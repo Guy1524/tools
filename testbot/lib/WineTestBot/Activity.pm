@@ -28,7 +28,9 @@ WineTestBot::Activity -  reconstruct the TestBot's activity from its history rec
 use Exporter 'import';
 our @EXPORT = qw(GetActivity GetStatistics);
 
+use List::Util qw(max);
 use Scalar::Util qw(weaken);
+
 use WineTestBot::Config;
 use WineTestBot::Jobs;
 use WineTestBot::RecordGroups;
@@ -38,12 +40,6 @@ use WineTestBot::Records;
 sub _UpdateMin($$)
 {
   $_[0] = $_[1] if (!defined $_[0] or $_[1] < $_[0]);
-}
-
-sub max($$)
-{
-  my ($a, $b) = @_;
-  return $a > $b ? $a : $b;
 }
 
 
@@ -442,8 +438,7 @@ sub GetStatistics($;$)
     # Of course this only works for statistics about VM operations and running
     # tasks (so running.time, reverting.time, etc) not for those about idle or
     # off VMs (idle.time, etc.).
-    $ActivitySeconds = $Seconds + 60 +
-        ($SuiteTimeout > $ReconfigTimeout ? $SuiteTimeout : $ReconfigTimeout);
+    $ActivitySeconds = $Seconds + 60 + max($SuiteTimeout, $ReconfigTimeout);
   }
   my ($Activity, $Counters) = GetActivity($VMs, $ActivitySeconds);
   $GlobalStats->{"recordgroups.count"} = $Counters->{recordgroups};
