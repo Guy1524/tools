@@ -67,7 +67,6 @@ Status is set to skipped.
 use WineTestBot::WineTestBotObjects;
 our @ISA = qw(WineTestBot::WineTestBotItem);
 
-use POSIX qw(:errno_h);
 use File::Path;
 use ObjectModel::BackEnd;
 use WineTestBot::Config;
