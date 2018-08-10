@@ -93,7 +93,9 @@ sub ApplyPatch($)
   my ($PatchFile) = @_;
 
   InfoMsg "Applying patch\n";
-  system("cd '$DataDir/wine' && set -x && ".
+  system("cd '$DataDir/wine' && ".
+         "echo wine:HEAD=`git rev-parse HEAD` && ".
+         "set -x && ".
          "git apply --verbose ". ShQuote($PatchFile) ." && ".
          "git add -A");
   if ($? != 0)
