@@ -307,7 +307,7 @@ sub HandleJobStatusChange($$$)
     LogMsg "Invalid JobKey $JobKey in jobstatuschange message\n";
   }
 
-  if ($OldStatus eq "running" && $NewStatus ne "running")
+  if ($OldStatus eq "running" and $NewStatus !~ /^(?:canceled|queued|running)$/)
   {
     my $Pid = fork;
     if (!defined $Pid)
