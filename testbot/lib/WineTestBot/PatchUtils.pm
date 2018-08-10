@@ -36,39 +36,9 @@ our @EXPORT = qw(GetPatchImpact UpdateWineData);
 use WineTestBot::Config;
 
 
-# These paths are too generic to be proof that this is a Wine patch.
-my $AmbiguousPathsRe = join('|',
-  'Makefile\.in$',
-  # aclocal.m4 gets special treatment
-  # configure gets special treatment
-  # configure.ac gets special treatment
-  'include/Makefile\.in$',
-  'include/config\.h\.in$',
-  'po/',
-  'tools/Makefile.in',
-  'tools/config.guess',
-  'tools/config.sub',
-  'tools/install-sh',
-  'tools/makedep.c',
-);
-
-# Patches to these paths don't impact the Wine build. So ignore them.
-my $IgnoredPathsRe = join('|',
-  '\.mailmap$',
-  'ANNOUNCE$',
-  'AUTHORS$',
-  'COPYING\.LIB$',
-  'LICENSE\$',
-  'LICENSE\.OLD$',
-  'MAINTAINERS$',
-  'README$',
-  'VERSION$',
-  'documentation/',
-  'tools/c2man\.pl$',
-  'tools/winapi/',
-  'tools/winemaker/',
-);
-
+#
+# Source repository maintenance
+#
 
 =pod
 =over 12
@@ -139,6 +109,44 @@ sub _LoadWineFiles()
     close($fh);
   }
 }
+
+
+#
+# Wine patch analysis
+#
+
+# These paths are too generic to be proof that this is a Wine patch.
+my $AmbiguousPathsRe = join('|',
+  'Makefile\.in$',
+  # aclocal.m4 gets special treatment
+  # configure gets special treatment
+  # configure.ac gets special treatment
+  'include/Makefile\.in$',
+  'include/config\.h\.in$',
+  'po/',
+  'tools/Makefile.in',
+  'tools/config.guess',
+  'tools/config.sub',
+  'tools/install-sh',
+  'tools/makedep.c',
+);
+
+# Patches to these paths don't impact the Wine build. So ignore them.
+my $IgnoredPathsRe = join('|',
+  '\.mailmap$',
+  'ANNOUNCE$',
+  'AUTHORS$',
+  'COPYING\.LIB$',
+  'LICENSE\$',
+  'LICENSE\.OLD$',
+  'MAINTAINERS$',
+  'README$',
+  'VERSION$',
+  'documentation/',
+  'tools/c2man\.pl$',
+  'tools/winapi/',
+  'tools/winemaker/',
+);
 
 sub _HandleFile($$$)
 {
