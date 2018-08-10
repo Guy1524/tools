@@ -102,15 +102,15 @@ sub Time()
 
 sub Elapsed($)
 {
-    my ($Start) = @_;
-    return sprintf("%0.2f", Time()-$Start);
+  my ($Start) = @_;
+  return sprintf("%0.2f", Time() - $Start);
 }
 
 sub PrettyElapsed($)
 {
-    my ($Start) = @_;
-    require WineTestBot::Utils;
-    return WineTestBot::Utils::DurationToString(Time()-$Start);
+  my ($Start) = @_;
+  require WineTestBot::Utils;
+  return WineTestBot::Utils::DurationToString(Time() - $Start);
 }
 
 1;
