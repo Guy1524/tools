@@ -373,11 +373,11 @@ if ($VM->Type ne "wine")
 {
   FatalError("This is not a Wine VM! (" . $VM->Type . ")\n");
 }
-elsif (!$Debug and $VM->Status ne "running")
+if (!$Debug and $VM->Status ne "running")
 {
   FatalError("The VM is not ready for use (" . $VM->Status . ")\n");
 }
-elsif (!$VM->GetDomain()->IsPoweredOn())
+if (!$VM->GetDomain()->IsPoweredOn())
 {
   FatalError("The VM is not powered on\n");
 }
