@@ -125,11 +125,8 @@ sub BuildTestLauncher()
   return 1;
 }
 
-sub GitPull($)
+sub GitPull()
 {
-  my ($Targets) = @_;
-  return 1 if (!$Targets->{update});
-
   InfoMsg "\nUpdating the Wine source\n";
   system("cd '$DataDir/wine' && git pull");
   if ($? != 0)
@@ -148,11 +145,10 @@ sub GitPull($)
   return 1;
 }
 
-sub BuildNative($$)
+sub BuildNative($)
 {
-  my ($Targets, $NoRm) = @_;
+  my ($NoRm) = @_;
 
-  return 1 if (!$Targets->{native});
   mkdir "$DataDir/build-native" if (! -d "$DataDir/build-native");
 
   # Rebuild from scratch to make sure cruft will not accumulate
@@ -194,6 +190,15 @@ sub BuildCross($$$)
   return 1;
 }
 
+sub UpdateWineBuilds($$)
+{
+  my ($Targets, $NoRm) = @_;
+
+  return BuildNative($NoRm) &&
+         BuildCross($Targets, $NoRm, 32) &&
+         BuildCross($Targets, $NoRm, 64);
+}
+
 
 #
 # Setup and command line processing
@@ -203,15 +208,23 @@ $ENV{PATH} = "/usr/lib/ccache:/usr/bin:/bin";
 delete $ENV{ENV};
 
 my %AllTargets;
-map { $AllTargets{$_} = 1 } qw(update native exe32 exe64);
+map { $AllTargets{$_} = 1 } qw(exe32 exe64);
 
-my ($Usage, $TargetList, $NoRm);
+my ($Usage, $OptUpdate, $OptBuild, $OptNoRm, $TargetList);
 while (@ARGV)
 {
   my $Arg = shift @ARGV;
-  if ($Arg eq "--no-rm")
+  if ($Arg eq "--update")
   {
-    $NoRm = 1;
+    $OptUpdate = 1;
+  }
+  elsif ($Arg eq "--build")
+  {
+    $OptBuild = 1;
+  }
+  elsif ($Arg eq "--no-rm")
+  {
+    $OptNoRm = 1;
   }
   elsif ($Arg =~ /^(?:-\?|-h|--help)$/)
   {
@@ -240,6 +253,10 @@ while (@ARGV)
 my $Targets;
 if (!defined $Usage)
 {
+  if (!$OptUpdate and !$OptBuild)
+  {
+    $OptUpdate = $OptBuild = 1;
+  }
   $TargetList = join(",", keys %AllTargets) if (!defined $TargetList);
   foreach my $Target (split /,/, $TargetList)
   {
@@ -259,19 +276,19 @@ if (defined $Usage)
     Error "try '$Name0 --help' for more information\n";
     exit $Usage;
   }
-  print "Usage: $Name0 [--no-rm] [--help] [TARGETS]\n";
+  print "Usage: $Name0 [--update] [--build [--no-rm]] [--help] [TARGETS]\n";
   print "\n";
   print "Updates Wine to the latest version and recompiles it so the host is ready to build executables for the Windows tests.\n";
   print "\n";
   print "Where:\n";
-  print "  TARGETS   Is a comma-separated list of reconfiguration targets. By default\n";
-  print "            every target is run.\n";
-  print "            - update: Update Wine's source code.\n";
-  print "            - native: Rebuild the native Wine tools.\n";
-  print "            - exe32: Rebuild the 32 bit Windows test executables.\n";
-  print "            - exe64: Rebuild the 64 bit Windows test executables.\n";
-  print "  --no-rm   Don't rebuild from scratch.\n";
-  print "  --help    Shows this usage message.\n";
+  print "  --update     Update Wine's source code.\n";
+  print "  --build      Update the Wine builds.\n";
+  print "  TARGETS      Is a comma-separated list of reconfiguration targets. By default\n";
+  print "               every target is run.\n";
+  print "               - exe32: Rebuild the 32 bit Windows test executables.\n";
+  print "               - exe64: Rebuild the 64 bit Windows test executables.\n";
+  print "  --no-rm      Don't rebuild from scratch.\n";
+  print "  --help       Shows this usage message.\n";
   exit 0;
 }
 
@@ -293,15 +310,9 @@ if (! -d "$DataDir/staging" and ! mkdir "$DataDir/staging")
 
 CountCPUs();
 
-if (!BuildTestAgentd() or
-    !BuildTestLauncher() or
-    !GitPull($Targets) or
-    !BuildNative($Targets, $NoRm) or
-    !BuildCross($Targets, $NoRm, 32) or
-    !BuildCross($Targets, $NoRm, 64))
-{
-  exit(1);
-}
+exit(1) if (!BuildTestAgentd() or !BuildTestLauncher());
+exit(1) if ($OptUpdate and !GitPull());
+exit(1) if ($OptBuild and !UpdateWineBuilds($Targets, $OptNoRm));
 
 LogMsg "ok\n";
 exit;
