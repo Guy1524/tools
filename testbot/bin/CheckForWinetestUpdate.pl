@@ -386,7 +386,7 @@ while (@ARGV)
 # Check parameters
 if (!defined $Usage)
 {
-  map { $OptTypes{$_} = 1 } keys %TaskTypes if (!%OptTypes);
+  %OptTypes = %TaskTypes if (!%OptTypes);
 }
 if (defined $Usage)
 {
