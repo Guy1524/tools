@@ -102,11 +102,8 @@ sub BuildTestAgentd()
   return 1;
 }
 
-sub GitPull($)
+sub GitPull()
 {
-  my ($Targets) = @_;
-  return 1 if (!$Targets->{update});
-
   InfoMsg "\nUpdating the Wine source\n";
   system("cd '$DataDir/wine' && git pull");
   if ($? != 0)
@@ -129,7 +126,7 @@ sub BuildWine($$$$)
 {
   my ($Targets, $NoRm, $Build, $Extras) = @_;
 
-  return 1 if (!$Targets->{build} or !$Targets->{$Build});
+  return 1 if (!$Targets->{$Build});
   mkdir "$DataDir/build-$Build" if (!-d "$DataDir/build-$Build");
 
   # If $NoRm is not set, rebuild from scratch to make sure cruft will not
@@ -146,6 +143,15 @@ sub BuildWine($$$$)
   }
 
   return 1;
+}
+
+sub UpdateWineBuilds($$)
+{
+  my ($Targets, $NoRm) = @_;
+
+  return BuildWine($Targets, $NoRm, "win32", "") &&
+         BuildWine($Targets, $NoRm, "wow64", "--enable-win64") &&
+         BuildWine($Targets, $NoRm, "wow32", "--with-wine64='$DataDir/build-wow64'");
 }
 
 
@@ -207,11 +213,8 @@ sub UpdateAddOn($$$)
   return 0;
 }
 
-sub UpdateAddOns($)
+sub UpdateAddOns()
 {
-  my ($Targets) = @_;
-  return 1 if (!$Targets->{addons});
-
   my %AddOns;
   if (open(my $fh, "<", "$DataDir/wine/dlls/appwiz.cpl/addons.c"))
   {
@@ -277,7 +280,7 @@ sub NewWinePrefix($$)
 {
   my ($Targets, $Build) = @_;
 
-  return 1 if (!$Targets->{wineprefix} or !$Targets->{$Build});
+  return 1 if (!$Targets->{$Build});
 
   InfoMsg "\nRecreating the $Build wineprefix\n";
   SetupWineEnvironment($Build);
@@ -296,6 +299,20 @@ sub NewWinePrefix($$)
   return 1;
 }
 
+sub UpdateWinePrefixes($)
+{
+  my ($Targets) = @_;
+
+  return NewWinePrefix($Targets, "win32") &&
+         # The wow32 and wow64 wineprefixes:
+         # - Are essentially identical.
+         # - Must be created after both WoW builds have been updated.
+         # - Make it possible to run the wow32 and wow64 tests in separate
+         #   prefixes, thus ensuring they don't interfere with each other.
+         NewWinePrefix($Targets, "wow64") &&
+         NewWinePrefix($Targets, "wow32");
+}
+
 
 #
 # Setup and command line processing
@@ -305,15 +322,31 @@ $ENV{PATH} = "/usr/lib/ccache:/usr/bin:/bin";
 delete $ENV{ENV};
 
 my %AllTargets;
-map { $AllTargets{$_} = 1 } qw(update addons build wineprefix win32 wow32 wow64);
+map { $AllTargets{$_} = 1 } qw(win32 wow32 wow64);
 
-my ($Usage, $TargetList, $NoRm);
+my ($Usage, $OptUpdate, $OptBuild, $OptNoRm, $OptAddOns, $OptWinePrefix, $TargetList);
 while (@ARGV)
 {
   my $Arg = shift @ARGV;
-  if ($Arg eq "--no-rm")
+  if ($Arg eq "--update")
   {
-    $NoRm = 1;
+    $OptUpdate = 1;
+  }
+  elsif ($Arg eq "--build")
+  {
+    $OptBuild = 1;
+  }
+  elsif ($Arg eq "--no-rm")
+  {
+    $OptNoRm = 1;
+  }
+  elsif ($Arg eq "--addons")
+  {
+    $OptAddOns = 1;
+  }
+  elsif ($Arg eq "--wineprefix")
+  {
+    $OptWinePrefix = 1;
   }
   elsif ($Arg =~ /^(?:-\?|-h|--help)$/)
   {
@@ -342,6 +375,10 @@ while (@ARGV)
 my $Targets;
 if (!defined $Usage)
 {
+  if (!$OptUpdate and !$OptBuild and !$OptAddOns and !$OptWinePrefix)
+  {
+    $OptUpdate = $OptBuild = $OptAddOns = $OptWinePrefix = 1;
+  }
   $TargetList = join(",", keys %AllTargets) if (!defined $TargetList);
   foreach my $Target (split /,/, $TargetList)
   {
@@ -361,22 +398,24 @@ if (defined $Usage)
     Error "try '$Name0 --help' for more information\n";
     exit $Usage;
   }
-  print "Usage: $Name0 [--no-rm] [--help] [TARGETS]\n";
+  print "Usage: $Name0 [--update] [--build [--no-rm]] [--addons] [--wineprefix]\n";
+  print "                       [--help] [TARGETS]\n";
   print "\n";
   print "Performs all the tasks needed for the host to be ready to test new patches: update the Wine source and addons, and rebuild the Wine binaries.\n";
   print "\n";
   print "Where:\n";
-  print "  TARGETS   Is a comma-separated list of targets to process. By default all\n";
-  print "            targets are processed.\n";
-  print "            - update: Update Wine's source code.\n";
-  print "            - build: Update the Wine builds.\n";
-  print "            - addons: Update the Gecko and Mono Wine addons.\n";
-  print "            - wineprefix: Update the wineprefixes.\n";
-  print "            - win32: Apply the above to the regular 32 bit Wine.\n";
-  print "            - wow32: Apply the above to the 32 bit WoW Wine.\n";
-  print "            - wow64: Apply the above to the 64 bit WoW Wine.\n";
-  print "  --no-rm   Don't rebuild from scratch.\n";
-  print "  --help    Shows this usage message.\n";
+  print "  --update     Update Wine's source code.\n";
+  print "  --build      Update the Wine builds.\n";
+  print "  --addons     Update the Gecko and Mono Wine addons.\n";
+  print "  --wineprefix Update the wineprefixes.\n";
+  print "If none of the above actions is specified they are all performed.\n";
+  print "  TARGETS      Is a comma-separated list of targets to process. By default all\n";
+  print "               targets are processed.\n";
+  print "               - win32: Apply the above to the regular 32 bit Wine.\n";
+  print "               - wow32: Apply the above to the 32 bit WoW Wine.\n";
+  print "               - wow64: Apply the above to the 64 bit WoW Wine.\n";
+  print "  --no-rm      Don't rebuild from scratch.\n";
+  print "  --help       Shows this usage message.\n";
   exit 0;
 }
 
@@ -399,23 +438,11 @@ if ($DataDir =~ /'/)
 
 CountCPUs();
 
-if (!BuildTestAgentd() or
-    !GitPull($Targets) or
-    !UpdateAddOns($Targets) or
-    !BuildWine($Targets, $NoRm, "win32", "") or
-    !BuildWine($Targets, $NoRm, "wow64", "--enable-win64") or
-    !BuildWine($Targets, $NoRm, "wow32", "--with-wine64='$DataDir/build-wow64'") or
-    !NewWinePrefix($Targets, "win32") or
-    # The wow32 and wow64 wineprefixes:
-    # - Are essentially identical.
-    # - Must be created after both WoW builds have been updated.
-    # - Make it possible to run the wow32 and wow64 tests in separate prefixes,
-    #   thus ensuring they don't interfere with each other.
-    !NewWinePrefix($Targets, "wow64") or
-    !NewWinePrefix($Targets, "wow32"))
-{
-  exit(1);
-}
+exit(1) if (!BuildTestAgentd());
+exit(1) if ($OptUpdate and !GitPull());
+exit(1) if ($OptAddOns and !UpdateAddOns());
+exit(1) if ($OptBuild and !UpdateWineBuilds($Targets, $OptNoRm));
+exit(1) if ($OptWinePrefix and !UpdateWinePrefixes($Targets));
 
 LogMsg "ok\n";
 exit;
