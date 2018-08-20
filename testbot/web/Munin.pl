@@ -474,7 +474,7 @@ sub GetOutput($)
 
   # Then print the corresponding data
   print "===== data =====\n";
-  map { print $_ } @Data;
+  print $_ for (@Data);
 
 }
 

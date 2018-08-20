@@ -113,7 +113,7 @@ sub SubmitSubset($$$)
     if (defined $Part and
         open(my $PartFile, "<" , "$DataDir/patches/" . $Part->Patch->Id))
     {
-      map { print $CombinedFile $_; } <$PartFile>;
+      print $CombinedFile $_ for (<$PartFile>);
       close($PartFile);
     }
   }
