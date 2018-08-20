@@ -170,9 +170,9 @@ sub RunWine($$$)
                 "time $Wine $Cmd $CmdArgs");
 }
 
-sub DailyWineTest($$$$)
+sub DailyWineTest($$$$$)
 {
-  my ($Targets, $Build, $BaseTag, $Args) = @_;
+  my ($Targets, $Build, $NoSubmit, $BaseTag, $Args) = @_;
 
   return 1 if (!$Targets->{$Build});
 
@@ -190,7 +190,7 @@ sub DailyWineTest($$$$)
   }
 
   # Send the report to the website
-  if ($Targets->{submit} and
+  if (!$NoSubmit and
       RunWine($Build, "./programs/winetest/winetest.exe.so",
               "-c -s '../$Build.report'"))
   {
@@ -210,13 +210,26 @@ $ENV{PATH} = "/usr/lib/ccache:/usr/bin:/bin";
 delete $ENV{ENV};
 
 my %AllTargets;
-map { $AllTargets{$_} = 1 } qw(win32 wow32 wow64 submit);
+map { $AllTargets{$_} = 1 } qw(win32 wow32 wow64);
 
-my ($Usage, $TargetList, $Action, $FileName, $BaseTag);
+my $Action = "";
+my ($Usage, $OptNoSubmit, $TargetList, $FileName, $BaseTag);
 while (@ARGV)
 {
   my $Arg = shift @ARGV;
-  if ($Arg =~ /^(?:-\?|-h|--help)$/)
+  if ($Arg eq "--testpatch" or $Arg eq "build")
+  {
+    $Action = "testpatch";
+  }
+  elsif ($Arg eq "--winetest" or $Arg eq "winetest")
+  {
+    $Action = "winetest";
+  }
+  elsif ($Arg eq "--no-submit")
+  {
+    $OptNoSubmit = 1;
+  }
+  elsif ($Arg =~ /^(?:-\?|-h|--help)$/)
   {
     $Usage = 0;
     last;
@@ -231,11 +244,7 @@ while (@ARGV)
   {
     $TargetList = $Arg;
   }
-  elsif (!defined $Action)
-  {
-    $Action = $Arg;
-  }
-  elsif (($Action || "") eq "winetest")
+  elsif ($Action eq "winetest")
   {
     $BaseTag = $Arg;
     # The remaining arguments are meant for WineTest
@@ -289,7 +298,7 @@ if (!defined $Usage)
     $Usage = 2;
   }
 
-  if (!defined $Action)
+  if (!$Action)
   {
     Error "you must specify the action to perform\n";
     $Usage = 2;
@@ -311,13 +320,8 @@ if (!defined $Usage)
       $Usage = 2;
     }
   }
-  elsif ($Action ne "build")
-  {
-    Error "invalid '$Action' action\n";
-    $Usage = 2;
-  }
 
-  if (!defined $FileName and ($Action || "") eq "build")
+  if (!defined $FileName and $Action eq "testpatch")
   {
     Error "you must provide a patch to test\n";
     $Usage = 2;
@@ -325,25 +329,24 @@ if (!defined $Usage)
 }
 if (defined $Usage)
 {
-  print "Usage: $Name0 [--help] TARGETS build PATCH\n";
-  print "or     $Name0 [--help] TARGETS winetest BASETAG ARGS\n";
+  print "Usage: $Name0 [--help] --testpatch TARGETS PATCH\n";
+  print "or     $Name0 [--help] --winetest [--no-submit] TARGETS BASETAG ARGS\n";
   print "\n";
   print "Tests the specified patch or runs WineTest in Wine.\n";
   print "\n";
   print "Where:\n";
-  print "  TARGETS   Is a comma-separated list of targets for the specified action.\n";
-  print "            - win32: The regular 32 bit Wine build.\n";
-  print "            - wow32: The 32 bit WoW Wine build.\n";
-  print "            - wow64: The 64 bit WoW Wine build.\n";
-  print "            - submit: Send the WineTest result to the website.\n";
-  print "  build     Verify that the patch compiles.\n";
-  print "  PATCH     Is the staging file containing the patch to test.\n";
-  print "  winetest  Run WineTest and submit the result to the website if the submit\n";
-  print "            task was specified.\n";
-  print "  BASETAG   Is the tag for this WineTest run. Note that the build type is\n";
-  print "            automatically added to this tag.\n";
-  print "  ARGS      The WineTest arguments.\n";
-  print "  --help    Shows this usage message.\n";
+  print "  --testpatch  Verify that the patch compiles.\n";
+  print "  --winetest   Run WineTest and submit the result to the website.\n";
+  print "  --no-submit  Do not submit the WineTest results to the website.\n";
+  print "  TARGETS      Is a comma-separated list of targets for the specified action.\n";
+  print "               - win32: The regular 32 bit Wine build.\n";
+  print "               - wow32: The 32 bit WoW Wine build.\n";
+  print "               - wow64: The 64 bit WoW Wine build.\n";
+  print "  PATCH        Is the staging file containing the patch to test.\n";
+  print "  BASETAG      Is the tag for this WineTest run. Note that the build type is\n";
+  print "               automatically added to this tag.\n";
+  print "  ARGS         The WineTest arguments.\n";
+  print "  --help       Shows this usage message.\n";
   exit $Usage;
 }
 
@@ -363,7 +366,7 @@ map { unlink("$_.report") } keys %AllTargets;
 
 CountCPUs();
 
-if ($Action eq "build")
+if ($Action eq "testpatch")
 {
   my $Impacts = ApplyPatch($FileName);
   exit(1) if (!$Impacts or
@@ -373,9 +376,12 @@ if ($Action eq "build")
 }
 elsif ($Action eq "winetest")
 {
-  exit(1) if (!DailyWineTest($Targets, "win32", $BaseTag, \@ARGV) or
-              !DailyWineTest($Targets, "wow64", $BaseTag, \@ARGV) or
-              !DailyWineTest($Targets, "wow32", $BaseTag, \@ARGV));
+  if (!DailyWineTest($Targets, "win32", $OptNoSubmit, $BaseTag, \@ARGV) or
+      !DailyWineTest($Targets, "wow64", $OptNoSubmit, $BaseTag, \@ARGV) or
+      !DailyWineTest($Targets, "wow32", $OptNoSubmit, $BaseTag, \@ARGV))
+  {
+    exit(1);
+  }
 }
 
 LogMsg "ok\n";
