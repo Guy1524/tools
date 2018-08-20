@@ -250,7 +250,7 @@ if (!defined $Usage)
   }
 
   $TargetList = join(",", keys %AllTargets) if (!defined $TargetList);
-  foreach my $Target (split /,/, $TargetList)
+  foreach my $Target (split /[,:]/, $TargetList)
   {
     $Target = "exe$1" if ($Target =~ /^(32|64)$/);
     if (!$AllTargets{$Target})

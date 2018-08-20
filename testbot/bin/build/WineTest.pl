@@ -282,7 +282,7 @@ if (!defined $Usage)
 {
   if (defined $TargetList)
   {
-    foreach my $Target (split /,/, $TargetList)
+    foreach my $Target (split /[,:]/, $TargetList)
     {
       if (!$AllTargets{$Target})
       {
