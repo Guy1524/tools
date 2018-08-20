@@ -59,8 +59,8 @@ use WineTestBot::Engine::Notify;
 
 
 my %WineTestUrls = (
-    32 => "http://test.winehq.org/builds/winetest-latest.exe",
-    64 => "http://test.winehq.org/builds/winetest64-latest.exe"
+    "exe32" => "http://test.winehq.org/builds/winetest-latest.exe",
+    "exe64" => "http://test.winehq.org/builds/winetest64-latest.exe"
 );
 
 my %TaskTypes = (build => 1, base32 => 1, winetest32 => 1, all64 => 1,
@@ -96,9 +96,9 @@ error occurred.
 
 sub UpdateWineTest($$)
 {
-  my ($OptCreate, $Bits) = @_;
+  my ($OptCreate, $Build) = @_;
 
-  my $BitsSuffix = ($Bits == 64 ? "64" : "");
+  my $BitsSuffix = ($Build eq "exe64" ? "64" : "");
   my $LatestBaseName = "winetest${BitsSuffix}-latest.exe";
   my $LatestFileName = "$DataDir/latest/$LatestBaseName";
   if ($OptCreate)
@@ -110,13 +110,13 @@ sub UpdateWineTest($$)
   # See if the online WineTest executable is newer
   my $UA = LWP::UserAgent->new();
   $UA->agent("WineTestBot");
-  my $Request = HTTP::Request->new(GET => $WineTestUrls{$Bits});
+  my $Request = HTTP::Request->new(GET => $WineTestUrls{$Build});
   if (-r $LatestFileName)
   {
     my $Since = gmtime((stat $LatestFileName)[9]);
     $Request->header("If-Modified-Since" => "$Since GMT");
   }
-  Debug("Checking $WineTestUrls{$Bits}\n");
+  Debug("Checking $WineTestUrls{$Build}\n");
   my $Response = $UA->request($Request);
   if ($Response->code == RC_NOT_MODIFIED)
   {
@@ -164,14 +164,14 @@ sub UpdateWineTest($$)
 
 sub AddJob($$$)
 {
-  my ($BaseJob, $LatestBaseName, $Bits) = @_;
+  my ($BaseJob, $LatestBaseName, $Build) = @_;
 
-  my $Remarks = ($Bits == 64 ? "64-bit" : $BaseJob ? "base" : "other");
+  my $Remarks = ($Build eq "exe64" ? "64-bit" : $BaseJob ? "base" : "other");
   $Remarks = "WineTest: $Remarks VMs";
   Debug("Creating the '$Remarks' job\n");
 
   my $VMs = CreateVMs();
-  if ($Bits == 64)
+  if ($Build eq "exe64")
   {
     $VMs->AddFilter("Type", ["win64"]);
     $VMs->AddFilter("Role", ["base", "winetest"]);
@@ -197,22 +197,21 @@ sub AddJob($$$)
   my $Jobs = CreateJobs();
   my $NewJob = $Jobs->Add();
   $NewJob->User(GetBatchUser());
-  $NewJob->Priority($BaseJob && $Bits == 32 ? 8 : 9);
+  $NewJob->Priority($BaseJob && $Build eq "exe32" ? 8 : 9);
   $NewJob->Remarks($Remarks);
 
   # Add a step to the job
   my $Steps = $NewJob->Steps;
   my $NewStep = $Steps->Add();
-  my $BitsSuffix = ($Bits == 64 ? "64" : "");
   $NewStep->Type("suite");
   $NewStep->FileName($LatestBaseName);
-  $NewStep->FileType($Bits == 64 ? "exe64" : "exe32");
+  $NewStep->FileType($Build);
 
   # Add a task for each VM
   my $Tasks = $NewStep->Tasks;
   foreach my $VMKey (@{$VMs->SortKeysBySortOrder($VMs->GetKeys())})
   {
-    Debug("  $VMKey exe$Bits\n");
+    Debug("  $VMKey $Build\n");
     my $Task = $Tasks->Add();
     $Task->VM($VMs->GetItem($VMKey));
     $Task->Timeout($SuiteTimeout);
@@ -406,7 +405,7 @@ my $Rc = 0;
 if ($OptTypes{build} or $OptTypes{base32} or $OptTypes{winetest32} or
     $OptTypes{wine})
 {
-  my ($Create, $LatestBaseName) = UpdateWineTest($OptCreate, 32);
+  my ($Create, $LatestBaseName) = UpdateWineTest($OptCreate, "exe32");
   if ($Create < 0)
   {
     $Rc = 1;
@@ -417,8 +416,8 @@ if ($OptTypes{build} or $OptTypes{base32} or $OptTypes{winetest32} or
     # this job first purely to make the WineTestBot job queue look nice, and
     # arbitrarily do it only for 32-bit executables to avoid redundant updates.
     $Rc = 1 if ($OptTypes{build} and !AddReconfigJob("build"));
-    $Rc = 1 if ($OptTypes{base32} and !AddJob("base", $LatestBaseName, 32));
-    $Rc = 1 if ($OptTypes{winetest32} and !AddJob("", $LatestBaseName, 32));
+    $Rc = 1 if ($OptTypes{base32} and !AddJob("base", $LatestBaseName, "exe32"));
+    $Rc = 1 if ($OptTypes{winetest32} and !AddJob("", $LatestBaseName, "exe32"));
 
     $Rc = 1 if ($OptTypes{wine} and !AddReconfigJob("wine"));
   }
@@ -431,14 +430,14 @@ if ($OptTypes{build} or $OptTypes{base32} or $OptTypes{winetest32} or
 
 if ($OptTypes{all64})
 {
-  my ($Create, $LatestBaseName) = UpdateWineTest($OptCreate, 64);
+  my ($Create, $LatestBaseName) = UpdateWineTest($OptCreate, "exe64");
   if ($Create < 0)
   {
     $Rc = 1;
   }
   elsif ($Create == 1)
   {
-    $Rc = 1 if ($OptTypes{all64} and !AddJob("", $LatestBaseName, 64));
+    $Rc = 1 if ($OptTypes{all64} and !AddJob("", $LatestBaseName, "exe64"));
   }
 }
 
