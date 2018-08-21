@@ -60,16 +60,16 @@ sub ParseTaskLog($$)
     foreach my $Line (<$LogFile>)
     {
       chomp $Line;
-      if ($Line =~ /^$ResultPrefix: ok$/)
+      if ($Line =~ /^(?:$ResultPrefix|Task): ok$/)
       {
         $Result ||= "ok";
       }
-      elsif ($Line =~ /^$ResultPrefix: Patch failed to apply$/)
+      elsif ($Line =~ /^(?:$ResultPrefix|Task): Patch failed to apply$/)
       {
         $Result = "badpatch";
         last; # Should be the last and most specific message
       }
-      elsif ($Line =~ /^$ResultPrefix: /)
+      elsif ($Line =~ /^(?:$ResultPrefix|Task): /)
       {
         $Result = "failed";
       }
