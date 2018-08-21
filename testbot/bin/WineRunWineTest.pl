@@ -428,7 +428,7 @@ if ($Step->Type eq "suite")
   my $Tag = lc($VM->Name);
   $Tag =~ s/^$TagPrefix//;
   $Tag =~ s/[^a-zA-Z0-9]/-/g;
-  $Script .= $Task->CmdLineArg .",submit winetest $TagPrefix-$Tag ";
+  $Script .= "--winetest ". $Task->CmdLineArg ." $TagPrefix-$Tag ";
   if (defined $WebHostName)
   {
     my $StepTask = 100 * $StepNo + $TaskNo;
@@ -444,7 +444,7 @@ if ($Step->Type eq "suite")
 }
 else
 {
-  $Script .= $Task->CmdLineArg ." build patch.diff";
+  $Script .= "--testpatch ". $Task->CmdLineArg ." patch.diff";
 }
 $Script .= "\n) >Task.log 2>&1\n";
 Debug(Elapsed($Start), " Sending the script: [$Script]\n");
