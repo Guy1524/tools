@@ -132,8 +132,6 @@ sub ApplyPatch($)
 
 sub BuildNative()
 {
-  mkdir "$DataDir/build-native" if (! -d "$DataDir/build-native");
-
   InfoMsg "\nRebuilding native tools\n";
   system("cd '$DataDir/build-native' && set -x && ".
          "time make -j$ncpus __tooldeps__");
