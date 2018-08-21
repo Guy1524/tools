@@ -363,7 +363,7 @@ if (!$TA->SendFile($FileName, "staging/patch.diff", 0))
 }
 my $Script = "#!/bin/sh\n".
              "( set -x\n".
-             "  ../bin/build/Build.pl patch.diff ". join(",", sort keys %Bitnesses) ."\n".
+             "  ../bin/build/Build.pl patch.diff ". join(":", sort keys %Bitnesses) ."\n".
              ") >Build.log 2>&1\n";
 Debug(Elapsed($Start), " Sending the script: [$Script]\n");
 if (!$TA->SendFileFromString($Script, "task", $TestAgent::SENDFILE_EXE))
