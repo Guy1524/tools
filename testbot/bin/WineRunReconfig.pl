@@ -325,9 +325,13 @@ if (!$VM->GetDomain()->IsPoweredOn())
   FatalError("The VM is not powered on\n");
 }
 
+if ($Step->Type ne "reconfig")
+{
+  FatalError("Unexpected step type '". $Step->Type ."' found\n");
+}
 if ($Step->FileType ne "none")
 {
-  FatalError("Unexpected file type '". $Step->FileType ."' found\n");
+  FatalError("Unexpected file type '". $Step->FileType ."' found for ". $Step->Type ." step\n");
 }
 
 

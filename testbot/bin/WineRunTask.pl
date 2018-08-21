@@ -381,9 +381,13 @@ if (!$VM->GetDomain()->IsPoweredOn())
   FatalError("The VM is not powered on\n");
 }
 
+if ($Step->Type ne "single" and $Step->Type ne "suite")
+{
+  FatalError("Unexpected step type '". $Step->Type ."' found\n");
+}
 if ($Step->FileType ne "exe32" and $Step->FileType ne "exe64")
 {
-  FatalError("Unexpected file type '". $Step->FileType ."' found\n");
+  FatalError("Unexpected file type '". $Step->FileType ."' found for ". $Step->Type ." step\n");
 }
 
 
