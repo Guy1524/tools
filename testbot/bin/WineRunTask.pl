@@ -41,11 +41,12 @@ $Name0 =~ s+^.*/++;
 
 
 use WineTestBot::Config;
+use WineTestBot::Engine::Notify;
 use WineTestBot::Jobs;
-use WineTestBot::VMs;
 use WineTestBot::Log;
 use WineTestBot::LogUtils;
-use WineTestBot::Engine::Notify;
+use WineTestBot::Utils;
+use WineTestBot::VMs;
 
 
 #
@@ -455,18 +456,13 @@ elsif ($Step->Type eq "suite")
 {
   $Keepalive = 60;
   $Script .= "$FileName ";
-  my $Tag = lc($VM->Name);
-  $Tag =~ s/^$TagPrefix//;
-  $Tag =~ s/[^a-zA-Z0-9]/-/g;
-  if ($VM->Type eq "win64")
-  {
-    $Tag .= "-" . ($Step->FileType eq "exe64" ? "64" : "32");
-  }
   if (defined($WebHostName))
   {
     my $StepTask = 100 * $StepNo + $TaskNo;
     $Script .= "-u \"http://$WebHostName/JobDetails.pl?Key=$JobId&s$StepTask=1#k$StepTask\" ";
   }
+  my $Tag = $VM->Type ne "win64" ? "" : $Step->FileType eq "exe64" ? "64" : "32";
+  $Tag = BuildTag($VM->Name, $Tag);
   my $Info = $VM->Description ? $VM->Description : "";
   if ($VM->Details)
   {
@@ -481,7 +477,7 @@ elsif ($Step->Type eq "suite")
   $Info =~ s/"/\\"/g;
   $Info =~ s/%/%%/g;
   $Info =~ s/%/%%/g;
-  $Script .= "-q -o $RptFileName -t $TagPrefix-$Tag -m \"$EMail\" -i \"$Info\"\r\n".
+  $Script .= "-q -o $RptFileName -t $Tag -m \"$EMail\" -i \"$Info\"\r\n".
              "$FileName -q -s $RptFileName\r\n";
 }
 Debug(Elapsed($Start), " Sending the script: [$Script]\n");

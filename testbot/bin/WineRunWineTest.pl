@@ -425,10 +425,8 @@ my $Script = "#!/bin/sh\n".
              "  ../bin/build/WineTest.pl ";
 if ($Step->Type eq "suite")
 {
-  my $Tag = lc($VM->Name);
-  $Tag =~ s/^$TagPrefix//;
-  $Tag =~ s/[^a-zA-Z0-9]/-/g;
-  $Script .= "--winetest ". $Task->CmdLineArg ." $TagPrefix-$Tag ";
+  my $BaseTag = BuildTag($VM->Name);
+  $Script .= "--winetest ". $Task->CmdLineArg ." $BaseTag ";
   if (defined $WebHostName)
   {
     my $StepTask = 100 * $StepNo + $TaskNo;

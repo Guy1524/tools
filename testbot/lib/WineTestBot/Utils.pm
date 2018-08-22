@@ -1,5 +1,6 @@
 # -*- Mode: Perl; perl-indent-level: 2; indent-tabs-mode: nil -*-
 # Copyright 2009 Ge van Geldorp
+# Copyright 2012-2018 Francois Gouget
 #
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
@@ -29,7 +30,7 @@ use Exporter 'import';
 our @EXPORT = qw(MakeSecureURL SecureConnection GenerateRandomString
                  OpenNewFile CreateNewFile CreateNewLink CreateNewDir
                  DurationToString BuildEMailRecipient IsValidFileName
-                 ShQuote ShArgv2Cmd);
+                 BuildTag SanitizeTag ShQuote ShArgv2Cmd);
 
 use Fcntl;
 
@@ -172,6 +173,27 @@ sub CreateNewDir($$)
     # This is not an error that will be fixed by trying a different path
     return undef if (!$!{EEXIST});
   }
+}
+
+
+#
+# WineTest helpers
+#
+
+sub SanitizeTag($)
+{
+  my ($Tag) = @_;
+  $Tag =~ s/[^a-zA-Z0-9.-]/-/g;
+  return substr($Tag, 0, 30);
+}
+
+sub BuildTag($;$)
+{
+  my ($VMName, $Tag) = @_;
+
+  $Tag = $Tag ? "$VMName-$Tag" : $VMName;
+  $Tag =~ s/^$TagPrefix//;
+  return SanitizeTag("$TagPrefix-$Tag");
 }
 
 

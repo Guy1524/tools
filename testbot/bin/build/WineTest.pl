@@ -181,8 +181,9 @@ sub DailyWineTest($$$$$)
 
   # Run WineTest. Ignore the exit code since it returns non-zero whenever
   # there are test failures.
+  my $Tag = SanitizeTag("$BaseTag-$Build");
   RunWine($Build, "./programs/winetest/winetest.exe.so",
-          "-c -o '../$Build.report' -t $BaseTag-$Build ". ShArgv2Cmd(@$Args));
+          "-c -o '../$Build.report' -t $Tag ". ShArgv2Cmd(@$Args));
   if (!-f "$Build.report")
   {
     LogMsg "WineTest did not produce a report file\n";
