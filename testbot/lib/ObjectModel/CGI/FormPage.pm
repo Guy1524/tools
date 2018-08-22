@@ -128,8 +128,8 @@ sub GenerateBody($)
   {
     print "<p>$Text</p>\n";
   }
-  print "</div>\n";
-  print "</div>\n";
+  print "</div><!--Content-->\n";
+  print "</div><!--ItemBody-->\n";
 }
 
 sub GenerateFormStart($)

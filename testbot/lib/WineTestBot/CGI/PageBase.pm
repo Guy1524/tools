@@ -327,10 +327,10 @@ sub GenerateFooter($)
   my ($self) = @_;
 
   print <<EOF;
-    </div>
+    </div><!--ContentContainer-->
     <b class="rbottom"><b class="r4">&nbsp;</b><b class="r3">&nbsp;</b><b class="r2">&nbsp;</b><b class="r1">&nbsp;</b></b>
   </div>
-</div>
+</div><!--main_content-->
 
 </body>
 </html>
