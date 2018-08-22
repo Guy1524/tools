@@ -40,92 +40,15 @@ sub BEGIN
   }
   $::BuildEnv = 1;
 }
-my $Name0 = $0;
-$Name0 =~ s+^.*/++;
 
-
+use Build::Utils;
 use WineTestBot::Config;
-use WineTestBot::PatchUtils;
 use WineTestBot::Utils;
-
-
-#
-# Logging and error handling helpers
-#
-
-sub InfoMsg(@)
-{
-  print @_;
-}
-
-sub LogMsg(@)
-{
-  print "Task: ", @_;
-}
-
-sub Error(@)
-{
-  print STDERR "$Name0:error: ", @_;
-}
 
 
 #
 # Build helpers
 #
-
-my $ncpus;
-sub CountCPUs()
-{
-  if (open(my $fh, "<", "/proc/cpuinfo"))
-  {
-    # Linux
-    map { $ncpus++ if (/^processor/); } <$fh>;
-    close($fh);
-  }
-  $ncpus ||= 1;
-}
-
-sub ApplyPatch($)
-{
-  my ($PatchFile) = @_;
-
-  InfoMsg "Applying patch\n";
-  system("cd '$DataDir/wine' && ".
-         "echo wine:HEAD=`git rev-parse HEAD` && ".
-         "set -x && ".
-         "git apply --verbose ". ShQuote($PatchFile) ." && ".
-         "git add -A");
-  if ($? != 0)
-  {
-    LogMsg "Patch failed to apply\n";
-    return undef;
-  }
-
-  my $Impacts = GetPatchImpact($PatchFile, "nounits");
-  if ($Impacts->{MakeMakefiles})
-  {
-    InfoMsg "\nRunning make_makefiles\n";
-    system("cd '$DataDir/wine' && set -x && ./tools/make_makefiles");
-    if ($? != 0)
-    {
-      LogMsg "make_makefiles failed\n";
-      return undef;
-    }
-  }
-
-  if ($Impacts->{Autoconf} && !$Impacts->{HasConfigure})
-  {
-    InfoMsg "\nRunning autoconf\n";
-    system("cd '$DataDir/wine' && set -x && autoconf");
-    if ($? != 0)
-    {
-      LogMsg "Autoconf failed\n";
-      return undef;
-    }
-  }
-
-  return $Impacts;
-}
 
 sub BuildWine($$)
 {
@@ -134,8 +57,9 @@ sub BuildWine($$)
   return 1 if (!$Targets->{$Build});
 
   InfoMsg "\nRebuilding the $Build Wine\n";
+  my $CPUCount = GetCPUCount();
   system("cd '$DataDir/build-$Build' && set -x && ".
-         "time make -j$ncpus");
+         "time make -j$CPUCount");
   if ($? != 0)
   {
     LogMsg "The $Build build failed\n";
@@ -150,25 +74,6 @@ sub BuildWine($$)
 # Test helpers
 #
 
-# See also WineReconfig.pl
-sub SetupWineEnvironment($)
-{
-  my ($Build) = @_;
-
-  $ENV{WINEPREFIX} = "$DataDir/wineprefix-$Build";
-  $ENV{DISPLAY} ||= ":0.0";
-}
-
-# See also WineReconfig.pl
-sub RunWine($$$)
-{
-  my ($Build, $Cmd, $CmdArgs) = @_;
-
-  my $Magic = `cd '$DataDir/build-$Build' && file $Cmd`;
-  my $Wine = ($Magic =~ /ELF 64/ ? "./wine64" : "./wine");
-  return system("cd '$DataDir/build-$Build' && set -x && ".
-                "time $Wine $Cmd $CmdArgs");
-}
 
 sub DailyWineTest($$$$$)
 {
@@ -330,6 +235,12 @@ if (!defined $Usage)
 }
 if (defined $Usage)
 {
+  my $Name0 = GetToolName();
+  if ($Usage)
+  {
+    Error "try '$Name0 --help' for more information\n";
+    exit $Usage;
+  }
   print "Usage: $Name0 [--help] --testpatch TARGETS PATCH\n";
   print "or     $Name0 [--help] --winetest [--no-submit] TARGETS BASETAG ARGS\n";
   print "\n";
@@ -365,11 +276,9 @@ if ($DataDir =~ /'/)
 # Clean up old reports
 map { unlink("$_.report") } keys %AllTargets;
 
-CountCPUs();
-
 if ($Action eq "testpatch")
 {
-  my $Impacts = ApplyPatch($FileName);
+  my $Impacts = ApplyPatch("wine", $FileName);
   exit(1) if (!$Impacts or
               !BuildWine($Targets, "win32") or
               !BuildWine($Targets, "wow64") or

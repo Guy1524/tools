@@ -39,111 +39,14 @@ sub BEGIN
   }
   $::BuildEnv = 1;
 }
-my $Name0 = $0;
-$Name0 =~ s+^.*/++;
 
-
+use Build::Utils;
 use WineTestBot::Config;
-use WineTestBot::PatchUtils;
-
-
-#
-# Logging and error handling helpers
-#
-
-sub InfoMsg(@)
-{
-  print @_;
-}
-
-sub LogMsg(@)
-{
-  print "Reconfig: ", @_;
-}
-
-sub Error(@)
-{
-  print STDERR "$Name0:error: ", @_;
-}
 
 
 #
 # Build helpers
 #
-
-my $ncpus;
-sub CountCPUs()
-{
-  if (open(my $fh, "<", "/proc/cpuinfo"))
-  {
-    # Linux
-    map { $ncpus++ if (/^processor/); } <$fh>;
-    close($fh);
-  }
-  $ncpus ||= 1;
-}
-
-sub BuildTestAgentd()
-{
-  # If testagentd already exists it's likely already running
-  # so don't rebuild it.
-  if (! -x "$BinDir/build/testagentd")
-  {
-    InfoMsg "\nBuilding the native testagentd\n";
-    system("cd '$::RootDir/src/testagentd' && set -x && ".
-           "time make -j$ncpus build");
-    if ($? != 0)
-    {
-      LogMsg "Build testagentd failed\n";
-      return !1;
-    }
-  }
-
-  InfoMsg "\nRebuilding the Windows TestAgentd\n";
-  system("cd '$::RootDir/src/testagentd' && set -x && ".
-         "time make -j$ncpus iso");
-  if ($? != 0)
-  {
-    LogMsg "Build winetestbot.iso failed\n";
-    return !1;
-  }
-
-  return 1;
-}
-
-sub BuildTestLauncher()
-{
-  InfoMsg "\nRebuilding TestLauncher\n";
-  system("cd '$::RootDir/src/TestLauncher' && set -x && ".
-         "time make -j$ncpus");
-  if ($? != 0)
-  {
-    LogMsg "Build TestLauncher failed\n";
-    return !1;
-  }
-
-  return 1;
-}
-
-sub GitPull()
-{
-  InfoMsg "\nUpdating the Wine source\n";
-  system("cd '$DataDir/wine' && git pull");
-  if ($? != 0)
-  {
-    LogMsg "Git pull failed\n";
-    return !1;
-  }
-
-  my $ErrMessage = UpdateWineData("$DataDir/wine");
-  if ($ErrMessage)
-  {
-    LogMsg "$ErrMessage\n";
-    return !1;
-  }
-
-  return 1;
-}
 
 sub BuildNative($)
 {
@@ -153,10 +56,11 @@ sub BuildNative($)
 
   # Rebuild from scratch to make sure cruft will not accumulate
   InfoMsg "\nRebuilding native tools\n";
+  my $CPUCount = GetCPUCount();
   system("cd '$DataDir/build-native' && set -x && ".
          ($NoRm ? "" : "rm -rf * && ") .
          "time ../wine/configure --enable-win64 --without-x --without-freetype --disable-winetest && ".
-         "time make -j$ncpus __tooldeps__");
+         "time make -j$CPUCount __tooldeps__");
 
   if ($? != 0)
   {
@@ -176,11 +80,12 @@ sub BuildCross($$$)
 
   # Rebuild from scratch to make sure cruft will not accumulate
   InfoMsg "\nRebuilding the $Bits-bit test executables\n";
+  my $CPUCount = GetCPUCount();
   my $Host = ($Bits == 64 ? "x86_64-w64-mingw32" : "i686-w64-mingw32");
   system("cd '$DataDir/build-mingw$Bits' && set -x && ".
          ($NoRm ? "" : "rm -rf * && ") .
          "time ../wine/configure --host=$Host --with-wine-tools=../build-native --without-x --without-freetype --disable-winetest && ".
-         "time make -j$ncpus buildtests");
+         "time make -j$CPUCount buildtests");
   if ($? != 0)
   {
     LogMsg "Build cross ($Bits bits) failed\n";
@@ -271,6 +176,7 @@ if (!defined $Usage)
 }
 if (defined $Usage)
 {
+  my $Name0 = GetToolName();
   if ($Usage)
   {
     Error "try '$Name0 --help' for more information\n";
@@ -308,10 +214,9 @@ if (! -d "$DataDir/staging" and ! mkdir "$DataDir/staging")
 # Run the builds
 #
 
-CountCPUs();
-
-exit(1) if (!BuildTestAgentd() or !BuildTestLauncher());
-exit(1) if ($OptUpdate and !GitPull());
+exit(1) if (!BuildNativeTestAgentd() or !BuildWindowsTestAgentd());
+exit(1) if (!BuildTestLauncher());
+exit(1) if ($OptUpdate and !GitPull("wine"));
 exit(1) if ($OptBuild and !UpdateWineBuilds($Targets, $OptNoRm));
 
 LogMsg "ok\n";

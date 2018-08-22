@@ -43,98 +43,23 @@ sub BEGIN
   }
   $::BuildEnv = 1;
 }
-my $Name0 = $0;
-$Name0 =~ s+^.*/++;
 
-
+use Build::Utils;
 use WineTestBot::Config;
-use WineTestBot::PatchUtils;
 use WineTestBot::Utils;
-
-
-#
-# Logging and error handling helpers
-#
-
-sub InfoMsg(@)
-{
-  print @_;
-}
-
-sub LogMsg(@)
-{
-  print "Build: ", @_;
-}
-
-sub Error(@)
-{
-  print STDERR "$Name0:error: ", @_;
-}
 
 
 #
 # Build helpers
 #
 
-my $ncpus;
-sub CountCPUs()
-{
-  if (open(my $fh, "<", "/proc/cpuinfo"))
-  {
-    # Linux
-    map { $ncpus++ if (/^processor/); } <$fh>;
-    close($fh);
-  }
-  $ncpus ||= 1;
-}
-
-sub ApplyPatch($)
-{
-  my ($PatchFile) = @_;
-
-  InfoMsg "Applying patch\n";
-  system("cd '$DataDir/wine' && ".
-         "echo wine:HEAD=`git rev-parse HEAD` && ".
-         "set -x && ".
-         "git apply --verbose ". ShQuote($PatchFile) ." && ".
-         "git add -A");
-  if ($? != 0)
-  {
-    LogMsg "Patch failed to apply\n";
-    return undef;
-  }
-
-  my $Impacts = GetPatchImpact($PatchFile, "nounits");
-  if ($Impacts->{MakeMakefiles})
-  {
-    InfoMsg "\nRunning make_makefiles\n";
-    system("cd '$DataDir/wine' && set -x && ./tools/make_makefiles");
-    if ($? != 0)
-    {
-      LogMsg "make_makefiles failed\n";
-      return undef;
-    }
-  }
-
-  if ($Impacts->{Autoconf} && !$Impacts->{HasConfigure})
-  {
-    InfoMsg "\nRunning autoconf\n";
-    system("cd '$DataDir/wine' && set -x && autoconf");
-    if ($? != 0)
-    {
-      LogMsg "Autoconf failed\n";
-      return undef;
-    }
-  }
-
-  return $Impacts;
-}
 
 sub BuildNative()
 {
   InfoMsg "\nRebuilding native tools\n";
+  my $CPUCount = GetCPUCount();
   system("cd '$DataDir/build-native' && set -x && ".
-         "time make -j$ncpus __tooldeps__");
+         "time make -j$CPUCount __tooldeps__");
   if ($? != 0)
   {
     LogMsg "Rebuild of native tools failed\n";
@@ -160,8 +85,9 @@ sub BuildTestExecutables($$$)
   }
 
   InfoMsg "\nBuilding the $Bits-bit test executable(s)\n";
+  my $CPUCount = GetCPUCount();
   system("cd '$DataDir/build-mingw$Bits' && set -x && ".
-         "time make -j$ncpus ". join(" ", sort @BuildDirs));
+         "time make -j$CPUCount ". join(" ", sort @BuildDirs));
   if ($? != 0)
   {
     LogMsg "Rebuild of $Bits-bit crossbuild failed\n";
@@ -262,6 +188,7 @@ if (!defined $Usage)
 }
 if (defined $Usage)
 {
+  my $Name0 = GetToolName();
   if ($Usage)
   {
     Error "try '$Name0 --help' for more information\n";
@@ -292,9 +219,7 @@ if ($DataDir =~ /'/)
 # Run the builds
 #
 
-CountCPUs();
-
-my $Impacts = ApplyPatch($PatchFile);
+my $Impacts = ApplyPatch("wine", $PatchFile);
 
 if (!$Impacts or
     ($Impacts->{WineBuild} and !BuildNative()) or
