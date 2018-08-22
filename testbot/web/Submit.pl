@@ -237,7 +237,7 @@ sub GenerateFields($)
       print "<thead><tr><th class='Record'></th>\n";
       print "<th class='Record'>VM Name</th>\n";
       print "<th class='Record'>Description</th>\n";
-      print "</th><tbody>\n";
+      print "</thead><tbody>\n";
 
       my $VMs = CreateVMs();
       if ($self->{FileType} eq "exe64")
@@ -296,6 +296,7 @@ sub GenerateFields($)
         print "</tr>\n";
       }
       print "</tbody></table>\n";
+      print "</div><!--CollectionBlock-->\n";
     }
     else
     {

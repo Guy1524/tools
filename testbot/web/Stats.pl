@@ -335,6 +335,7 @@ sub GenerateBody($)
 
   print "</tbody></table></div>\n";
   print "<p class='GeneralFooterText'>Generated in ", Elapsed($self->{start}), " s</p>\n";
+  print "</div>\n";
 }
 
 

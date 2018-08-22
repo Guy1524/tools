@@ -94,7 +94,7 @@ sub GenerateBody($)
 
   # Generate a custom form to let the user specify the Hours field.
   $self->GenerateFormStart();
-  print "<div class='ItemProperty'><label>Analyze the activity of the past <div class='ItemValue'><input type='text' name='Hours' maxlength='3' size='3' value='$self->{hours}'/></div> hours.</div>\n";
+  print "<div class='ItemProperty'><label>Analyze the activity of the past <div class='ItemValue'><input type='text' name='Hours' maxlength='3' size='3' value='$self->{hours}'/></div> hours.</label></div>\n";
   $self->GenerateFormEnd();
 
   print "<h1>${ProjectName} Test Bot activity</h1>\n";
@@ -267,6 +267,7 @@ EOF
   ### Generate the table footer
 
   print "</tbody></table></div>\n";
+  print "</div>\n";
 }
 
 sub GenerateFooter($)
@@ -294,8 +295,9 @@ sub GenerateFooter($)
   print "<span class='Record-deleted'>deletion</span>.</p>\n";
 
   print "</td></tr></tbody>\n";
-  print "</tbody></table></div>\n";
+  print "</table></div>\n";
   print "<p class='GeneralFooterText'>Generated in ", Elapsed($self->{start}), " s</p>\n";
+  $self->SUPER::GenerateFooter();
 }
 
 
