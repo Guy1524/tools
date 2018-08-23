@@ -342,7 +342,8 @@ if ($Step->FileType ne "patch")
 my (%Bitnesses, %TestExes);
 foreach my $TestStep (@{$Job->Steps->GetItems()})
 {
-  if ($TestStep->FileType =~ /^exe([0-9]+)$/)
+  if (($TestStep->PreviousNo || 0) == $Step->No and
+      $TestStep->FileType =~ /^exe([0-9]+)$/)
   {
     $Bitnesses{$1} = 1;
     $TestExes{$TestStep->FileName} = 1;
