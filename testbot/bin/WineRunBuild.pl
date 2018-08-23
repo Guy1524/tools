@@ -339,14 +339,14 @@ if ($Step->FileType ne "patch")
 # Figure out what to build
 #
 
-my (%Bitnesses, %TestExes);
+my (%Builds, %TestExes);
 foreach my $TestStep (@{$Job->Steps->GetItems()})
 {
   if (($TestStep->PreviousNo || 0) == $Step->No and
-      $TestStep->FileType =~ /^exe([0-9]+)$/)
+      $TestStep->FileType =~ /^exe/)
   {
-    $Bitnesses{$1} = 1;
-    $TestExes{$TestStep->FileName} = 1;
+    $Builds{$TestStep->FileType} = 1;
+    $TestExes{$TestStep->FileName} = $TestStep->FileType;
   }
 }
 
@@ -364,7 +364,7 @@ if (!$TA->SendFile($FileName, "staging/patch.diff", 0))
 }
 my $Script = "#!/bin/sh\n".
              "( set -x\n".
-             "  ../bin/build/Build.pl patch.diff ". join(":", sort keys %Bitnesses) ."\n".
+             "  ../bin/build/Build.pl patch.diff ". join(":", sort keys %Builds) ."\n".
              ") >Build.log 2>&1\n";
 Debug(Elapsed($Start), " Sending the script: [$Script]\n");
 if (!$TA->SendFileFromString($Script, "task", $TestAgent::SENDFILE_EXE))
@@ -455,9 +455,10 @@ foreach my $TestInfo (values %{$Impacts->{Tests}})
     my $Local = "$TestInfo->{ExeBase}$Bits.exe";
     next if (!$TestExes{$Local});
 
-    my $Remote = "build-mingw". ($Bits || "32") ."/$TestInfo->{Path}/$TestInfo->{ExeBase}.exe";
     Debug(Elapsed($Start), " Retrieving '$Local'\n");
-    if ($TA->GetFile($Remote, "$StepDir/$Local"))
+    my $BuildDir = "wine-$TestExes{$Local}";
+    if ($TA->GetFile("$BuildDir/$TestInfo->{Path}/$TestInfo->{ExeBase}.exe",
+                     "$StepDir/$Local"))
     {
       chmod 0664, "$StepDir/$Local";
     }
