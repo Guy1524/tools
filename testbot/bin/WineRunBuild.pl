@@ -406,7 +406,7 @@ if (!defined $TA->Wait($Pid, $Task->Timeout, 60))
 Debug(Elapsed($Start), " Retrieving 'Build.log'\n");
 if ($TA->GetFile("Build.log", "$TaskDir/log"))
 {
-  my $Result = ParseTaskLog("$TaskDir/log", "Build");
+  my $Result = ParseTaskLog("$TaskDir/log");
   if ($Result eq "ok")
   {
     # We must have gotten the full log and the build did succeed.

@@ -50,9 +50,9 @@ Returns ok if the task was successful and an error code otherwise.
 =back
 =cut
 
-sub ParseTaskLog($$)
+sub ParseTaskLog($)
 {
-  my ($FileName, $ResultPrefix) = @_;
+  my ($FileName) = @_;
 
   if (open(my $LogFile, "<", $FileName))
   {
@@ -60,16 +60,16 @@ sub ParseTaskLog($$)
     foreach my $Line (<$LogFile>)
     {
       chomp $Line;
-      if ($Line =~ /^(?:$ResultPrefix|Task): ok$/)
+      if ($Line =~ /^Task: ok$/)
       {
         $Result ||= "ok";
       }
-      elsif ($Line =~ /^(?:$ResultPrefix|Task): Patch failed to apply$/)
+      elsif ($Line =~ /^Task: Patch failed to apply$/)
       {
         $Result = "badpatch";
         last; # Should be the last and most specific message
       }
-      elsif ($Line =~ /^(?:$ResultPrefix|Task): /)
+      elsif ($Line =~ /^Task: /)
       {
         $Result = "failed";
       }
