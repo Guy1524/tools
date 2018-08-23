@@ -393,7 +393,7 @@ sub GenerateBody($)
     print "</div>\n";
 
     my $LogName = $MoreInfo->{Full} || $MoreInfo->{Logs}->[0] || "log";
-    my $ErrName = $LogName eq "log.old" ? "err.old" : "err";
+    my $ErrName = "$LogName.err";
 
     my ($EmptyDiag, $LogFirst) = (undef, 1);
     if (open(my $LogFile, "<", "$TaskDir/$LogName"))
@@ -472,7 +472,7 @@ sub GenerateBody($)
           if (!$LogFirst)
           {
             print "<div class='HrTitle'>".
-                  ($ErrName eq "err" ? "Other errors" : "Old errors") .
+                  ($ErrName =~ /^old_/ ? "Old errors" : "Extra errors") .
                   "<div class='HrLine'></div></div>\n";
           }
           print "<pre><code>";

@@ -51,6 +51,7 @@ use WineTestBot::Engine::Notify;
 use WineTestBot::Engine::Scheduler;
 use WineTestBot::Jobs;
 use WineTestBot::Log;
+use WineTestBot::LogUtils; # FIXME Temporary, for the log renaming
 use WineTestBot::Patches;
 use WineTestBot::PendingPatchSets;
 use WineTestBot::RecordGroups;
@@ -101,6 +102,20 @@ In all other cases the VM is powered off and marked as such.
 sub Cleanup($;$$)
 {
   my ($Starting, $KillTasks, $KillVMs) = @_;
+
+  # FIXME Temporary: Rename the old logs so they follow the new naming scheme
+  #       and can be identified by WineSendLog.pl and JobDetails.pl.
+  RenameReferenceLogs();
+  foreach my $Job (@{CreateJobs()->GetItems()})
+  {
+    foreach my $Step (@{$Job->Steps->GetItems()})
+    {
+      foreach my $Task (@{$Step->Tasks->GetItems()})
+      {
+        RenameTaskLogs($Task->GetDir());
+      }
+    }
+  }
 
   # Verify that the running tasks are still alive and requeue them if not.
   # Ignore the Job and Step status fields because they may be a bit out of date.

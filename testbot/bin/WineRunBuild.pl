@@ -183,14 +183,14 @@ sub LogTaskError($)
   Debug("$Name0:error: ", $ErrMessage);
 
   my $OldUMask = umask(002);
-  if (open(my $ErrFile, ">>", "$TaskDir/err"))
+  if (open(my $ErrFile, ">>", "$TaskDir/log.err"))
   {
     print $ErrFile $ErrMessage;
     close($ErrFile);
   }
   else
   {
-    Error "Unable to open 'err' for writing: $!\n";
+    Error "Unable to open 'log.err' for writing: $!\n";
   }
   umask($OldUMask);
 }

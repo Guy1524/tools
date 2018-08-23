@@ -209,14 +209,14 @@ sub LogTaskError($)
   my ($ErrMessage) = @_;
   Debug("$Name0:error: ", $ErrMessage);
 
-  if (open(my $ErrFile, ">>", "$TaskDir/err"))
+  if (open(my $ErrFile, ">>", "$TaskDir/log.err"))
   {
     print $ErrFile $ErrMessage;
     close($ErrFile);
   }
   else
   {
-    Error "Unable to open 'err' for writing: $!\n";
+    Error "Unable to open 'log.err' for writing: $!\n";
   }
 }
 
@@ -295,15 +295,15 @@ sub WrapUpAndExit($;$$$)
       my $RptFileName = "$Build.report";
       if (-f "$TaskDir/$RptFileName" and !-z "$TaskDir/$RptFileName")
       {
-        # Update the reference VM suite results for WineSendLog.pl
-        my $LatestBaseName = join("", "$DataDir/latest/", $Task->VM->Name,
-                                  "_$Build");
-        unlink("$LatestBaseName.log");
-        link("$TaskDir/$RptFileName", "$LatestBaseName.log");
-        unlink("$LatestBaseName.err");
-        if (-f "$TaskDir/err" and !-z "$TaskDir/err")
+        # Update the VM's reference WineTest results for WineSendLog.pl
+        my $RefReport = "$DataDir/latest/". $Task->VM->Name ."_$RptFileName";
+        unlink($RefReport);
+        link("$TaskDir/$RptFileName", $RefReport);
+
+        unlink("$RefReport.err");
+        if (-f "$TaskDir/$RptFileName.err" and !-z "$TaskDir/$RptFileName.err")
         {
-          link("$TaskDir/err", "$LatestBaseName.err");
+          link("$TaskDir/$RptFileName.err", "$RefReport.err");
         }
       }
     }
@@ -560,9 +560,17 @@ if ($Step->Type ne "build")
       {
         # $LogFailures can legitimately be undefined in case of a timeout
         $TaskFailures += $LogFailures || 0;
-        foreach my $Error (@$LogErrors)
+        if (@$LogErrors and open(my $Log, ">", "$TaskDir/$RptFileName.err"))
         {
-          LogTaskError("$Error\n");
+          # Save the extra errors detected by ParseWineTestReport() in
+          # $RptFileName.err:
+          # - This keep the .report file clean.
+          # - Each .err file can be matched to its corresponding .report, even
+          #   if there are multiple .report files in the directory.
+          # - The .err file can be moved to the latest directory next to the
+          #   reference report.
+          print $Log "$_\n" for (@$LogErrors);
+          close($Log);
         }
       }
     }

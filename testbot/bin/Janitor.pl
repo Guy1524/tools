@@ -311,7 +311,7 @@ if (opendir(my $dh, "$DataDir/latest"))
   {
     next if ($Entry eq "." or $Entry eq "..");
 
-    if ($Entry =~ /^(.*)_[a-z0-9]+\.(?:err|log)$/)
+    if ($Entry =~ /^(.*)_[a-z0-9]+\.report(?:\.err)?$/)
     {
       # Keep the reference WineTest reports for all VMs even if they are
       # retired or scheduled for deletion.

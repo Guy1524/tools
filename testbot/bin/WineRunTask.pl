@@ -214,14 +214,14 @@ sub LogTaskError($)
   Debug("$Name0:error: ", $ErrMessage);
 
   my $OldUMask = umask(002);
-  if (open(my $ErrFile, ">>", "$TaskDir/err"))
+  if (open(my $ErrFile, ">>", "$TaskDir/log.err"))
   {
     print $ErrFile $ErrMessage;
     close($ErrFile);
   }
   else
   {
-    Error "Unable to open 'err' for writing: $!\n";
+    Error "Unable to open 'log.err' for writing: $!\n";
   }
   umask($OldUMask);
 }
@@ -296,15 +296,15 @@ sub WrapUpAndExit($;$$$)
     # Keep the old report if the new one is missing
     if (-f "$TaskDir/$RptFileName" and !-z "$TaskDir/$RptFileName")
     {
-      # Update the reference VM suite results for WineSendLog.pl
-      my $LatestBaseName = join("", "$DataDir/latest/", $Task->VM->Name, "_",
-                                $Step->FileType eq "exe64" ? "64" : "32");
-      unlink("$LatestBaseName.log");
-      link("$TaskDir/$RptFileName", "$LatestBaseName.log");
-      unlink("$LatestBaseName.err");
-      if (-f "$TaskDir/err" and !-z "$TaskDir/err")
+      # Update the VM's reference WineTest results for WineSendLog.pl
+      my $RefReport = "$DataDir/latest/". $Task->VM->Name ."_$RptFileName";
+      unlink($RefReport);
+      link("$TaskDir/$RptFileName", $RefReport);
+
+      unlink("$RefReport.err");
+      if (-f "$TaskDir/$RptFileName.err" and !-z "$TaskDir/$RptFileName.err")
       {
-        link("$TaskDir/err", "$LatestBaseName.err");
+        link("$TaskDir/$RptFileName.err", "$RefReport.err");
       }
     }
   }
@@ -541,9 +541,12 @@ if ($TA->GetFile($RptFileName, "$TaskDir/$RptFileName"))
   {
     # $LogFailures can legitimately be undefined in case of a timeout
     $TaskFailures += $LogFailures || 0;
-    foreach my $Error (@$LogErrors)
+    if (@$LogErrors and open(my $Log, ">", "$TaskDir/$RptFileName.err"))
     {
-      LogTaskError("$Error\n");
+      # Save the extra errors detected by ParseWineTestReport() in
+      # $RptFileName.err (see WineRunWineTest.pl).
+      print $Log "$_\n" for (@$LogErrors);
+      close($Log);
     }
   }
 }

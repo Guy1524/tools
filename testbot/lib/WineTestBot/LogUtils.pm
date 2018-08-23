@@ -29,6 +29,7 @@ WineTestBot::LogUtils - Provides functions to parse task logs
 use Exporter 'import';
 our @EXPORT = qw(GetLogFileNames GetLogLabel
                  GetLogLineCategory GetReportLineCategory
+                 RenameReferenceLogs RenameTaskLogs
                  ParseTaskLog ParseWineTestReport);
 
 use File::Basename;
@@ -485,6 +486,49 @@ sub GetReportLineCategory($)
 # Log querying and formatting
 #
 
+sub RenameReferenceLogs()
+{
+  if (opendir(my $dh, "$DataDir/latest"))
+  {
+    # We will be renaming files so read the directory in one go
+    my @Entries = readdir($dh);
+    close($dh);
+    foreach my $Entry (@Entries)
+    {
+      if ($Entry =~ /^([a-z0-9._]+)$/)
+      {
+        my $NewName = $Entry = $1;
+        $NewName =~ s/\.log$/.report/;
+        $NewName =~ s/(_[a-z0-9]+)\.err$/$1.report.err/;
+        $NewName =~ s/_(32|64)\.report/_exe$1.report/;
+        if ($Entry ne $NewName and !-f "$DataDir/latest/$NewName")
+        {
+          rename "$DataDir/latest/$Entry", "$DataDir/latest/$NewName";
+        }
+      }
+    }
+  }
+}
+
+sub RenameTaskLogs($)
+{
+  my ($Dir) = @_;
+
+  if (-f "$Dir/err" and !-f "$Dir/log.err")
+  {
+    rename "$Dir/err", "$Dir/log.err";
+  }
+
+  if (-f "$Dir/log.old" and !-f "$Dir/old_log")
+  {
+    rename "$Dir/log.old", "$Dir/old_log";
+  }
+  if (-f "$Dir/err.old" and !-f "$Dir/old_log.err")
+  {
+    rename "$Dir/err.old", "$Dir/old_log.err";
+  }
+}
+
 =pod
 =over 12
 
@@ -503,8 +547,8 @@ sub GetLogFileNames($;$)
 
   my @Candidates = ("exe32.report", "exe64.report",
                     "win32.report", "wow32.report", "wow64.report",
-                    "log", "err");
-  push @Candidates, "log.old", "err.old" if ($IncludeOld);
+                    "log", "log.err");
+  push @Candidates, "old_log", "old_log.err" if ($IncludeOld);
 
   my @Logs;
   foreach my $FileName (@Candidates)
@@ -521,9 +565,9 @@ my %_LogFileLabels = (
   "wow32.report" => "32 bit WoW Wine report",
   "wow64.report" => "64 bit Wow Wine report",
   "log"          => "task log",
-  "err"          => "task errors",
-  "log.old"      => "old logs",
-  "err.old"      => "old task errors",
+  "log.err"      => "task errors",
+  "old_log"      => "old logs",
+  "old_log.err"  => "old task errors",
 );
 
 =pod

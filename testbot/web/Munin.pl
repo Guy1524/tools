@@ -441,7 +441,7 @@ sub GetOutput($)
     foreach my $VM (@SortedVMs)
     {
       next if ($VM->Type ne "win32" and $VM->Type ne "win64");
-      my $Filename = "$DataDir/latest/". $VM->Name ."_$Bitness.log";
+      my $Filename = "$DataDir/latest/". $VM->Name ."_exe$Bitness.report";
       my $Size = -s $Filename;
       if (defined $Size)
       {

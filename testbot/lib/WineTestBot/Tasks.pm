@@ -117,13 +117,15 @@ sub _SetupTask($$)
   if (-d $Dir)
   {
     mkpath("$Dir.new", 0, 0775);
-    rename "$Dir/log.old", "$Dir.new/log.old" if (-f "$Dir/log.old");
-    rename "$Dir/err.old", "$Dir.new/err.old" if (-f "$Dir/err.old");
-    foreach my $Filename ("log", "err")
+    foreach my $Filename ("log", "log.err")
     {
+      if (-f "$Dir/old_$Filename")
+      {
+        rename "$Dir/old_$Filename", "$Dir.new/old_$Filename";
+      }
       if (open(my $Src, "<", "$Dir/$Filename"))
       {
-        if (open(my $Dst, ">>", "$Dir.new/$Filename.old"))
+        if (open(my $Dst, ">>", "$Dir.new/old_$Filename"))
         {
           print $Dst "----- Run ", ($self->TestFailures || 0), " $Filename\n";
           while (my $Line = <$Src>)
@@ -142,7 +144,7 @@ sub _SetupTask($$)
 
   # Capture Perl errors in the task's generic error log
   my $TaskDir = $self->CreateDir();
-  if (open(STDERR, ">>", "$TaskDir/err"))
+  if (open(STDERR, ">>", "$TaskDir/log.err"))
   {
     # Make sure stderr still flushes after each print
     my $tmp=select(STDERR);
@@ -152,7 +154,7 @@ sub _SetupTask($$)
   else
   {
     require WineTestBot::Log;
-    WineTestBot::Log::LogMsg("unable to redirect stderr to '$TaskDir/err': $!\n");
+    WineTestBot::Log::LogMsg("unable to redirect stderr to '$TaskDir/log.err': $!\n");
   }
 }
 
@@ -215,7 +217,7 @@ sub UpdateStatus($$)
     my ($JobId, $StepNo, $TaskNo) = @{$self->GetMasterKey()};
     my $OldUMask = umask(002);
     my $TaskDir = $self->CreateDir();
-    if (open TASKLOG, ">>$TaskDir/err")
+    if (open TASKLOG, ">>$TaskDir/log.err")
     {
       print TASKLOG "TestBot process got stuck or died unexpectedly\n";
       close TASKLOG;

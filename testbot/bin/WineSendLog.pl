@@ -327,7 +327,7 @@ EOF
       }
       close LOGFILE;
 
-      if (open ERRFILE, "<$TaskDir/err")
+      if (open ERRFILE, "<$TaskDir/log.err")
       {
         my $First = 1;
         while (defined($Line = <ERRFILE>))
@@ -365,7 +365,7 @@ EOF
         push @FailureKeys, $Key;
       }
     }
-    elsif (open ERRFILE, "<$TaskDir/err")
+    elsif (open ERRFILE, "<$TaskDir/log.err")
     {
       my $HasErrEntries = !1;
       my $Line;
@@ -419,7 +419,7 @@ EOF
       close LOGFILE;
     }
 
-    if (open ERRFILE, "<$TaskDir/err")
+    if (open ERRFILE, "<$TaskDir/log.err")
     {
       my $Line;
       while (defined($Line = <ERRFILE>))
@@ -456,12 +456,12 @@ EOF
     my $StepTask = $StepsTasks->GetItem($Key);
     my $TaskDir = $StepTask->GetTaskDir();
 
-    my ($BotFailure, $MessagesFromErr) = CheckErrLog("$TaskDir/err");
+    my ($BotFailure, $MessagesFromErr) = CheckErrLog("$TaskDir/log.err");
     if ($BotFailure)
     {
       # TestBot errors are not the developer's fault and prevent us from doing
       # any meaningful analysis. So skip.
-      Error "A TestBot error was found in $TaskDir/err\n";
+      Error "A TestBot error was found in $TaskDir/log.err\n";
       next;
     }
 
@@ -470,9 +470,7 @@ EOF
     my $LogName = $LogFiles->[0] || "log";
     if ($LogName =~ /\.report$/)
     {
-      $StepTask->FileName =~ m/^(.*)_test(64)?\.exe$/;
-      my ($BaseName, $Bits) = ($1, $2 || "32");
-      my $LatestName = "$DataDir/latest/" . $StepTask->VM->Name . "_$Bits";
+      my $LatestName = "$DataDir/latest/". $StepTask->VM->Name ."_$LogName";
       my ($LatestBotFailure, $Dummy) = CheckErrLog("$LatestName.err");
       if (! $LatestBotFailure)
       {
@@ -481,13 +479,15 @@ EOF
           # Filter out failures that happened in the full test suite:
           # the test suite is run against code which is already in Wine
           # so any failure it reported is not caused by this patch.
-          $MessagesFromLog = CompareLogs("$LatestName.log", "$TaskDir/$LogName",
+          $StepTask->FileName =~ m/^(.*)_test/;
+          my $BaseName = $1;
+          $MessagesFromLog = CompareLogs($LatestName, "$TaskDir/$LogName",
                                          $BaseName, $StepTask->CmdLineArg);
         }
       }
       else
       {
-        Error "BotFailure found in ${LatestName}.err\n";
+        Error "BotFailure found in $LatestName.err\n";
       }
     }
     elsif (open(my $LogFile, "<", "$TaskDir/$LogName"))
@@ -596,7 +596,7 @@ EOF
           close($logfile);
         }
   
-        if (open(my $errfile, "<", "$TaskDir/err"))
+        if (open(my $errfile, "<", "$TaskDir/log.err"))
         {
           my $Line;
           while (defined($Line = <$errfile>))
