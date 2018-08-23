@@ -27,7 +27,7 @@ WineTestBot::LogUtils - Provides functions to parse task logs
 
 
 use Exporter 'import';
-our @EXPORT = qw(GetLogFileNames GetLogLabel
+our @EXPORT = qw(GetLogFileNames GetLogLabel GetLogErrors
                  GetLogLineCategory GetReportLineCategory
                  RenameReferenceLogs RenameTaskLogs
                  ParseTaskLog ParseWineTestReport);
@@ -547,13 +547,17 @@ sub GetLogFileNames($;$)
 
   my @Candidates = ("exe32.report", "exe64.report",
                     "win32.report", "wow32.report", "wow64.report",
-                    "log", "log.err");
-  push @Candidates, "old_log", "old_log.err" if ($IncludeOld);
+                    "log");
+  push @Candidates, "old_log" if ($IncludeOld);
 
   my @Logs;
   foreach my $FileName (@Candidates)
   {
-    push @Logs, $FileName if (-f "$Dir/$FileName" and !-z "$Dir/$FileName");
+    if ((-f "$Dir/$FileName" and !-z "$Dir/$FileName") or
+        (-f "$Dir/$FileName.err" and !-z "$Dir/$FileName.err"))
+    {
+      push @Logs, $FileName;
+    }
   }
   return \@Logs;
 }
@@ -565,9 +569,7 @@ my %_LogFileLabels = (
   "wow32.report" => "32 bit WoW Wine report",
   "wow64.report" => "64 bit Wow Wine report",
   "log"          => "task log",
-  "log.err"      => "task errors",
   "old_log"      => "old logs",
-  "old_log.err"  => "old task errors",
 );
 
 =pod
@@ -584,6 +586,132 @@ sub GetLogLabel($)
 {
   my ($LogFileName) = @_;
   return $_LogFileLabels{$LogFileName};
+}
+
+
+sub _DumpErrors($$$)
+{
+  my ($Label, $Groups, $Errors) = @_;
+
+  print STDERR "$Label:\n";
+  print STDERR "  Groups=", scalar(@$Groups), " [", join(",", @$Groups), "]\n";
+  my @ErrorKeys = sort keys %$Errors;
+  print STDERR "  Errors=", scalar(@ErrorKeys), " [", join(",", @ErrorKeys), "]\n";
+  foreach my $GroupName (@$Groups)
+  {
+    print STDERR "  [$GroupName]\n";
+    print STDERR "    [$_]\n" for (@{$Errors->{$GroupName}});
+  }
+}
+
+sub _AddErrorGroup($$$)
+{
+  my ($Groups, $Errors, $GroupName) = @_;
+
+  # In theory the error group names are all unique. But, just in case, make
+  # sure we don't overwrite $Errors->{$GroupName}.
+  if (!$Errors->{$GroupName})
+  {
+    push @$Groups, $GroupName;
+    $Errors->{$GroupName} = [];
+  }
+  return $Errors->{$GroupName};
+}
+
+=pod
+=over 12
+
+=item C<GetLogErrors()>
+
+Analyzes the specified log and associated error file to filter out unimportant
+messages and only return the errors, split by module (for Wine reports that's
+per dll / program being tested).
+
+Returns a list of modules containing errors, and a hashtable containing the list of errors for each module.
+
+=back
+=cut
+
+sub GetLogErrors($)
+{
+  my ($LogFileName) = @_;
+
+  my ($IsReport, $GetCategory);
+  if ($LogFileName =~ /\.report$/)
+  {
+    $IsReport = 1;
+    $GetCategory = \&GetReportLineCategory;
+  }
+  else
+  {
+    $GetCategory = \&GetLogLineCategory;
+  }
+
+  my $NoLog = 1;
+  my $Groups = [];
+  my $Errors = {};
+  if (open(my $LogFile, "<", $LogFileName))
+  {
+    $NoLog = 0;
+    my $CurrentModule = "";
+    my $CurrentGroup;
+    foreach my $Line (<$LogFile>)
+    {
+      $Line =~ s/\s*$//;
+      if ($IsReport and $Line =~ /^([_.a-z0-9-]+):[_a-z0-9]* start /)
+      {
+        $CurrentModule = $1;
+        $CurrentGroup = undef;
+        next;
+      }
+
+      next if ($GetCategory->($Line) !~ /error/);
+
+      if ($Line =~ m/^[^:]+:([^:]*)(?::[0-9a-f]+)? done \(258\)/)
+      {
+        my $Unit = $1;
+        $Line = $Unit ne "" ? "$Unit: Timeout" : "Timeout";
+      }
+      if (!$CurrentGroup)
+      {
+        $CurrentGroup = _AddErrorGroup($Groups, $Errors, $CurrentModule);
+      }
+      push @$CurrentGroup, $Line;
+    }
+    close($LogFile);
+  }
+  elsif (-f $LogFileName)
+  {
+    $NoLog = 0;
+    my $Group = _AddErrorGroup($Groups, $Errors, "TestBot errors");
+    push @$Group, "Could not open '". basename($LogFileName) ."' for reading: $!";
+  }
+
+  if (open(my $LogFile, "<", "$LogFileName.err"))
+  {
+    $NoLog = 0;
+    # Add the related extra errors
+    my $CurrentGroup;
+    foreach my $Line (<$LogFile>)
+    {
+      $Line =~ s/\s*$//;
+      if (!$CurrentGroup)
+      {
+        my $GroupName = $IsReport ? "Report errors" : "Task errors";
+        $CurrentGroup = _AddErrorGroup($Groups, $Errors, $GroupName);
+      }
+      push @$CurrentGroup, $Line;
+    }
+    close($LogFile);
+  }
+  elsif (-f "$LogFileName.err")
+  {
+    $NoLog = 0;
+    my $Group = _AddErrorGroup($Groups, $Errors, "TestBot errors");
+    push @$Group, "Could not open '". basename($LogFileName) .".err' for reading: $!";
+  }
+
+  return $NoLog ? (undef, undef) : ($Groups, $Errors);
 }
 
 1;

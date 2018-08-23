@@ -2,6 +2,7 @@
 # Job details page
 #
 # Copyright 2009 Ge van Geldorp
+# Copyright 2012-2014,2017-2018 Francois Gouget
 #
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
@@ -229,45 +230,6 @@ sub GeneratePage($)
   $self->SUPER::GeneratePage();
 }
 
-=pod
-=over 12
-
-=item C<GetHtmlLine()>
-
-Determines if the log line should be shown, how, and escapes it so it is valid
-HTML.
-
-When not showing the full log, returns undef except for error messages which
-are the only lines tha should be shown.
-When showing the full log error messages and other lines of interest are
-highlighted to make the log more readable.
-
-=back
-=cut
-
-sub GetHtmlLine($$$$)
-{
-  my ($self, $LogName, $FullLog, $Line) = @_;
-
-  my $Category = $LogName =~ /\.report$/ ?
-                 GetReportLineCategory($Line) :
-                 GetLogLineCategory($Line);
-  return undef if ($Category !~ /error/ and !$FullLog);
-
-  my $Html = $self->escapeHTML($Line);
-  if (!$FullLog and $Html =~ m/^[^:]+:([^:]*)(?::[0-9a-f]+)? done \(258\)/)
-  {
-    my $Unit = $1;
-    return $Unit ne "" ? "$Unit: Timeout" : "Timeout";
-  }
-  if ($FullLog and $Category ne "none")
-  {
-    # Highlight all line categories in the full log
-    $Html =~ s~^(.*\S)\s*\r?$~<span class='log-$Category'>$1</span>~;
-  }
-  return $Html;
-}
-
 sub InitMoreInfo($)
 {
   my ($self) = @_;
@@ -283,12 +245,6 @@ sub InitMoreInfo($)
     my $TaskDir = $StepTask->GetTaskDir();
     foreach my $Log (@{GetLogFileNames($TaskDir, 1)})
     {
-      if ($Log =~ s/^err/log/)
-      {
-        # We don't want separate entries for log* and err* but we also want a
-        # log* entry even if only err* exists.
-        next if (($More->{$Key}->{Logs}->[-1] || "") eq $Log);
-      }
       push @{$More->{$Key}->{Logs}}, $Log;
       $More->{$Key}->{Full} = $Log if (uri_escape($Log) eq $Value);
     }
@@ -348,6 +304,47 @@ sub GenerateMoreInfoLink($$$;$)
   print "<div class='TaskMoreInfoLink'>$Html</div>\n";
 }
 
+sub GetErrorCategory($)
+{
+  return "error";
+}
+
+sub GenerateFullLog($$;$)
+{
+  my ($self, $FileName, $Header) = @_;
+
+  my $GetCategory = $FileName =~ /\.err$/ ? \&GetErrorCategory :
+                    $FileName =~ /\.report$/ ? \&GetReportLineCategory :
+                    \&GetLogLineCategory;
+
+  my $IsEmpty = 1;
+  if (open(my $LogFile, "<", $FileName))
+  {
+    foreach my $Line (<$LogFile>)
+    {
+      $Line =~ s/\s*$//;
+      if ($IsEmpty)
+      {
+        print $Header if (defined $Header);
+        print "<pre><code>";
+        $IsEmpty = 0;
+      }
+
+      my $Category = $GetCategory->($Line);
+      my $Html = $self->escapeHTML($Line);
+      if ($Category ne "none")
+      {
+        $Html =~ s~^(.*\S)\s*\r?$~<span class='log-$Category'>$1</span>~;
+      }
+      print "$Html\n";
+    }
+    close($LogFile);
+  }
+  print "</code></pre>\n" if (!$IsEmpty);
+
+  return $IsEmpty;
+}
+
 sub GenerateBody($)
 {
   my ($self) = @_;
@@ -386,109 +383,101 @@ sub GenerateBody($)
       $self->GenerateMoreInfoLink($Key, "final screenshot", "Screenshot");
     }
 
-    foreach my $Log (@{$MoreInfo->{Logs}})
+    my $ReportCount;
+    foreach my $LogName (@{$MoreInfo->{Logs}})
     {
-      $self->GenerateMoreInfoLink($Key, GetLogLabel($Log), "Full", $Log);
+      $self->GenerateMoreInfoLink($Key, GetLogLabel($LogName), "Full", $LogName);
+      $ReportCount++ if ($LogName !~ /^old_/ and $LogName =~ /\.report$/);
     }
     print "</div>\n";
 
-    my $LogName = $MoreInfo->{Full} || $MoreInfo->{Logs}->[0] || "log";
-    my $ErrName = "$LogName.err";
-
-    my ($EmptyDiag, $LogFirst) = (undef, 1);
-    if (open(my $LogFile, "<", "$TaskDir/$LogName"))
+    if ($MoreInfo->{Full})
     {
-      my $HasLogEntries;
-      my ($CurrentDll, $PrintedDll) = ("", "");
-      foreach my $Line (<$LogFile>)
-      {
-        $HasLogEntries = 1;
-        chomp $Line;
-        $CurrentDll = $1 if ($Line =~ m/^([_.a-z0-9-]+):[_a-z0-9]* start /);
-        my $Html = $self->GetHtmlLine($LogName, $MoreInfo->{Full}, $Line);
-        next if (!defined $Html);
+      #
+      # Show this log in full, highlighting the important lines
+      #
 
-        if ($PrintedDll ne $CurrentDll && !$MoreInfo->{Full})
+      my $LogIsEmpty = $self->GenerateFullLog("$TaskDir/$MoreInfo->{Full}");
+      my $EmptyDiag;
+      if ($LogIsEmpty)
+      {
+        if ($StepTask->Status eq "canceled")
         {
-          print "</code></pre>" if (!$LogFirst);
-          print "<div class='LogDllName'>$CurrentDll:</div><pre><code>";
-          $PrintedDll = $CurrentDll;
-          $LogFirst = 0;
+          $EmptyDiag = "No log, task was canceled\n";
         }
-        elsif ($LogFirst)
+        elsif ($StepTask->Status eq "skipped")
         {
-          print "<pre><code>";
-          $LogFirst = 0;
+          $EmptyDiag = "No log, task skipped\n";
         }
-        print "$Html\n";
+        else
+        {
+          print "Empty log\n";
+          $LogIsEmpty = 0;
+        }
       }
-      close($LogFile);
 
-      if (!$LogFirst)
-      {
-        print "</code></pre>\n";
-      }
-      elsif ($HasLogEntries)
-      {
-        # Here we know we did not show the full log since it was not empty,
-        # and yet we did not show anything to the user. But don't claim there
-        # is no failure if the error log is not empty.
-        if (-z "$TaskDir/$ErrName")
-        {
-          print "No ". ($StepTask->Type eq "single" ||
-                        $StepTask->Type eq "suite" ? "test" : "build") .
-                " failures found";
-          $LogFirst = 0;
-        }
-      }
-      elsif ($StepTask->Status eq "canceled")
-      {
-        $EmptyDiag = "<p>No log, task was canceled</p>\n";
-      }
-      elsif ($StepTask->Status eq "skipped")
-      {
-        $EmptyDiag = "<p>No log, task skipped</p>\n";
-      }
-      else
-      {
-        print "Empty log";
-        $LogFirst = 0;
-      }
+      # And append the associated extra errors
+      my $ErrHeader = $MoreInfo->{Full} =~ /\.report/ ? "report" : "task";
+      $ErrHeader = "old $ErrHeader" if ($MoreInfo->{Full} =~ /^old_/);
+      $ErrHeader = "<div class='HrTitle'>". ucfirst($ErrHeader) ." errors<div class='HrLine'></div></div>";
+      my $ErrIsEmpty = $self->GenerateFullLog("$TaskDir/$MoreInfo->{Full}.err", $ErrHeader);
+      print $EmptyDiag if ($ErrIsEmpty and defined $EmptyDiag);
     }
     else
     {
-      print "No log". ($StepTask->Status =~ /^(?:queued|running)$/ ? " yet" : "");
-      $LogFirst = 0;
-    }
+      #
+      # Show a summary of the errors from all the reports and logs
+      #
 
-    if (open(my $ErrFile, "<", "$TaskDir/$ErrName"))
-    {
-      my $ErrFirst = 1;
-      foreach my $Line (<$ErrFile>)
+      # Figure out which logs / reports actually have errors
+      my $LogSummaries;
+      foreach my $LogName (@{$MoreInfo->{Logs}})
       {
-        chomp $Line;
-        if ($ErrFirst)
+        next if ($LogName =~ /^old_/);
+        my ($Groups, $Errors) = GetLogErrors("$TaskDir/$LogName");
+        next if (!$Groups or !@$Groups);
+        $LogSummaries->{$LogName}->{Groups} = $Groups;
+        $LogSummaries->{$LogName}->{Errors} = $Errors;
+      }
+      my $ShowLogName = ($ReportCount > 1 or scalar(keys %$LogSummaries) > 1);
+
+      my $LogIsEmpty = 1;
+      foreach my $LogName (@{$MoreInfo->{Logs}})
+      {
+        next if (!$LogSummaries->{$LogName});
+        $LogIsEmpty = 0;
+
+        if ($ShowLogName)
         {
-          if (!$LogFirst)
-          {
-            print "<div class='HrTitle'>".
-                  ($ErrName =~ /^old_/ ? "Old errors" : "Extra errors") .
-                  "<div class='HrLine'></div></div>\n";
-          }
-          print "<pre><code>";
-          $ErrFirst = 0;
+          # Show the log / report name to avoid ambiguity
+          my $Label = ucfirst(GetLogLabel($LogName));
+          print "<div class='HrTitle'>$Label<div class='HrLine'></div></div>\n";
         }
-        print $self->GetHtmlLine($ErrName, 1, $Line), "\n";
-      }
-      close($ErrFile);
 
-      if (!$ErrFirst)
-      {
-        print "</code></pre>\n";
+        my $Summary = $LogSummaries->{$LogName};
+        foreach my $GroupName (@{$Summary->{Groups}})
+        {
+          print "<div class='LogDllName'>$GroupName:</div>\n" if ($GroupName);
+          print "<pre><code>";
+          print $self->escapeHTML($_), "\n" for (@{$Summary->{Errors}->{$GroupName}});
+          print "</code></pre>\n";
+        }
       }
-      elsif (defined $EmptyDiag)
+
+      if ($LogIsEmpty)
       {
-        print $EmptyDiag;
+        if ($StepTask->Status eq "canceled")
+        {
+          print "No log, task was canceled\n";
+        }
+        elsif ($StepTask->Status eq "skipped")
+        {
+          print "No log, task skipped\n";
+        }
+        else
+        {
+          print "No errors\n";
+        }
       }
     }
   }
