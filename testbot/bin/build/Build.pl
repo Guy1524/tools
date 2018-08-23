@@ -58,11 +58,11 @@ sub BuildNative()
 {
   InfoMsg "\nRebuilding native tools\n";
   my $CPUCount = GetCPUCount();
-  system("cd '$DataDir/build-native' && set -x && ".
+  system("cd '$DataDir/wine-native' && set -x && ".
          "time make -j$CPUCount __tooldeps__");
   if ($? != 0)
   {
-    LogMsg "Rebuild of native tools failed\n";
+    LogMsg "The Wine native tools build failed\n";
     return !1;
   }
 
@@ -71,9 +71,9 @@ sub BuildNative()
 
 sub BuildTestExecutables($$$)
 {
-  my ($Targets, $Impacts, $Bits) = @_;
+  my ($Targets, $Impacts, $Build) = @_;
 
-  return 1 if (!$Targets->{"exe$Bits"});
+  return 1 if (!$Targets->{$Build});
 
   my (@BuildDirs, @TestExes);
   foreach my $TestInfo (values %{$Impacts->{Tests}})
@@ -81,26 +81,26 @@ sub BuildTestExecutables($$$)
     push @BuildDirs, $TestInfo->{Path};
     my $TestExe = "$TestInfo->{Path}/$TestInfo->{ExeBase}.exe";
     push @TestExes, $TestExe;
-    unlink("$DataDir/build-mingw$Bits/$TestExe"); # Ignore errors
+    unlink("$DataDir/wine-$Build/$TestExe"); # Ignore errors
   }
 
-  InfoMsg "\nBuilding the $Bits-bit test executable(s)\n";
+  InfoMsg "\nBuilding the $Build Wine test executable(s)\n";
   my $CPUCount = GetCPUCount();
-  system("cd '$DataDir/build-mingw$Bits' && set -x && ".
+  system("cd '$DataDir/wine-$Build' && set -x && ".
          "time make -j$CPUCount ". join(" ", sort @BuildDirs));
   if ($? != 0)
   {
-    LogMsg "Rebuild of $Bits-bit crossbuild failed\n";
+    LogMsg "The $Build Wine crossbuild failed\n";
     return !1;
   }
 
   my $Success = 1;
   foreach my $TestExe (@TestExes)
   {
-    if (!-f "$DataDir/build-mingw$Bits/$TestExe")
+    if (!-f "$DataDir/wine-$Build/$TestExe")
     {
-      LogMsg "Make didn't produce a $TestExe file\n";
-      $Success = undef;
+      LogMsg "Make didn't produce the $Build $TestExe file\n";
+      $Success = !1;
     }
   }
 
@@ -223,8 +223,8 @@ my $Impacts = ApplyPatch("wine", $PatchFile);
 
 if (!$Impacts or
     ($Impacts->{WineBuild} and !BuildNative()) or
-    !BuildTestExecutables($Targets, $Impacts, 32) or
-    !BuildTestExecutables($Targets, $Impacts, 64))
+    !BuildTestExecutables($Targets, $Impacts, "exe32") or
+    !BuildTestExecutables($Targets, $Impacts, "exe64"))
 {
   exit(1);
 }

@@ -50,19 +50,27 @@ sub BuildWine($$$$)
   my ($Targets, $NoRm, $Build, $Extras) = @_;
 
   return 1 if (!$Targets->{$Build});
-  mkdir "$DataDir/build-$Build" if (!-d "$DataDir/build-$Build");
+  # FIXME Temporary code to ensure compatibility during the transition
+  my $OldDir = "build-$Build";
+  if (-d "$DataDir/$OldDir" and !-d "$DataDir/wine-$Build")
+  {
+    rename("$DataDir/$OldDir", "$DataDir/wine-$Build");
+    # Add a symlink from compatibility with older server-side TestBot scripts
+    symlink("wine-$Build", "$DataDir/$OldDir");
+  }
+  mkdir "$DataDir/wine-$Build" if (!-d "$DataDir/wine-$Build");
 
   # If $NoRm is not set, rebuild from scratch to make sure cruft will not
   # accumulate
   InfoMsg "\nRebuilding the $Build Wine\n";
   my $CPUCount = GetCPUCount();
-  system("cd '$DataDir/build-$Build' && set -x && ".
+  system("cd '$DataDir/wine-$Build' && set -x && ".
          ($NoRm ? "" : "rm -rf * && ") .
          "time ../wine/configure $Extras && ".
          "time make -j$CPUCount");
   if ($? != 0)
   {
-    LogMsg "The $Build build failed\n";
+    LogMsg "The $Build Wine build failed\n";
     return !1;
   }
 
@@ -75,7 +83,7 @@ sub UpdateWineBuilds($$)
 
   return BuildWine($Targets, $NoRm, "win32", "") &&
          BuildWine($Targets, $NoRm, "wow64", "--enable-win64") &&
-         BuildWine($Targets, $NoRm, "wow32", "--with-wine64='$DataDir/build-wow64'");
+         BuildWine($Targets, $NoRm, "wow32", "--with-wine64='$DataDir/wine-wow64'");
 }
 
 

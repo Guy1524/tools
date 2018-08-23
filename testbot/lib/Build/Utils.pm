@@ -326,9 +326,9 @@ sub RunWine($$$)
 {
   my ($Build, $Cmd, $CmdArgs) = @_;
 
-  my $Magic = `cd '$DataDir/build-$Build' && file $Cmd`;
+  my $Magic = `cd '$DataDir/wine-$Build' && file $Cmd`;
   my $Wine = ($Magic =~ /ELF 64/ ? "./wine64" : "./wine");
-  return system("cd '$DataDir/build-$Build' && set -x && ".
+  return system("cd '$DataDir/wine-$Build' && set -x && ".
                 "time $Wine $Cmd $CmdArgs");
 }
 
@@ -354,7 +354,7 @@ sub CreateWinePrefix($$)
   {
     # Ensure the WinePrefix has been fully created and the registry files
     # saved before returning.
-    system("cd '$DataDir/build-$Build' && ./server/wineserver -w");
+    system("cd '$DataDir/wine-$Build' && ./server/wineserver -w");
   }
 
   return undef;

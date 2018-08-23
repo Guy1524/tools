@@ -52,19 +52,27 @@ sub BuildNative($)
 {
   my ($NoRm) = @_;
 
-  mkdir "$DataDir/build-native" if (! -d "$DataDir/build-native");
+  # FIXME Temporary code to ensure compatibility during the transition
+  my $OldDir = "build-native";
+  if (-d "$DataDir/$OldDir" and !-d "$DataDir/wine-native")
+  {
+    rename("$DataDir/$OldDir", "$DataDir/wine-native");
+    # Add a symlink from compatibility with older server-side TestBot scripts
+    symlink("wine-native", "$DataDir/$OldDir");
+  }
+  mkdir "$DataDir/wine-native" if (!-d "$DataDir/wine-native");
 
   # Rebuild from scratch to make sure cruft will not accumulate
   InfoMsg "\nRebuilding native tools\n";
   my $CPUCount = GetCPUCount();
-  system("cd '$DataDir/build-native' && set -x && ".
+  system("cd '$DataDir/wine-native' && set -x && ".
          ($NoRm ? "" : "rm -rf * && ") .
          "time ../wine/configure --enable-win64 --without-x --without-freetype --disable-winetest && ".
          "time make -j$CPUCount __tooldeps__");
 
   if ($? != 0)
   {
-    LogMsg "Build native failed\n";
+    LogMsg "The Wine native tools build failed\n";
     return !1;
   }
 
@@ -73,22 +81,30 @@ sub BuildNative($)
 
 sub BuildCross($$$)
 {
-  my ($Targets, $NoRm, $Bits) = @_;
+  my ($Targets, $NoRm, $Build) = @_;
 
-  return 1 if (!$Targets->{"exe$Bits"});
-  mkdir "$DataDir/build-mingw$Bits" if (!-d "$DataDir/build-mingw$Bits");
+  return 1 if (!$Targets->{$Build});
+  # FIXME Temporary code to ensure compatibility during the transition
+  my $OldDir = $Build eq "exe32" ? "build-mingw32" : "build-mingw64";
+  if (-d "$DataDir/$OldDir" and !-d "$DataDir/wine-$Build")
+  {
+    rename("$DataDir/$OldDir", "$DataDir/wine-$Build");
+    # Add a symlink from compatibility with older server-side TestBot scripts
+    symlink("wine-$Build", "$DataDir/$OldDir");
+  }
+  mkdir "$DataDir/wine-$Build" if (!-d "$DataDir/wine-$Build");
 
   # Rebuild from scratch to make sure cruft will not accumulate
-  InfoMsg "\nRebuilding the $Bits-bit test executables\n";
+  InfoMsg "\nRebuilding the $Build Wine test executables\n";
   my $CPUCount = GetCPUCount();
-  my $Host = ($Bits == 64 ? "x86_64-w64-mingw32" : "i686-w64-mingw32");
-  system("cd '$DataDir/build-mingw$Bits' && set -x && ".
+  my $Host = ($Build eq "exe64" ? "x86_64-w64-mingw32" : "i686-w64-mingw32");
+  system("cd '$DataDir/wine-$Build' && set -x && ".
          ($NoRm ? "" : "rm -rf * && ") .
-         "time ../wine/configure --host=$Host --with-wine-tools=../build-native --without-x --without-freetype --disable-winetest && ".
+         "time ../wine/configure --host=$Host --with-wine-tools=../wine-native --without-x --without-freetype --disable-winetest && ".
          "time make -j$CPUCount buildtests");
   if ($? != 0)
   {
-    LogMsg "Build cross ($Bits bits) failed\n";
+    LogMsg "The $Build Wine crossbuild failed\n";
     return !1;
   }
 
@@ -100,8 +116,8 @@ sub UpdateWineBuilds($$)
   my ($Targets, $NoRm) = @_;
 
   return BuildNative($NoRm) &&
-         BuildCross($Targets, $NoRm, 32) &&
-         BuildCross($Targets, $NoRm, 64);
+         BuildCross($Targets, $NoRm, "exe32") &&
+         BuildCross($Targets, $NoRm, "exe64");
 }
 
 

@@ -58,7 +58,7 @@ sub BuildWine($$)
 
   InfoMsg "\nRebuilding the $Build Wine\n";
   my $CPUCount = GetCPUCount();
-  system("cd '$DataDir/build-$Build' && set -x && ".
+  system("cd '$DataDir/wine-$Build' && set -x && ".
          "time make -j$CPUCount");
   if ($? != 0)
   {
