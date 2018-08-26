@@ -78,129 +78,47 @@ sub Error(@)
 
 
 #
-# Log analysis
+# Reporting
 #
 
-sub IsBotFailure($)
+sub GetTitle($$)
 {
-  my ($ErrLine) = @_;
+  my ($StepTask, $LogName) = @_;
 
-  return ($ErrLine =~ m/Can't set VM status to running/ ||
-          $ErrLine =~ m/Can't copy exe to VM/ ||
-          $ErrLine =~ m/Can't copy log from VM/ ||
-          $ErrLine =~ m/Can't copy generated executable from VM/);
-}
-
-sub CheckErrLog($)
-{
-  my ($ErrLogFileName) = @_;
-
-  my $BotFailure = !1;
-  my $Messages = "";
-  if (open ERRFILE, "$ErrLogFileName")
+  my $Label = GetLogLabel($LogName);
+  if ($LogName !~ /\.report$/ and
+      ($StepTask->Type eq "build" or $StepTask->VM->Type eq "wine"))
   {
-    my $Line;
-    while (defined($Line = <ERRFILE>))
-    {
-      if (IsBotFailure($Line))
-      {
-        if (! $Messages)
-        {
-          $BotFailure = 1;
-        }
-      }
-      else
-      {
-        $Messages .= $Line;
-      }
-    }
-    close ERRFILE;
+    $Label = "build log";
   }
 
-  return ($BotFailure, $Messages);
+  return $StepTask->VM->Name . " ($Label)";
 }
 
-sub ReadLog($$$)
+sub DumpLogAndErr($$)
 {
-  my ($LogName, $BaseName, $TestSet) = @_;
+  my ($File, $Path) = @_;
 
-  my @Messages;
-  if (open LOG, "<$LogName")
+  my $PrintSeparator;
+  foreach my $FileName ($Path, "$Path.err")
   {
-    my $Line;
-    my $Found = !1;
-    while (! $Found && defined($Line = <LOG>))
+    if (open(my $LogFile, "<",  $FileName))
     {
-      $Found = ($Line =~ m/${BaseName}:${TestSet} start/);
-    }
-    if ($Found)
-    {
-      $Found = !1;
-      while (! $Found && defined($Line = <LOG>))
+      my $First = 1;
+      foreach my $Line (<$LogFile>)
       {
-        $Line =~ s/[\r\n]*$//;
-        if ($Line =~ m/${BaseName}:${TestSet}(?::[0-9a-f]+)? done/)
+        $Line =~ s/\s*$//;
+        if ($First and $PrintSeparator)
         {
-          if ($Line =~ m/${BaseName}:${TestSet}(?::[0-9a-f]+)? done \(258\)/)
-          {
-            push @Messages, "The test timed out";
-          }
-          $Found = 1;
+          print $File "\n";
+          $First = 0;
         }
-        else
-        {
-          push @Messages, $Line;
-        }
+        print $File "$Line\n";
       }
-    }
-
-    close LOG;
-  }
-  else
-  {
-    Error "Unable to open '$LogName' for reading: $!\n";
-  }
-
-  return \@Messages;
-}
-
-sub GetLineKey($)
-{
-  my ($Line) = @_;
-
-  $Line =~ s/^([\w_.]+:)\d+(:.*)$/$1$2/;
-
-  return $Line;
-}
-
-sub CompareLogs($$$$)
-{
-  my ($SuiteLog, $TaskLog, $BaseName, $TestSet) = @_;
-
-  my $Messages = "";
-
-  my $SuiteMessages = ReadLog($SuiteLog, $BaseName, $TestSet);
-  my $TaskMessages = ReadLog($TaskLog, $BaseName, $TestSet);
-
-  my $Diff = Algorithm::Diff->new($SuiteMessages, $TaskMessages,
-                                  { keyGen => \&GetLineKey });
-  while ($Diff->Next())
-  {
-    if (! $Diff->Same())
-    {
-      foreach my $Line ($Diff->Items(2))
-      {
-        if ($Line =~ m/: Test failed: / || 
-            $Line =~ m/: unhandled exception [0-9a-fA-F]{8} at / ||
-            $Line =~ m/The test timed out/)
-        {
-          $Messages .= "$Line\n";
-        }
-      }
+      close($LogFile);
+      $PrintSeparator = 1;
     }
   }
-
-  return $Messages;
 }
 
 sub SendLog($)
@@ -279,110 +197,28 @@ EOF
   print $Sendmail "\nYou can also see the results at:\n$JobURL\n\n";
 
   # Print the job summary
-  my @FailureKeys;
+  my ($JobErrors, $ReportCounts);
   foreach my $Key (@SortedKeys)
   {
     my $StepTask = $StepsTasks->GetItem($Key);
     my $TaskDir = $StepTask->GetTaskDir();
 
-    print $Sendmail "\n=== ", $StepTask->GetTitle(), " ===\n";
-
-    my $LogFiles = GetLogFileNames($TaskDir);
-    my $LogName = $LogFiles->[0] || "log";
-    if (open LOGFILE, "<$TaskDir/$LogName")
+    my $LogNames = GetLogFileNames($TaskDir);
+    $JobErrors->{$Key}->{LogNames} = $LogNames;
+    foreach my $LogName (@$LogNames)
     {
-      my $HasLogEntries = !1;
-      my $PrintedSomething = !1;
-      my $CurrentDll = "";
-      my $PrintedDll = "";
-      my $Line;
-      while (defined($Line = <LOGFILE>))
-      {
-        $HasLogEntries = 1;
-        $Line =~ s/\s*$//;
-        if ($Line =~ m/^([^:]+):[^ ]+ start [^ ]+ -$/)
-        {
-          $CurrentDll = $1;
-        }
-        my $Category = $LogName =~ /\.report$/ ?
-                       GetReportLineCategory($Line) :
-                       GetLogLineCategory($Line);
-        if ($Category eq "error")
-        {
-          if ($PrintedDll ne $CurrentDll)
-          {
-            print $Sendmail "\n$CurrentDll:\n";
-            $PrintedDll = $CurrentDll;
-          }
-          if ($Line =~ m/^[^:]+:([^ ]+)(?::[0-9a-f]+)? done \(258\)/)
-          {
-            print $Sendmail "$1: The test timed out\n";
-          }
-          else
-          {
-            print $Sendmail "$Line\n";
-          }
-          $PrintedSomething = 1;
-        }
-      }
-      close LOGFILE;
+      my ($Groups, $Errors) = GetLogErrors("$TaskDir/$LogName");
+      next if (!$Groups or !@$Groups);
+      $JobErrors->{$Key}->{HasErrors} = 1;
+      $JobErrors->{$Key}->{$LogName}->{Groups} = $Groups;
+      $JobErrors->{$Key}->{$LogName}->{Errors} = $Errors;
 
-      if (open ERRFILE, "<$TaskDir/log.err")
-      {
-        my $First = 1;
-        while (defined($Line = <ERRFILE>))
-        {
-          if ($First)
-          {
-            print $Sendmail "\n";
-            $First = !1;
-          }
-          $HasLogEntries = 1;
-          $Line =~ s/\s*$//;
-          print $Sendmail "$Line\n";
-          $PrintedSomething = 1;
-        }
-        close ERRFILE;
-      }
+      print $Sendmail "\n=== ", GetTitle($StepTask, $LogName), " ===\n";
 
-      if (! $PrintedSomething)
+      foreach my $GroupName (@$Groups)
       {
-        if (! $HasLogEntries)
-        {
-          print $Sendmail "Empty test log and no error message\n";
-        }
-        elsif ($StepTask->Type eq "build")
-        {
-          print $Sendmail "No build failures found\n";
-        }
-        else
-        {
-          print $Sendmail "No test failures found\n";
-        }
-      }
-      else
-      {
-        push @FailureKeys, $Key;
-      }
-    }
-    elsif (open ERRFILE, "<$TaskDir/log.err")
-    {
-      my $HasErrEntries = !1;
-      my $Line;
-      while (defined($Line = <ERRFILE>))
-      {
-        $HasErrEntries = 1;
-        $Line =~ s/\s*$//;
-        print $Sendmail "$Line\n";
-      }
-      close ERRFILE;
-      if (! $HasErrEntries)
-      {
-        print $Sendmail "No test log and no error message";
-      }
-      else
-      {
-        push @FailureKeys, $Key;
+        print $Sendmail ($GroupName ? "\n$GroupName:\n" : "\n");
+        print $Sendmail "$_\n" for (@{$Errors->{$GroupName}});
       }
     }
   }
@@ -393,46 +229,25 @@ EOF
     my $StepTask = $StepsTasks->GetItem($Key);
     my $TaskDir = $StepTask->GetTaskDir();
 
-    print $Sendmail <<"EOF";
+    foreach my $LogName (@{$JobErrors->{$Key}->{LogNames}})
+    {
+      print $Sendmail <<"EOF";
 
 --$PART_BOUNDARY
 Content-Type: text/plain; charset="UTF-8"
 MIME-Version: 1.0
 Content-Transfer-Encoding: 8bit
 EOF
-    print $Sendmail "Content-Disposition: attachment; filename=",
-                    $StepTask->VM->Name, ".log\n\n";
-    print $Sendmail "Not dumping logs in debug mode\n" if ($Debug);
-
-    my $LogFiles = GetLogFileNames($TaskDir);
-    my $LogName = $LogFiles->[0] || "log";
-    my $PrintSeparator = !1;
-    if (open LOGFILE, "<$TaskDir/$LogName")
-    {
-      my $Line;
-      while (defined($Line = <LOGFILE>))
+      print $Sendmail "Content-Disposition: attachment; filename=",
+                     $StepTask->VM->Name, "_$LogName\n\n";
+      if ($Debug)
       {
-        $Line =~ s/\s*$//;
-        print $Sendmail "$Line\n" if (!$Debug);
-        $PrintSeparator = 1;
+        print $Sendmail "Not dumping logs in debug mode\n";
       }
-      close LOGFILE;
-    }
-
-    if (open ERRFILE, "<$TaskDir/log.err")
-    {
-      my $Line;
-      while (defined($Line = <ERRFILE>))
+      else
       {
-        if ($PrintSeparator)
-        {
-          print $Sendmail "\n" if (!$Debug);
-          $PrintSeparator = !1;
-        }
-        $Line =~ s/\s*$//;
-        print $Sendmail "$Line\n" if (!$Debug);
+        DumpLogAndErr($Sendmail, "$TaskDir/$LogName");
       }
-      close ERRFILE;
     }
   }
   
@@ -446,67 +261,54 @@ EOF
     return;
   }
 
+
   #
   # Build a job summary with only the new errors
   #
 
-  my $Messages = "";
-  foreach my $Key (@FailureKeys)
+  my @Messages;
+  foreach my $Key (@SortedKeys)
   {
+    next if (!$JobErrors->{$Key}->{HasErrors});
     my $StepTask = $StepsTasks->GetItem($Key);
     my $TaskDir = $StepTask->GetTaskDir();
 
-    my ($BotFailure, $MessagesFromErr) = CheckErrLog("$TaskDir/log.err");
-    if ($BotFailure)
+    if ($StepTask->Status eq "boterror")
     {
-      # TestBot errors are not the developer's fault and prevent us from doing
-      # any meaningful analysis. So skip.
-      Error "A TestBot error was found in $TaskDir/log.err\n";
+      # TestBot errors are not the developer's fault and prevent us from
+      # identifying new errors. So skip.
+      Error "A Task error was found in '$TaskDir/log.err'\n";
       next;
     }
 
-    my $MessagesFromLog = "";
-    my $LogFiles = GetLogFileNames($TaskDir);
-    my $LogName = $LogFiles->[0] || "log";
-    if ($LogName =~ /\.report$/)
+    foreach my $LogName (@{$JobErrors->{$Key}->{LogNames}})
     {
-      my $LatestName = "$DataDir/latest/". $StepTask->VM->Name ."_$LogName";
-      my ($LatestBotFailure, $Dummy) = CheckErrLog("$LatestName.err");
-      if (! $LatestBotFailure)
+      my $LogErrors = $JobErrors->{$Key}->{$LogName};
+      my $RefFileName = "$DataDir/latest". $StepTask->VM->Name ."_$LogName";
+      my ($NewGroups, $NewErrors) = GetNewLogErrors($RefFileName, $LogErrors->{Groups}, $LogErrors->{Errors});
+      if (!$NewGroups)
       {
-        if (defined($StepTask->CmdLineArg))
-        {
-          # Filter out failures that happened in the full test suite:
-          # the test suite is run against code which is already in Wine
-          # so any failure it reported is not caused by this patch.
-          $StepTask->FileName =~ m/^(.*)_test/;
-          my $BaseName = $1;
-          $MessagesFromLog = CompareLogs($LatestName, "$TaskDir/$LogName",
-                                         $BaseName, $StepTask->CmdLineArg);
-        }
+        # There was no reference log (typical of build logs)
+        # so every error is new
+        $NewGroups = $LogErrors->{Groups};
+        $NewErrors = $LogErrors->{Errors};
       }
-      else
+      elsif (!@$NewGroups)
       {
-        Error "BotFailure found in $LatestName.err\n";
+        # There is no new error
+        next;
       }
-    }
-    elsif (open(my $LogFile, "<", "$TaskDir/$LogName"))
-    {
-      foreach my $Line (<$LogFile>)
+
+      push @Messages, "\n=== ". GetTitle($StepTask, $LogName) ." ===\n";
+
+      foreach my $GroupName (@$NewGroups)
       {
-        my $Category = $LogName =~ /\.report$/ ?
-                       GetReportLineCategory($Line) :
-                       GetLogLineCategory($Line);
-        $MessagesFromLog .= $Line if ($Category eq "error");
+        push @Messages, ($GroupName ? "\n$GroupName:\n" : "\n");
+        push @Messages, "$_\n" for (@{$NewErrors->{$GroupName}});
       }
-      close($LogFile);
-    }
-    if ($MessagesFromErr || $MessagesFromLog)
-    {
-      $Messages .= "\n=== " . $StepTask->GetTitle() . " ===\n" .
-                   $MessagesFromLog . $MessagesFromErr;
     }
   }
+
 
   #
   # Send a summary of the new errors to the mailing list
@@ -514,7 +316,7 @@ EOF
 
   Debug("\n-------------------- Mailing list email --------------------\n");
 
-  if ($Messages)
+  if (@Messages)
   {
     if ($Debug)
     {
@@ -548,13 +350,14 @@ Your paranoid android.
 
 EOF
 
-    print $Sendmail $Messages;
+    print $Sendmail $_ for (@Messages);
     close($Sendmail);
   }
   else
   {
     Debug("Found no error to report to the mailing list\n");
   }
+
 
   #
   # Create a .testbot file for the patches website
@@ -570,7 +373,7 @@ EOF
     {
       # Only take into account new errors to decide whether the job was
       # successful or not.
-      DebugTee($Result, "Status: ". ($Messages ? "Failed" : "OK") ."\n");
+      DebugTee($Result, "Status: ". (@Messages ? "Failed" : "OK") ."\n");
       DebugTee($Result, "Job-ID: ". $Job->Id ."\n");
       DebugTee($Result, "URL: $JobURL\n");
 
@@ -579,37 +382,10 @@ EOF
         my $StepTask = $StepsTasks->GetItem($Key);
         my $TaskDir = $StepTask->GetTaskDir();
 
-        print $Result "\n=== ", $StepTask->GetTitle(), " ===\n";
-
-        my $LogFiles = GetLogFileNames($TaskDir);
-        my $LogName = $LogFiles->[0] || "log";
-        my $PrintSeparator = !1;
-        if (open(my $logfile, "<", "$TaskDir/$LogName"))
+        foreach my $LogName (@{$JobErrors->{$Key}->{LogNames}})
         {
-          my $Line;
-          while (defined($Line = <$logfile>))
-          {
-            $Line =~ s/\s*$//;
-            print $Result "$Line\n";
-            $PrintSeparator = 1;
-          }
-          close($logfile);
-        }
-  
-        if (open(my $errfile, "<", "$TaskDir/log.err"))
-        {
-          my $Line;
-          while (defined($Line = <$errfile>))
-          {
-            if ($PrintSeparator)
-            {
-              print $Result "\n";
-              $PrintSeparator = !1;
-            }
-            $Line =~ s/\s*$//;
-            print $Result "$Line\n";
-          }
-          close($errfile);
+          print $Result "=== ", GetTitle($StepTask, $LogName), " ===\n";
+          DumpLogAndErr($Result, "$TaskDir/$LogName");
         }
       }
       print $Result "--- END FULL_LOGS ---\n";

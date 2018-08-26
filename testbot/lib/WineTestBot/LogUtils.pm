@@ -27,11 +27,12 @@ WineTestBot::LogUtils - Provides functions to parse task logs
 
 
 use Exporter 'import';
-our @EXPORT = qw(GetLogFileNames GetLogLabel GetLogErrors
+our @EXPORT = qw(GetLogFileNames GetLogLabel GetLogErrors GetNewLogErrors
                  GetLogLineCategory GetReportLineCategory
                  RenameReferenceLogs RenameTaskLogs
                  ParseTaskLog ParseWineTestReport);
 
+use Algorithm::Diff;
 use File::Basename;
 
 use WineTestBot::Config; # For $MaxUnitSize
@@ -697,6 +698,8 @@ sub GetLogErrors($)
       $Line =~ s/\s*$//;
       if (!$CurrentGroup)
       {
+        # Note: $GroupName must not depend on the previous content as this
+        #       would break diffs.
         my $GroupName = $IsReport ? "Report errors" : "Task errors";
         $CurrentGroup = _AddErrorGroup($Groups, $Errors, $GroupName);
       }
@@ -712,6 +715,107 @@ sub GetLogErrors($)
   }
 
   return $NoLog ? (undef, undef) : ($Groups, $Errors);
+}
+
+sub _DumpDiff($$)
+{
+  my ($Label, $Diff) = @_;
+
+  print STDERR "$Label:\n";
+  $Diff = $Diff->Copy();
+  while ($Diff->Next())
+  {
+    if ($Diff->Same())
+    {
+      print STDERR " $_\n" for ($Diff->Same());
+    }
+    else
+    {
+      print STDERR "-$_\n" for ($Diff->Items(1));
+      print STDERR "+$_\n" for ($Diff->Items(2));
+    }
+  }
+}
+
+=pod
+=over 12
+
+=item C<_GetLineKey()>
+
+This is a helper for GetNewLogErrors(). It reformats the log lines so they can
+meaningfully be compared to the reference log even if line numbers change, etc.
+
+=back
+=cut
+
+sub _GetLineKey($)
+{
+  my ($Line) = @_;
+  return undef if (!defined $Line);
+
+  # Remove the line number
+  $Line =~ s/^([_a-z0-9]+\.c:)\d+:( Test (?:failed|succeeded inside todo block): )/$1$2/;
+
+  # Note: Only the 'done (258)' lines are reported as errors and they are
+  #       modified by GetLogErrors() so that they no longer contain the pid.
+  #       So there is no need to remove the pid from the done lines.
+
+  return $Line;
+}
+
+=pod
+=over 12
+
+=item C<GetNewLogErrors()>
+
+Compares the specified errors to the reference log and returns only the ones
+that are new.
+
+Returns a list of error groups containing new errors and a hashtable containing
+the list of new errors for each group.
+
+=back
+=cut
+
+sub GetNewLogErrors($$$)
+{
+  my ($RefFileName, $Groups, $Errors) = @_;
+
+  my ($_Dummy, $RefErrors, $NoLog) = GetLogErrors($RefFileName);
+  return (undef, undef) if ($NoLog);
+
+  my (@NewGroups, %NewErrors);
+  foreach my $GroupName (@$Groups)
+  {
+    if ($RefErrors->{$GroupName})
+    {
+      my $Diff = Algorithm::Diff->new($RefErrors->{$GroupName},
+                                      $Errors->{$GroupName},
+                                      { keyGen => \&_GetLineKey });
+      my $CurrentGroup;
+      while ($Diff->Next())
+      {
+        # Skip if there are no new lines
+        next if ($Diff->Same() or !$Diff->Items(2));
+
+        if (!$CurrentGroup)
+        {
+          push @NewGroups, $GroupName;
+          $CurrentGroup = $NewErrors{$GroupName} = [];
+        }
+        push @$CurrentGroup, $Diff->Items(2);
+      }
+    }
+    else
+    {
+      # This module did not have errors before, so every error is new
+      push @NewGroups, $GroupName;
+      $NewErrors{$GroupName} = $Errors->{$GroupName};
+      my $Last = @{$Errors->{$GroupName}} - 1;
+    }
+  }
+
+  return (\@NewGroups, \%NewErrors);
 }
 
 1;
