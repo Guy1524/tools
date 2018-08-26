@@ -756,6 +756,12 @@ sub _GetLineKey($)
   # Remove the line number
   $Line =~ s/^([_a-z0-9]+\.c:)\d+:( Test (?:failed|succeeded inside todo block): )/$1$2/;
 
+  # Remove the crash code address: it changes whenever the test is recompiled
+  $Line =~ s/^(Unhandled exception: .* code) \(0x[0-9a-fA-F]{8,16}\)\.$/$1/;
+
+  # The exact amount of data printed does not change the error
+  $Line =~ s/^([_.a-z0-9-]+:[_a-z0-9]* prints too much data )\([0-9]+ bytes\)$/$1/;
+
   # Note: Only the 'done (258)' lines are reported as errors and they are
   #       modified by GetLogErrors() so that they no longer contain the pid.
   #       So there is no need to remove the pid from the done lines.
