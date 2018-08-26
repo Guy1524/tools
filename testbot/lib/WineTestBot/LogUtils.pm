@@ -119,7 +119,11 @@ sub GetLogLineCategory($)
   {
     return "diag";
   }
-  if ($Line =~ /^BotError:/ or
+  if (# TestBot script error messages
+      $Line =~ /^[a-zA-Z.]+:error: / or
+      # TestBot error
+      $Line =~ /^BotError:/ or
+      # X errors
       $Line =~ /^X Error of failed request: / or
       $Line =~ / opcode of failed request: /)
   {
