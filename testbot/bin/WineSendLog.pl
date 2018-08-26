@@ -266,6 +266,12 @@ EOF
   # Build a job summary with only the new errors
   #
 
+  # Note that this may be a bit inaccurate right after a Wine commit if this
+  # job's patch got compiled on top of the new Wine before all the reference
+  # WineTest results were updated. This is made more likely by the job
+  # priorities: high for Wine updates, and low for WineTest runs.
+  # However in practice this would only be an issue if the patch reintroduced
+  # an error that just disappeared in the latest Wine which is highly unlikely.
   my @Messages;
   foreach my $Key (@SortedKeys)
   {
