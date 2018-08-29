@@ -252,7 +252,7 @@ sub InitMoreInfo($)
   }
 }
 
-sub GenerateMoreInfoLink($$$;$)
+sub GetMoreInfoLink($$$$;$)
 {
   my ($self, $LinkKey, $Label, $Set, $Value) = @_;
 
@@ -295,6 +295,14 @@ sub GenerateMoreInfoLink($$$;$)
     }
   }
   $Url .= "#k" . uri_escape($LinkKey);
+  return ($Action, $Url);
+}
+
+sub GenerateMoreInfoLink($$$$;$)
+{
+  my ($self, $LinkKey, $Label, $Set, $Value) = @_;
+
+  my ($Action, $Url) = $self->GetMoreInfoLink($LinkKey, $Label, $Set, $Value);
 
   my $Html = "<a href='". $self->CGI->escapeHTML($Url) ."'>$Action $Label</a>";
   if ($Action eq "Hide")
@@ -309,9 +317,9 @@ sub GetErrorCategory($)
   return "error";
 }
 
-sub GenerateFullLog($$;$)
+sub GenerateFullLog($$$;$)
 {
-  my ($self, $FileName, $Header) = @_;
+  my ($self, $FileName, $HideLog, $Header) = @_;
 
   my $GetCategory = $FileName =~ /\.err$/ ? \&GetErrorCategory :
                     $FileName =~ /\.report$/ ? \&GetReportLineCategory :
@@ -326,7 +334,7 @@ sub GenerateFullLog($$;$)
       if ($IsEmpty)
       {
         print $Header if (defined $Header);
-        print "<pre><code>";
+        print "<pre$HideLog><code>";
         $IsEmpty = 0;
       }
 
@@ -352,6 +360,23 @@ sub GenerateBody($)
   $self->SUPER::GenerateBody();
 
   $self->InitMoreInfo();
+
+  print <<EOF;
+<script type='text/javascript'>
+<!--
+function HideLog(event, url)
+{
+  // Ignore double-clicks on the log text (i.e. on the <code> element) to
+  // allow word-selection
+  if (event.target.nodeName == 'PRE' && !event.altKey && !event.ctrlKey &&
+      !event.metaKey && !event.shiftKey)
+  {
+    window.open(url, "_self", "", true);
+  }
+}
+//-->
+</script>
+EOF
 
   print "<div class='Content'>\n";
   my $Keys = $self->SortKeys(undef, $self->{Collection}->GetKeys());
@@ -397,7 +422,11 @@ sub GenerateBody($)
       # Show this log in full, highlighting the important lines
       #
 
-      my $LogIsEmpty = $self->GenerateFullLog("$TaskDir/$MoreInfo->{Full}");
+      my ($Action, $Url) = $self->GetMoreInfoLink($Key, GetLogLabel($MoreInfo->{Full}), "Full", $MoreInfo->{Full});
+      $Url = $self->CGI->escapeHTML($Url);
+      my $HideLog = $Action eq "Hide" ? " ondblclick='HideLog(event, \"$Url\")'" : "";
+
+      my $LogIsEmpty = $self->GenerateFullLog("$TaskDir/$MoreInfo->{Full}", $HideLog);
       my $EmptyDiag;
       if ($LogIsEmpty)
       {
@@ -420,7 +449,7 @@ sub GenerateBody($)
       my $ErrHeader = $MoreInfo->{Full} =~ /\.report/ ? "report" : "task";
       $ErrHeader = "old $ErrHeader" if ($MoreInfo->{Full} =~ /^old_/);
       $ErrHeader = "<div class='HrTitle'>". ucfirst($ErrHeader) ." errors<div class='HrLine'></div></div>";
-      my $ErrIsEmpty = $self->GenerateFullLog("$TaskDir/$MoreInfo->{Full}.err", $ErrHeader);
+      my $ErrIsEmpty = $self->GenerateFullLog("$TaskDir/$MoreInfo->{Full}.err", $HideLog, $ErrHeader);
       print $EmptyDiag if ($ErrIsEmpty and defined $EmptyDiag);
     }
     else
