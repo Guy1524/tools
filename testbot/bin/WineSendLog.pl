@@ -279,13 +279,10 @@ EOF
     my $StepTask = $StepsTasks->GetItem($Key);
     my $TaskDir = $StepTask->GetTaskDir();
 
-    if ($StepTask->Status eq "boterror")
-    {
-      # TestBot errors are not the developer's fault and prevent us from
-      # identifying new errors. So skip.
-      Error "A Task error was found in '$TaskDir/log.err'\n";
-      next;
-    }
+    # Note: We could check $StepTask->Status for TestBot errors. However,
+    # whether they are caused by the patch or not, they prevent the TestBot
+    # from checking for new errors which justifies sending an email to the
+    # mailing list so that the patch receives greater scrutiny.
 
     foreach my $LogName (@{$JobErrors->{$Key}->{LogNames}})
     {
