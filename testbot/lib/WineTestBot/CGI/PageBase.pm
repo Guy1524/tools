@@ -328,7 +328,7 @@ sub GenerateFooter($)
 
   print <<EOF;
     </div><!--ContentContainer-->
-    <b class="rbottom"><b class="r4">&nbsp;</b><b class="r3">&nbsp;</b><b class="r2">&nbsp;</b><b class="r1">&nbsp;</b></b>
+    <b id="PageEnd" class="rbottom"><b class="r4">&nbsp;</b><b class="r3">&nbsp;</b><b class="r2">&nbsp;</b><b class="r1">&nbsp;</b></b>
   </div>
 </div><!--main_content-->
 

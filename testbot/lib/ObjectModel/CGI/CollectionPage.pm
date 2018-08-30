@@ -63,7 +63,7 @@ sub GenerateTitle($)
   my $Title = $self->GetTitle();
   if ($Title)
   {
-    print "<h1>", $self->escapeHTML($Title), "</h1>\n";
+    print "<h1 id='PageTitle'>", $self->escapeHTML($Title), "</h1>\n";
   }
 }
 
