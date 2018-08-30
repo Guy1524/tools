@@ -495,7 +495,7 @@ EOF
 
         foreach my $GroupName (@{$Summary->{Groups}})
         {
-          print "<div class='LogDllName'>$GroupName:</div>\n" if ($GroupName);
+          print "<div class='LogDllName'>$GroupName</div>\n" if ($GroupName);
 
           print "<pre><code>";
           my $ErrIndex = 0;
