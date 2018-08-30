@@ -781,8 +781,9 @@ sub _GetLineKey($)
 Compares the specified errors to the reference log and returns only the ones
 that are new.
 
-Returns a list of error groups containing new errors and a hashtable containing
-the list of new errors for each group.
+Returns a list of error groups containing new errors, a hashtable containing
+the list of new errors for each group, and a hashtable containing the indices
+of the new errors in the input errors list for each group.
 
 =back
 =cut
@@ -791,10 +792,10 @@ sub GetNewLogErrors($$$)
 {
   my ($RefFileName, $Groups, $Errors) = @_;
 
-  my ($_Dummy, $RefErrors, $NoLog) = GetLogErrors($RefFileName);
-  return (undef, undef) if ($NoLog);
+  my ($RefGroups, $RefErrors) = GetLogErrors($RefFileName);
+  return (undef, undef) if (!$RefGroups);
 
-  my (@NewGroups, %NewErrors);
+  my (@NewGroups, %NewErrors, %NewIndices);
   foreach my $GroupName (@$Groups)
   {
     if ($RefErrors->{$GroupName})
@@ -802,7 +803,7 @@ sub GetNewLogErrors($$$)
       my $Diff = Algorithm::Diff->new($RefErrors->{$GroupName},
                                       $Errors->{$GroupName},
                                       { keyGen => \&_GetLineKey });
-      my $CurrentGroup;
+      my ($CurrentGroup, $CurrentIndices);
       while ($Diff->Next())
       {
         # Skip if there are no new lines
@@ -812,20 +813,24 @@ sub GetNewLogErrors($$$)
         {
           push @NewGroups, $GroupName;
           $CurrentGroup = $NewErrors{$GroupName} = [];
+          $CurrentIndices = $NewIndices{$GroupName} = {};
         }
         push @$CurrentGroup, $Diff->Items(2);
+        $CurrentIndices->{$_} = 1 for ($Diff->Range(2));
       }
     }
     else
     {
-      # This module did not have errors before, so every error is new
+      # This group did not have errors before, so every error is new
       push @NewGroups, $GroupName;
       $NewErrors{$GroupName} = $Errors->{$GroupName};
+      $NewIndices{$GroupName} = {};
       my $Last = @{$Errors->{$GroupName}} - 1;
+      $NewIndices{$GroupName}->{$_} = 1 for (0..$Last);
     }
   }
 
-  return (\@NewGroups, \%NewErrors);
+  return (\@NewGroups, \%NewErrors, \%NewIndices);
 }
 
 1;

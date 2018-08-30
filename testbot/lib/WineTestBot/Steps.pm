@@ -146,16 +146,22 @@ sub RmTree($)
   rmtree($Dir);
 }
 
-sub GetFullFileName($)
+sub GetFullFileName($;$)
 {
-  my ($self) = @_;
+  my ($self, $FileName) = @_;
 
-  return undef if (!defined $self->FileName);
+  $FileName = $self->FileName if (!defined $FileName);
+  return undef if (!defined $FileName);
 
   my ($JobId, $StepNo) = @{$self->GetMasterKey()};
   my $Path = "$DataDir/jobs/$JobId/";
-  $Path .= $self->PreviousNo ."/" if ($self->PreviousNo);
-  return $Path . $self->FileName;
+  foreach my $StepNo ($StepNo, $self->PreviousNo)
+  {
+    next if (!$StepNo);
+    my $Full = "$Path$StepNo/$FileName";
+    return $Full if (-f $Full);
+  }
+  return $Path . $FileName;
 }
 
 sub UpdateStatus($$)

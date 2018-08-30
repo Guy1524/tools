@@ -379,6 +379,7 @@ pre
 .log-error { color: red; }
 .log-boterror { color: #cc0052; }
 .log-diag { color: #e56300; }
+.log-new { color: #e56e00; font-weight: bold; }
 
 a.title { color:inherit; text-decoration: none; }
 

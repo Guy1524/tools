@@ -472,6 +472,37 @@ $TA->Disconnect();
 
 
 #
+# Grab a copy of the reference logs
+#
+
+# Note that this may be a bit inaccurate right after a Wine commit.
+# See WineSendLog.pl for more details.
+my $LatestDir = "$DataDir/latest";
+foreach my $TestStep (@{$Job->Steps->GetItems()})
+{
+  if (($TestStep->PreviousNo || 0) == $Step->No and
+      $TestStep->FileType =~ /^exe/)
+  {
+    foreach my $TestTask (@{$TestStep->Tasks->GetItems()})
+    {
+      my $RefReport = $TestTask->VM->Name ."_". $TestStep->FileType .".report";
+      for my $Suffix ("", ".err")
+      {
+        if (-f "$LatestDir/$RefReport$Suffix")
+        {
+          unlink "$StepDir/$RefReport$Suffix";
+          if (!link "$LatestDir/$RefReport$Suffix", "$StepDir/$RefReport$Suffix")
+          {
+            Error "Could not link '$RefReport$Suffix': $!\n";
+          }
+        }
+      }
+    }
+  }
+}
+
+
+#
 # Wrap up
 #
 

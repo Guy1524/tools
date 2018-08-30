@@ -25,6 +25,7 @@ package JobDetailsPage;
 use ObjectModel::CGI::CollectionPage;
 our @ISA = qw(ObjectModel::CGI::CollectionPage);
 
+use File::Basename;
 use URI::Escape;
 
 use WineTestBot::Config;
@@ -484,11 +485,32 @@ EOF
         }
 
         my $Summary = $LogSummaries->{$LogName};
+        my $New;
+        if ($LogName =~ /\.report$/)
+        {
+          # Identify new errors in test reports
+          my $RefFileName = $StepTask->GetFullFileName($VM->Name ."_$LogName");
+          (my $_NewGroups, my $_NewErrors, $New) = GetNewLogErrors($RefFileName, $Summary->{Groups}, $Summary->{Errors});
+        }
+
         foreach my $GroupName (@{$Summary->{Groups}})
         {
           print "<div class='LogDllName'>$GroupName:</div>\n" if ($GroupName);
+
           print "<pre><code>";
-          print $self->escapeHTML($_), "\n" for (@{$Summary->{Errors}->{$GroupName}});
+          my $ErrIndex = 0;
+          foreach my $Line (@{$Summary->{Errors}->{$GroupName}})
+          {
+            if ($New and $New->{$GroupName}->{$ErrIndex})
+            {
+              print "<span class='log-new'>", $self->escapeHTML($Line), "</span>\n";
+            }
+            else
+            {
+              print $self->escapeHTML($Line), "\n";
+            }
+            $ErrIndex++;
+          }
           print "</code></pre>\n";
         }
       }

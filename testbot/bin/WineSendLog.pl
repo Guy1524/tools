@@ -288,7 +288,7 @@ EOF
     {
       my $LogErrors = $JobErrors->{$Key}->{$LogName};
       my $RefFileName = "$DataDir/latest". $StepTask->VM->Name ."_$LogName";
-      my ($NewGroups, $NewErrors) = GetNewLogErrors($RefFileName, $LogErrors->{Groups}, $LogErrors->{Errors});
+      my ($NewGroups, $NewErrors, $_NewIndices) = GetNewLogErrors($RefFileName, $LogErrors->{Groups}, $LogErrors->{Errors});
       if (!$NewGroups)
       {
         # There was no reference log (typical of build logs)
