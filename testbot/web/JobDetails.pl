@@ -381,13 +381,19 @@ EOF
 
   print "<div class='Content'>\n";
   my $Keys = $self->SortKeys(undef, $self->{Collection}->GetKeys());
+  my $KeyIndex = 0;
   foreach my $Key (@$Keys)
   {
     my $StepTask = $self->{Collection}->GetItem($Key);
     my $TaskDir = $StepTask->GetTaskDir();
     my $VM = $StepTask->VM;
-    print "<h2><a name='k", $self->escapeHTML($Key), "'></a>" ,
-          $self->escapeHTML($StepTask->GetTitle()), "</h2>\n";
+
+    my $Prev = $KeyIndex > 0 ? "k". $Keys->[$KeyIndex-1] : "PageTitle";
+    my $Next = $KeyIndex + 1 < @$Keys ? "k". $Keys->[$KeyIndex+1] : "PageEnd";
+    $KeyIndex++;
+    print "<h2><a name='k", $self->escapeHTML($Key), "'></a>",
+          $self->escapeHTML($StepTask->GetTitle()),
+          " <span class='right'><a class='title' href='#$Prev'>&uarr;</a><a class='title' href='#$Next'>&darr;</a></span></h2>\n";
 
     print "<details><summary>",
           $self->CGI->escapeHTML($VM->Description || $VM->Name), "</summary>",

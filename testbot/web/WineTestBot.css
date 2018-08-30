@@ -364,6 +364,8 @@ pre
    background-color: red;
 }
 
+.right { float: right; }
+
 .queued    { color: black; }
 .running   { color: blue; }
 .success   { color: green; }
