@@ -537,7 +537,6 @@ elsif (!defined $TAError)
 my $TimedOut;
 if ($Step->Type ne "build")
 {
-  my $TaskDir = $Task->CreateDir();
   my $BuildList = $Task->CmdLineArg;
   $BuildList =~ s/ .*$//;
   foreach my $Build (split /,/, $BuildList)
