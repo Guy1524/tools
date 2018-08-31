@@ -71,7 +71,11 @@ sub ParseTaskLog($)
         $Result = "badpatch";
         last; # Should be the last and most specific message
       }
-      elsif ($Line =~ /^Task: /)
+      elsif ($Line =~ /^Task: / or
+             # Typical perl errors
+             $Line =~ /^Use of uninitialized value / or
+             $Line =~ /^Undefined subroutine / or
+             $Line =~ /^Global symbol /)
       {
         $Result = "failed";
       }
@@ -111,7 +115,9 @@ sub GetLogLineCategory($)
       $Line =~ /^Makefile:[0-9]+: recipe for target .* failed$/ or
       $Line =~ /^(?:Build|Reconfig|Task): (?!ok)/ or
       # Typical perl errors
-      $Line =~ /^Use of uninitialized value/)
+      $Line =~ /^Use of uninitialized value / or
+      $Line =~ /^Undefined subroutine / or
+      $Line =~ /^Global symbol /)
   {
     return "error";
   }
