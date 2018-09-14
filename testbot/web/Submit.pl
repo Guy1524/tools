@@ -821,7 +821,7 @@ sub OnSubmit($)
           $Task->VM($BuildVM);
 
           my $Builds = { "exe32" => 1 };
-          $Builds->{"exe64"} = 1 if (defined $self->GetParam("Run64");
+          $Builds->{"exe64"} = 1 if defined $self->GetParam("Run64");
           $Task->Timeout(GetBuildTimeout($Impacts, $Builds));
 
           # Save the build step so the others can reference it
