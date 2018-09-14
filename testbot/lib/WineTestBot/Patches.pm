@@ -185,12 +185,6 @@ sub Submit($$$)
     $BuildStep->Type("build");
     $BuildStep->DebugLevel(0);
 
-    # Add build task
-    my $BuildVM = ${$BuildVMs->GetItems()}[0];
-    my $Task = $BuildStep->Tasks->Add();
-    $Task->VM($BuildVM);
-    $Task->Timeout($BuildTimeout);
-
     # Save the build step so the others can reference it.
     my ($ErrKey, $ErrProperty, $ErrMessage) = $Jobs->Save();
     if (defined($ErrMessage))
@@ -200,6 +194,7 @@ sub Submit($$$)
     }
 
     # Create steps for the Windows tests
+    my $Builds;
     foreach my $Module (sort keys %{$Impacts->{Tests}})
     {
       my $TestInfo = $Impacts->{Tests}->{$Module};
@@ -219,6 +214,7 @@ sub Submit($$$)
             $FileName .= "64" if ($Bits eq "64");
             $NewStep->FileName("$FileName.exe");
             $NewStep->FileType("exe$Bits");
+            $Builds->{"exe$Bits"} = 1;
 
             # And a task for each VM
             my $Tasks = $NewStep->Tasks;
@@ -235,6 +231,12 @@ sub Submit($$$)
         }
       }
     }
+
+    # Add the build task
+    my $BuildVM = ${$BuildVMs->GetItems()}[0];
+    my $BuildTask = $BuildStep->Tasks->Add();
+    $BuildTask->VM($BuildVM);
+    $BuildTask->Timeout(GetBuildTimeout($Impacts, $Builds));
   }
 
   my $WineVMs = CreateVMs();
@@ -258,8 +260,9 @@ sub Submit($$$)
       my $Task = $Tasks->Add();
       $Task->VM($VM);
       # Only verify that the win32 version compiles
-      $Task->Timeout($WineReconfigTimeout);
-      $Task->CmdLineArg("win32");
+      my $Builds = { "win32" => 1 };
+      $Task->Timeout(GetBuildTimeout($Impacts, $Builds));
+      $Task->CmdLineArg(join(",", keys %$Builds));
     }
   }
 

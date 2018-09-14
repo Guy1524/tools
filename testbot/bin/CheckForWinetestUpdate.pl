@@ -50,12 +50,13 @@ use HTTP::Response;
 use HTTP::Status;
 
 use WineTestBot::Config;
+use WineTestBot::Engine::Notify;
 use WineTestBot::Jobs;
-use WineTestBot::Users;
 use WineTestBot::Log;
+use WineTestBot::PatchUtils;
+use WineTestBot::Users;
 use WineTestBot::Utils;
 use WineTestBot::VMs;
-use WineTestBot::Engine::Notify;
 
 
 my %WineTestUrls = (
@@ -245,6 +246,9 @@ sub AddJob($$$)
   return 1;
 }
 
+my @ExeBuilds = qw(exe32 exe64);
+my @WineBuilds = qw(win32 wow32 wow64);
+
 sub AddReconfigJob($)
 {
   my ($VMType) = @_;
@@ -283,9 +287,9 @@ sub AddReconfigJob($)
     Debug("  $VMKey $VMType reconfig\n");
     my $Task = $BuildStep->Tasks->Add();
     $Task->VM($VM);
-    $Task->Timeout($VMType eq "wine" ?
-                   3 * $WineReconfigTimeout : # 3 full Wine builds
-                   $ReconfigTimeout);         # 1 overall timeout
+    my $Builds;
+    map { $Builds->{$_} = 1 } ($VMType eq "wine" ? @WineBuilds : @ExeBuilds);
+    $Task->Timeout(GetBuildTimeout(undef, $Builds));
   }
 
   # Save the build step so the others can reference it.
@@ -299,7 +303,7 @@ sub AddReconfigJob($)
   if ($VMType eq "wine")
   {
     # Add steps to run WineTest on Wine
-    foreach my $Build ("win32", "wow32", "wow64")
+    foreach my $Build (@WineBuilds)
     {
       # Add a step to the job
       my $NewStep = $Steps->Add();

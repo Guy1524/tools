@@ -777,6 +777,13 @@ sub OnSubmit($)
 
   # Add steps and tasks for the 32 and 64-bit tests
   my $FileType = $self->GetParam("FileType");
+  my $Impacts;
+  if ($FileType eq "patch")
+  {
+    my $TmpStagingFullPath = $self->GetTmpStagingFullPath($BaseName);
+    $Impacts = GetPatchImpact($TmpStagingFullPath);
+  }
+
   my $BuildStep;
   foreach my $Bits ("32", "64")
   {
@@ -812,7 +819,10 @@ sub OnSubmit($)
           my $BuildVM = ${$VMs->GetItems()}[0];
           my $Task = $BuildStep->Tasks->Add();
           $Task->VM($BuildVM);
-          $Task->Timeout($BuildTimeout);
+
+          my $Builds = { "exe32" => 1 };
+          $Builds->{"exe64"} = 1 if (defined $self->GetParam("Run64");
+          $Task->Timeout(GetBuildTimeout($Impacts, $Builds));
 
           # Save the build step so the others can reference it
           my ($ErrKey, $ErrProperty, $ErrMessage) = $Jobs->Save();
@@ -861,6 +871,7 @@ sub OnSubmit($)
     {
       next if ($Build eq "wow64" and !defined($self->GetParam("Run64")));
 
+      my $Timeout;
       foreach my $VMKey (@$SortedKeys)
       {
         my $VM = $VMs->GetItem($VMKey);
@@ -878,12 +889,17 @@ sub OnSubmit($)
           $WineStep->ReportSuccessfulTests(defined($self->GetParam("ReportSuccessfulTests")));
           $Tasks = $WineStep->Tasks;
         }
+        if (!defined $Timeout)
+        {
+          my $Builds = { $Build => 1 };
+          $Timeout = GetBuildTimeout($Impacts, $Builds);
+        }
 
         # Then add a task for this VM
         my $Task = $Tasks->Add();
         $Task->VM($VM);
         $Task->CmdLineArg($Build);
-        $Task->Timeout($WineReconfigTimeout);
+        $Task->Timeout($Timeout);
       }
     }
   }

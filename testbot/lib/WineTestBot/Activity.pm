@@ -438,7 +438,7 @@ sub GetStatistics($;$)
     # Of course this only works for statistics about VM operations and running
     # tasks (so running.time, reverting.time, etc) not for those about idle or
     # off VMs (idle.time, etc.).
-    $ActivitySeconds = $Seconds + 60 + max($SuiteTimeout, $ReconfigTimeout);
+    $ActivitySeconds = $Seconds + 60 + max($SuiteTimeout, 2 * $WineBuildTimeout);
   }
   my ($Activity, $Counters) = GetActivity($VMs, $ActivitySeconds);
   $GlobalStats->{"recordgroups.count"} = $Counters->{recordgroups};

@@ -637,7 +637,7 @@ sub _ScheduleTasks($)
         }
 
         # It's not worth preparing the next step for tasks that take so long
-        $StepVMs{$Step} = undef if ($Task->Timeout > $BuildTimeout);
+        $StepVMs{$Step} = undef if ($Task->Timeout > $VMToolTimeout);
 
         my $VMKey = $VM->GetKey();
         if ($VM->Status eq "idle")

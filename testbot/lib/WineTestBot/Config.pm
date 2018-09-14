@@ -30,10 +30,11 @@ use vars qw (@ISA @EXPORT @EXPORT_OK $UseSSL $LogDir $DataDir $BinDir
              $MaxRevertsWhileRunningVMs $MaxActiveVMs $MaxRunningVMs
              $MaxVMsWhenIdle $SleepAfterRevert $WaitForToolsInVM
              $VMToolTimeout $MaxVMErrors $MaxTaskTries $AdminEMail $RobotEMail
-             $WinePatchToOverride $WinePatchCc $SuiteTimeout $SingleTimeout
-             $BuildTimeout $ReconfigTimeout $WineReconfigTimeout $TimeoutMargin
-             $TagPrefix
-             $MaxUnitSize $ProjectName $PatchesMailingList $LDAPServer
+             $WinePatchToOverride $WinePatchCc
+             $ExeBuildNativeTimeout $ExeBuildTestTimeout $ExeModuleTimeout
+             $WineBuildTimeout $WineModuleTimeout $TimeoutMargin
+             $SuiteTimeout $SingleTimeout $MaxUnitSize
+             $TagPrefix $ProjectName $PatchesMailingList $LDAPServer
              $LDAPBindDN $LDAPSearchBase $LDAPSearchFilter
              $LDAPRealNameAttribute $LDAPEMailAttribute $AgentPort $Tunnel
              $TunnelDefaults $PrettyHostNames $JobPurgeDays
@@ -46,9 +47,10 @@ require Exporter;
              $MaxRunningVMs $MaxVMsWhenIdle $SleepAfterRevert $WaitForToolsInVM
              $VMToolTimeout $MaxVMErrors $MaxTaskTries $AdminEMail
              $RobotEMail $WinePatchToOverride $WinePatchCc $SuiteTimeout
-             $SingleTimeout $BuildTimeout $ReconfigTimeout $WineReconfigTimeout
-             $TimeoutMargin
-             $TagPrefix $MaxUnitSize $ProjectName $PatchesMailingList
+             $ExeBuildNativeTimeout $ExeBuildTestTimeout $ExeModuleTimeout
+             $WineBuildTimeout $WineModuleTimeout $TimeoutMargin
+             $SuiteTimeout $SingleTimeout $MaxUnitSize
+             $TagPrefix $ProjectName $PatchesMailingList
              $LDAPServer $LDAPBindDN $LDAPSearchBase $LDAPSearchFilter
              $LDAPRealNameAttribute $LDAPEMailAttribute $AgentPort $Tunnel
              $TunnelDefaults $PrettyHostNames $JobPurgeDays
@@ -90,24 +92,29 @@ $MaxVMErrors = 3;
 # How many times to run a test that fails before giving up.
 $MaxTaskTries = 3;
 
-# How long to let a test suite run before forcibly shutting it down
-# (in seconds).
-$SuiteTimeout = 30 * 60;
-# How long to let a regular test run before forcibly shutting it down
-# (in seconds).
-$SingleTimeout = 2 * 60;
-# How long to let a regular build run before forcibly shutting it down
-# (in seconds).
-$BuildTimeout = 5 * 60;
-# How long to let a reconfig task run before forcibly shutting it down
-# (in seconds). Note that this includes building the native Wine build tools,
-# and the 32 and 64 bit test executables.
-$ReconfigTimeout = (1 + 2 * 5) * 60;
-# How long to let a full Wine recompilation run before forcibly shutting it
-# down (in seconds).
-$WineReconfigTimeout = 20 * 60;
+# Exe build timeouts (in seconds)
+# - For a full build
+$ExeBuildNativeTimeout = 60;
+$ExeBuildTestTimeout = 2 * 60;
+# - For a single module
+$ExeModuleTimeout = 30;
+
+# Wine build timeouts (in seconds)
+# - For a full build
+$WineBuildTimeout = 20 * 60;
+# - For a single module
+$WineModuleTimeout = 60;
+
 # How much to add to the task timeout to account for file transfers, etc.
+# (in seconds)
 $TimeoutMargin = 2 * 60;
+
+# Test timeouts (in seconds)
+# - For the whole test suite
+$SuiteTimeout = 30 * 60;
+# - For a single test
+$SingleTimeout = 2 * 60;
+
 # Maximum amount of traces for a test unit.
 $MaxUnitSize = 32 * 1024;
 

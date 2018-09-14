@@ -31,7 +31,9 @@ the Wine builds.
 =cut
 
 use Exporter 'import';
-our @EXPORT = qw(GetPatchImpact UpdateWineData);
+our @EXPORT = qw(GetPatchImpact UpdateWineData GetBuildTimeout);
+
+use List::Util qw(min max);
 
 use WineTestBot::Config;
 
@@ -166,11 +168,12 @@ sub _HandleFile($$$)
   if ($FilePath =~ m~^(dlls|programs)/([^/]+)/tests/([^/\s]+)$~)
   {
     my ($Root, $Dir, $File) = ($1, $2, $3);
-    $Impacts->{IsWinePatch} = 1;
+    my $Module = ($Root eq "programs") ? "$Dir.exe" : $Dir;
+    $Impacts->{BuildModules}->{$Module} = 1;
     $Impacts->{TestBuild} = 1;
+    $Impacts->{IsWinePatch} = 1;
 
     my $Tests = $Impacts->{Tests};
-    my $Module = ($Root eq "programs") ? "$Dir.exe" : $Dir;
     if (!$Tests->{$Module})
     {
       $Tests->{$Module} = {
@@ -205,8 +208,9 @@ sub _HandleFile($$$)
   {
     my ($Root, $Dir, $File) = ($1, $2, $3);
     my $Module = ($Root eq "programs") ? "$Dir.exe" : $Dir;
-    $Impacts->{IsWinePatch} = 1;
+    $Impacts->{BuildModules}->{$Module} = 1;
     $Impacts->{ModuleBuild} = 1;
+    $Impacts->{IsWinePatch} = 1;
 
     if ($File eq "Makefile.in" and $Change ne "modify")
     {
@@ -263,6 +267,11 @@ sub GetPatchImpact($;$$)
 
   my $Impacts = {
     NoUnits => $NoUnits,
+    # Number of patched test units.
+    UnitCount => 0,
+    # The modules that need a rebuild, even if only for the tests.
+    BuildModules => {},
+    # Information about 'tests' directories.
     Tests => {},
   };
   _LoadWineFiles();
@@ -277,6 +286,9 @@ sub GetPatchImpact($;$$)
       map { $Impacts->{WineFiles}->{$_} = 1 } keys %{$WineFiles};
       map { $Impacts->{WineFiles}->{$_} = 1 } keys %{$PastImpacts->{NewFiles}};
       map { delete $Impacts->{WineFiles}->{$_} } keys %{$PastImpacts->{DeletedFiles}};
+      # Modules impacted by previous parts of a patchset still need to be
+      # rebuilt.
+      $Impacts->{BuildModules} = { %{$PastImpacts->{BuildModules}} };
     }
     else
     {
@@ -341,8 +353,6 @@ sub GetPatchImpact($;$$)
   }
   close($fh);
 
-  $Impacts->{ModuleCount} = 0;
-  $Impacts->{UnitCount} = 0;
   foreach my $TestInfo (values %{$Impacts->{Tests}})
   {
     # For each module, identify modifications to non-C files and helper dlls
@@ -390,14 +400,44 @@ sub GetPatchImpact($;$$)
     }
 
     $TestInfo->{UnitCount} = scalar(keys %{$TestInfo->{Units}});
-    if ($TestInfo->{UnitCount})
-    {
-      $Impacts->{ModuleCount}++;
-      $Impacts->{UnitCount} += $TestInfo->{UnitCount};
-    }
+    $Impacts->{UnitCount} += $TestInfo->{UnitCount};
   }
 
   return $Impacts;
+}
+
+
+#
+# Compute task timeouts based on the patch data
+#
+
+sub GetBuildTimeout($$)
+{
+  my ($Impacts, $Builds) = @_;
+
+  my ($ExeCount, $WineCount);
+  map {$_ =~ /^exe/ ? $ExeCount++ : $WineCount++ } keys %$Builds;
+
+  # Set $ModuleCount to 0 if a full rebuild is needed
+  my $ModuleCount = (!$Impacts or $Impacts->{WineBuild}) ? 0 :
+                    scalar(keys %{$Impacts->{BuildModules}});
+
+  my ($ExeTimeout, $WineTimeout) = (0, 0);
+  if ($ExeCount)
+  {
+    my $OneBuild = $ModuleCount ? $ModuleCount * $ExeModuleTimeout :
+                                  $ExeBuildTestTimeout;
+    $ExeTimeout = ($ModuleCount ? 0 : $ExeBuildNativeTimeout) +
+                  $ExeCount * min($ExeBuildTestTimeout, $OneBuild);
+  }
+  if ($WineCount)
+  {
+    my $OneBuild = $ModuleCount ? $ModuleCount * $WineModuleTimeout :
+                                  $WineBuildTimeout;
+    $WineTimeout = $WineCount * min($WineBuildTimeout, $OneBuild);
+  }
+
+  return $ExeTimeout + $WineTimeout;
 }
 
 1;
