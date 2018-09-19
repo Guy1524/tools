@@ -597,7 +597,7 @@ sub DetermineFileType($$)
   my ($ErrMessage, $ExeBase, $TestUnit);
   if ($FileType eq "unknown")
   {
-    my $Impacts = GetPatchImpact($FileName);
+    my $Impacts = GetPatchImpacts($FileName);
     if ($Impacts->{UnitCount} == 0)
     {
       $ErrMessage = "Patch doesn't affect tests";
@@ -781,7 +781,7 @@ sub OnSubmit($)
   if ($FileType eq "patch")
   {
     my $TmpStagingFullPath = $self->GetTmpStagingFullPath($BaseName);
-    $Impacts = GetPatchImpact($TmpStagingFullPath);
+    $Impacts = GetPatchImpacts($TmpStagingFullPath);
   }
 
   my $BuildStep;

@@ -113,7 +113,7 @@ sub ApplyPatch($$)
     return undef;
   }
 
-  my $Impacts = GetPatchImpact($PatchFile, "nounits");
+  my $Impacts = GetPatchImpacts($PatchFile, "nounits");
   if ($Impacts->{MakeMakefiles})
   {
     InfoMsg "\nRunning make_makefiles\n";

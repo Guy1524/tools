@@ -31,7 +31,7 @@ the Wine builds.
 =cut
 
 use Exporter 'import';
-our @EXPORT = qw(GetPatchImpact UpdateWineData GetBuildTimeout);
+our @EXPORT = qw(GetPatchImpacts UpdateWineData GetBuildTimeout);
 
 use List::Util qw(min max);
 
@@ -249,7 +249,7 @@ sub _HandleFile($$$)
 =pod
 =over 12
 
-=item C<GetPatchImpact()>
+=item C<GetPatchImpacts()>
 
 Analyzes a patch and returns a hashtable describing the impact it has on the
 Wine build: whether it requires updating the makefiles, re-running autoconf or
@@ -258,7 +258,7 @@ configure, whether it impacts the tests, etc.
 =back
 =cut
 
-sub GetPatchImpact($;$$)
+sub GetPatchImpacts($;$$)
 {
   my ($PatchFileName, $NoUnits, $PastImpacts) = @_;
 

@@ -133,8 +133,8 @@ sub Submit($$$)
   my ($self, $PatchFileName, $IsSet) = @_;
 
   my $PastImpacts;
-  $PastImpacts = GetPatchImpact($PatchFileName) if ($IsSet);
-  my $Impacts = GetPatchImpact("$DataDir/patches/" . $self->Id, undef, $PastImpacts);
+  $PastImpacts = GetPatchImpacts($PatchFileName) if ($IsSet);
+  my $Impacts = GetPatchImpacts("$DataDir/patches/" . $self->Id, undef, $PastImpacts);
 
   if (!$Impacts->{WineBuild} and !$Impacts->{ModuleBuild} and
       !$Impacts->{TestBuild})

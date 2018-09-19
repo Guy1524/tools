@@ -446,7 +446,7 @@ FatalTAError(undef, $TAError) if (defined $TAError);
 # Grab the executables for the next steps
 #
 
-my $Impacts = GetPatchImpact($FileName, "nounit");
+my $Impacts = GetPatchImpacts($FileName, "nounit");
 my $StepDir = $Step->CreateDir();
 foreach my $TestInfo (values %{$Impacts->{Tests}})
 {
