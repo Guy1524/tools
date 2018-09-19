@@ -134,7 +134,7 @@ sub Submit($$$)
 
   my $PastImpacts;
   $PastImpacts = GetPatchImpacts($PatchFileName) if ($IsSet);
-  my $Impacts = GetPatchImpacts("$DataDir/patches/" . $self->Id, undef, $PastImpacts);
+  my $Impacts = GetPatchImpacts("$DataDir/patches/" . $self->Id, $PastImpacts);
 
   if (!$Impacts->{WineBuild} and !$Impacts->{ModuleBuild} and
       !$Impacts->{TestBuild})

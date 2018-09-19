@@ -193,7 +193,6 @@ sub _HandleFile($$$)
       }
       return;
     }
-    return if ($Impacts->{NoUnits});
 
     if (!$Tests->{$Module}->{Files})
     {
@@ -258,15 +257,17 @@ configure, whether it impacts the tests, etc.
 =back
 =cut
 
-sub GetPatchImpacts($;$$)
+sub GetPatchImpacts($;$)
 {
-  my ($PatchFileName, $NoUnits, $PastImpacts) = @_;
+  my ($PatchFileName, $PastImpacts) = @_;
 
   my $fh;
   return undef if (!open($fh, "<", $PatchFileName));
 
   my $Impacts = {
-    NoUnits => $NoUnits,
+    # Number of test units impacted either directly, or indirectly by a module
+    # patch.
+    ModuleUnitCount => 0,
     # Number of patched test units.
     UnitCount => 0,
     # The modules that need a rebuild, even if only for the tests.
