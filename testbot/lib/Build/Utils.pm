@@ -125,7 +125,7 @@ sub ApplyPatch($$)
     }
   }
 
-  if ($Impacts->{Autoconf} && !$Impacts->{HasConfigure})
+  if ($Impacts->{Autoconf})
   {
     InfoMsg "\nRunning autoconf\n";
     system("cd '$DataDir/$Dir' && set -x && autoconf");

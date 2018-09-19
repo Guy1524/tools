@@ -317,10 +317,6 @@ sub GetPatchImpacts($;$)
     {
       $Impacts->{WineBuild} = $Impacts->{Autoconf} = 1;
     }
-    elsif ($Line =~ m=^--- \w+/configure$=)
-    {
-      $Impacts->{WineBuild} = $Impacts->{HasConfigure} = 1;
-    }
     elsif ($Line =~ m=^--- \w+/tools/make_makefiles$=)
     {
       $Impacts->{WineBuild} = $Impacts->{MakeMakefiles} = 1;
