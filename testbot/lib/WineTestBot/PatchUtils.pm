@@ -353,7 +353,6 @@ sub GetPatchImpacts($;$)
   foreach my $TestInfo (values %{$Impacts->{Tests}})
   {
     # For each module, identify modifications to non-C files and helper dlls
-    my $AllUnits;
     foreach my $File (keys %{$TestInfo->{Files}})
     {
       # Skip unmodified files
@@ -363,7 +362,7 @@ sub GetPatchImpacts($;$)
       if ($Base !~ s/(?:\.c|\.spec)$//)
       {
         # Any change to a non-C non-Spec file can potentially impact all tests
-        $AllUnits = 1;
+        $TestInfo->{All} = 1;
         last;
       }
       if (exists $TestInfo->{Files}->{"$Base.spec"} and
@@ -371,7 +370,7 @@ sub GetPatchImpacts($;$)
            $TestInfo->{Files}->{"$Base.spec"}))
       {
         # Any change to a helper dll can potentially impact all tests
-        $AllUnits = 1;
+        $TestInfo->{All} = 1;
         last;
       }
     }
@@ -380,7 +379,7 @@ sub GetPatchImpacts($;$)
     foreach my $File (keys %{$TestInfo->{Files}})
     {
       # Skip unmodified files
-      next if (!$AllUnits and !$TestInfo->{Files}->{$File});
+      next if (!$TestInfo->{All} and !$TestInfo->{Files}->{$File});
 
       my $Base = $File;
       # Non-C files are not test units
@@ -388,7 +387,7 @@ sub GetPatchImpacts($;$)
       # Helper dlls are not test units
       next if (exists $TestInfo->{Files}->{"$Base.spec"});
 
-      if (($AllUnits or $TestInfo->{Files}->{$File}) and
+      if (($TestInfo->{All} or $TestInfo->{Files}->{$File}) and
              $TestInfo->{Files}->{$File} ne "rm")
       {
         # Only new/modified test units are impacted
