@@ -598,11 +598,11 @@ sub DetermineFileType($$)
   if ($FileType eq "unknown")
   {
     my $Impacts = GetPatchImpacts($FileName);
-    if ($Impacts->{UnitCount} == 0)
+    if ($Impacts->{TestUnitCount} == 0)
     {
       $ErrMessage = "Patch doesn't affect tests";
     }
-    elsif ($Impacts->{UnitCount} > 1)
+    elsif ($Impacts->{TestUnitCount} > 1)
     {
       $ErrMessage = "Patch contains changes to multiple tests";
     }

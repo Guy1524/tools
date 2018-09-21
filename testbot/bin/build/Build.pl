@@ -222,7 +222,7 @@ if ($DataDir =~ /'/)
 my $Impacts = ApplyPatch("wine", $PatchFile);
 
 if (!$Impacts or
-    ($Impacts->{WineBuild} and !BuildNative()) or
+    ($Impacts->{PatchedRoot} and !BuildNative()) or
     !BuildTestExecutables($Targets, $Impacts, "exe32") or
     !BuildTestExecutables($Targets, $Impacts, "exe64"))
 {

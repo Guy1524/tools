@@ -195,7 +195,7 @@ sub _HandleFile($$$)
     my ($Root, $Dir, $File) = ($1, $2, $3);
 
     my $Module = _CreateTestInfo($Impacts, $Root, $Dir);
-    $Impacts->{TestBuild} = 1;
+    $Impacts->{PatchedTests} = 1;
     $Impacts->{Tests}->{$Module}->{Files}->{$File} = $Change;
 
     if ($File eq "Makefile.in" and $Change ne "modify")
@@ -209,7 +209,7 @@ sub _HandleFile($$$)
     my ($Root, $Dir, $File) = ($1, $2, $3);
 
     my $Module = _CreateTestInfo($Impacts, $Root, $Dir);
-    $Impacts->{ModuleBuild} = 1;
+    $Impacts->{PatchedModules} = 1;
 
     if ($File eq "Makefile.in" and $Change ne "modify")
     {
@@ -227,12 +227,11 @@ sub _HandleFile($$$)
         $Impacts->{IsWinePatch} = 1;
       }
       # Else this file exists in Wine but has a very common name so it may just
-      # as well belong to another repository. Still update WineBuild in case
-      # this patch really is for Wine.
+      # as well belong to another repository.
 
       if ($FilePath !~ /^(?:$IgnoredPathsRe)/)
       {
-        $Impacts->{WineBuild} = 1;
+        $Impacts->{PatchedRoot} = 1;
         if ($FilePath =~ m~/Makefile.in$~ and $Change ne "modify")
         {
           # This adds / removes a directory
@@ -245,7 +244,7 @@ sub _HandleFile($$$)
     {
       # This may or may not be a Wine patch but the new Makefile.in will be
       # added to the build by make_makefiles.
-      $Impacts->{WineBuild} = $Impacts->{MakeMakefiles} = 1;
+      $Impacts->{PatchedRoot} = $Impacts->{MakeMakefiles} = 1;
     }
   }
 }
@@ -274,7 +273,7 @@ sub GetPatchImpacts($;$)
     # patch.
     ModuleUnitCount => 0,
     # Number of patched test units.
-    UnitCount => 0,
+    TestUnitCount => 0,
     # The modules that need a rebuild, even if only for the tests.
     BuildModules => {},
     # Information about 'tests' directories.
@@ -284,8 +283,8 @@ sub GetPatchImpacts($;$)
 
   if ($PastImpacts)
   {
-    if ($PastImpacts->{WineBuild} or $PastImpacts->{ModuleBuild} or
-        $PastImpacts->{TestBuild})
+    if ($PastImpacts->{PatchedRoot} or $PastImpacts->{PatchedModules} or
+        $PastImpacts->{PatchedTests})
     {
       # Update the list of Wine files so we correctly recognize patchset parts
       # that modify new Wine files.
@@ -318,11 +317,11 @@ sub GetPatchImpacts($;$)
   {
     if ($Line =~ m=^--- \w+/(?:aclocal\.m4|configure\.ac)$=)
     {
-      $Impacts->{WineBuild} = $Impacts->{Autoconf} = 1;
+      $Impacts->{PatchedRoot} = $Impacts->{Autoconf} = 1;
     }
     elsif ($Line =~ m=^--- \w+/tools/make_makefiles$=)
     {
-      $Impacts->{WineBuild} = $Impacts->{MakeMakefiles} = 1;
+      $Impacts->{PatchedRoot} = $Impacts->{MakeMakefiles} = 1;
       $Impacts->{IsWinePatch} = 1;
     }
     elsif ($Line =~ m=^--- /dev/null$=)
@@ -401,7 +400,7 @@ sub GetPatchImpacts($;$)
     }
 
     $TestInfo->{UnitCount} = scalar(keys %{$TestInfo->{Units}});
-    $Impacts->{UnitCount} += $TestInfo->{UnitCount};
+    $Impacts->{TestUnitCount} += $TestInfo->{UnitCount};
   }
 
   return $Impacts;
@@ -420,7 +419,7 @@ sub GetBuildTimeout($$)
   map {$_ =~ /^exe/ ? $ExeCount++ : $WineCount++ } keys %$Builds;
 
   # Set $ModuleCount to 0 if a full rebuild is needed
-  my $ModuleCount = (!$Impacts or $Impacts->{WineBuild}) ? 0 :
+  my $ModuleCount = (!$Impacts or $Impacts->{PatchedRoot}) ? 0 :
                     scalar(keys %{$Impacts->{BuildModules}});
 
   my ($ExeTimeout, $WineTimeout) = (0, 0);

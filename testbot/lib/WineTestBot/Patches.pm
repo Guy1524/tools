@@ -136,8 +136,8 @@ sub Submit($$$)
   $PastImpacts = GetPatchImpacts($PatchFileName) if ($IsSet);
   my $Impacts = GetPatchImpacts("$DataDir/patches/" . $self->Id, $PastImpacts);
 
-  if (!$Impacts->{WineBuild} and !$Impacts->{ModuleBuild} and
-      !$Impacts->{TestBuild})
+  if (!$Impacts->{PatchedRoot} and !$Impacts->{PatchedModules} and
+      !$Impacts->{PatchedTests})
   {
     if ($Impacts->{IsWinePatch})
     {
@@ -176,7 +176,7 @@ sub Submit($$$)
   my $BuildVMs = CreateVMs();
   $BuildVMs->AddFilter("Type", ["build"]);
   $BuildVMs->AddFilter("Role", ["base"]);
-  if ($Impacts->{UnitCount} and !$BuildVMs->IsEmpty())
+  if ($Impacts->{TestUnitCount} and !$BuildVMs->IsEmpty())
   {
     # Create the Build Step
     my $BuildStep = $NewJob->Steps->Add();
