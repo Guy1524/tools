@@ -279,7 +279,8 @@ sub GetPatchImpacts($;$)
 
   if ($PastImpacts)
   {
-    if ($PastImpacts->{WineBuild} or $PastImpacts->{TestBuild})
+    if ($PastImpacts->{WineBuild} or $PastImpacts->{ModuleBuild} or
+        $PastImpacts->{TestBuild})
     {
       # Update the list of Wine files so we correctly recognize patchset parts
       # that modify new Wine files.
