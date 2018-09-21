@@ -183,15 +183,10 @@ sub _HandleFile($$$)
       };
     }
 
-    # Assume makefile modifications may break the build but not the tests
-    if ($File eq "Makefile.in")
+    if ($File eq "Makefile.in" and $Change ne "modify")
     {
-      if ($Change eq "new" or $Change eq "rm")
-      {
-        # This adds / removes a directory
-        $Impacts->{MakeMakefiles} = 1;
-      }
-      return;
+      # This adds / removes a directory
+      $Impacts->{MakeMakefiles} = 1;
     }
 
     if (!$Tests->{$Module}->{Files})
@@ -233,6 +228,11 @@ sub _HandleFile($$$)
       if ($FilePath !~ /^(?:$IgnoredPathsRe)/)
       {
         $Impacts->{WineBuild} = 1;
+        if ($FilePath =~ m~/Makefile.in$~ and $Change ne "modify")
+        {
+          # This adds / removes a directory
+          $Impacts->{MakeMakefiles} = 1;
+        }
       }
       # Else patches to this file don't impact the Wine build.
     }
@@ -358,6 +358,8 @@ sub GetPatchImpacts($;$)
     {
       # Skip unmodified files
       next if (!$TestInfo->{Files}->{$File});
+      # Assume makefile modifications may break the build but not the tests
+      next if ($File eq "Makefile.in");
 
       my $Base = $File;
       if ($Base !~ s/(?:\.c|\.spec)$//)
