@@ -150,6 +150,31 @@ my $IgnoredPathsRe = join('|',
   'tools/winemaker/',
 );
 
+sub _CreateTestInfo($$$)
+{
+  my ($Impacts, $Root, $Dir) = @_;
+
+  my $Module = ($Root eq "programs") ? "$Dir.exe" : $Dir;
+  $Impacts->{BuildModules}->{$Module} = 1;
+  $Impacts->{IsWinePatch} = 1;
+
+  my $Tests = $Impacts->{Tests};
+  if (!$Tests->{$Module})
+  {
+    $Tests->{$Module} = {
+      "Module"  => $Module,
+      "Path"    => "$Root/$Dir/tests",
+      "ExeBase" => "${Module}_test",
+    };
+    foreach my $File (keys %{$_TestList->{$Module}})
+    {
+      $Tests->{$Module}->{Files}->{$File} = 0; # not modified
+    }
+  }
+
+  return $Module;
+}
+
 sub _HandleFile($$$)
 {
   my ($Impacts, $FilePath, $Change) = @_;
@@ -168,43 +193,23 @@ sub _HandleFile($$$)
   if ($FilePath =~ m~^(dlls|programs)/([^/]+)/tests/([^/\s]+)$~)
   {
     my ($Root, $Dir, $File) = ($1, $2, $3);
-    my $Module = ($Root eq "programs") ? "$Dir.exe" : $Dir;
-    $Impacts->{BuildModules}->{$Module} = 1;
-    $Impacts->{TestBuild} = 1;
-    $Impacts->{IsWinePatch} = 1;
 
-    my $Tests = $Impacts->{Tests};
-    if (!$Tests->{$Module})
-    {
-      $Tests->{$Module} = {
-        "Module"  => $Module,
-        "Path"    => "$Root/$Dir/tests",
-        "ExeBase" => "${Module}_test",
-      };
-    }
+    my $Module = _CreateTestInfo($Impacts, $Root, $Dir);
+    $Impacts->{TestBuild} = 1;
+    $Impacts->{Tests}->{$Module}->{Files}->{$File} = $Change;
 
     if ($File eq "Makefile.in" and $Change ne "modify")
     {
       # This adds / removes a directory
       $Impacts->{MakeMakefiles} = 1;
     }
-
-    if (!$Tests->{$Module}->{Files})
-    {
-      foreach my $File (keys %{$_TestList->{$Module}})
-      {
-        $Tests->{$Module}->{Files}->{$File} = 0; # not modified
-      }
-    }
-    $Tests->{$Module}->{Files}->{$File} = $Change;
   }
   elsif ($FilePath =~ m~^(dlls|programs)/([^/]+)/([^/\s]+)$~)
   {
     my ($Root, $Dir, $File) = ($1, $2, $3);
-    my $Module = ($Root eq "programs") ? "$Dir.exe" : $Dir;
-    $Impacts->{BuildModules}->{$Module} = 1;
+
+    my $Module = _CreateTestInfo($Impacts, $Root, $Dir);
     $Impacts->{ModuleBuild} = 1;
-    $Impacts->{IsWinePatch} = 1;
 
     if ($File eq "Makefile.in" and $Change ne "modify")
     {
@@ -300,13 +305,10 @@ sub GetPatchImpacts($;$)
 
     foreach my $PastInfo (values %{$PastImpacts->{Tests}})
     {
-      if ($PastInfo->{Files})
+      foreach my $File (keys %{$PastInfo->{Files}})
       {
-        foreach my $File (keys %{$PastInfo->{Files}})
-        {
-          _HandleFile($Impacts, "$PastInfo->{Path}/$File",
-                      $PastInfo->{Files}->{$File} eq "rm" ? "rm" : 0);
-        }
+        _HandleFile($Impacts, "$PastInfo->{Path}/$File",
+                    $PastInfo->{Files}->{$File} eq "rm" ? "rm" : 0);
       }
     }
   }
