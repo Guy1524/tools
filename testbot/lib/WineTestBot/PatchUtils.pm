@@ -283,24 +283,12 @@ sub GetPatchImpacts($;$)
 
   if ($PastImpacts)
   {
-    if ($PastImpacts->{PatchedRoot} or $PastImpacts->{PatchedModules} or
-        $PastImpacts->{PatchedTests})
-    {
-      # Update the list of Wine files so we correctly recognize patchset parts
-      # that modify new Wine files.
-      my $WineFiles = $PastImpacts->{WineFiles} || $_WineFiles;
-      map { $Impacts->{WineFiles}->{$_} = 1 } keys %{$WineFiles};
-      map { $Impacts->{WineFiles}->{$_} = 1 } keys %{$PastImpacts->{NewFiles}};
-      map { delete $Impacts->{WineFiles}->{$_} } keys %{$PastImpacts->{DeletedFiles}};
-      # Modules impacted by previous parts of a patchset still need to be
-      # rebuilt.
-      $Impacts->{BuildModules} = { %{$PastImpacts->{BuildModules}} };
-    }
-    else
-    {
-      $Impacts->{NewFiles} = $PastImpacts->{NewFiles};
-      $Impacts->{DeletedFiles} = $PastImpacts->{DeletedFiles};
-    }
+    # Update the list of Wine files so we correctly recognize patchset parts
+    # that modify new Wine files.
+    my $WineFiles = $PastImpacts->{WineFiles} || $_WineFiles;
+    map { $Impacts->{WineFiles}->{$_} = 1 } keys %{$WineFiles};
+    map { $Impacts->{WineFiles}->{$_} = 1 } keys %{$PastImpacts->{NewFiles}};
+    map { delete $Impacts->{WineFiles}->{$_} } keys %{$PastImpacts->{DeletedFiles}};
 
     foreach my $PastInfo (values %{$PastImpacts->{Tests}})
     {
@@ -403,6 +391,24 @@ sub GetPatchImpacts($;$)
     $Impacts->{TestUnitCount} += $TestInfo->{UnitCount};
   }
 
+  if ($Impacts->{PatchedRoot} or $Impacts->{PatchedModules} or
+      $Impacts->{PatchedTests})
+  {
+    # Any patched area will need to be rebuilt...
+    $Impacts->{RebuildRoot} = $Impacts->{PatchedRoot};
+    $Impacts->{RebuildModules} = $Impacts->{PatchedModules};
+
+    # ... even if the patch was in previous parts
+    if ($PastImpacts)
+    {
+      $Impacts->{Autoconf} ||= $PastImpacts->{Autoconf};
+      $Impacts->{MakeMakefiles} ||= $PastImpacts->{MakeMakefiles};
+      $Impacts->{RebuildRoot} ||= $PastImpacts->{PatchedRoot};
+      $Impacts->{RebuildModules} ||= $PastImpacts->{PatchedModules};
+      map { $Impacts->{BuildModules}->{$_} = 1 } keys %{$PastImpacts->{BuildModules}};
+    }
+  }
+
   return $Impacts;
 }
 
@@ -419,7 +425,7 @@ sub GetBuildTimeout($$)
   map {$_ =~ /^exe/ ? $ExeCount++ : $WineCount++ } keys %$Builds;
 
   # Set $ModuleCount to 0 if a full rebuild is needed
-  my $ModuleCount = (!$Impacts or $Impacts->{PatchedRoot}) ? 0 :
+  my $ModuleCount = (!$Impacts or $Impacts->{RebuildRoot}) ? 0 :
                     scalar(keys %{$Impacts->{BuildModules}});
 
   my ($ExeTimeout, $WineTimeout) = (0, 0);
