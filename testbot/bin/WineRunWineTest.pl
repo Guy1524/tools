@@ -534,7 +534,6 @@ elsif (!defined $TAError)
 # Grab the test logs if any
 #
 
-my $TimedOut;
 if ($Step->Type ne "build")
 {
   my $BuildList = $Task->CmdLineArg;
@@ -547,7 +546,8 @@ if ($Step->Type ne "build")
     {
       chmod 0664, "$TaskDir/$RptFileName";
 
-      (my $LogFailures, my $LogErrors, $TimedOut) = ParseWineTestReport("$TaskDir/$RptFileName", 1, $Step->Type eq "suite", $TaskTimedOut);
+      my ($TestUnitCount, $TimeoutCount, $LogFailures, $LogErrors) = ParseWineTestReport("$TaskDir/$RptFileName", 1, $TaskTimedOut);
+      $TaskTimedOut = 1 if ($TestUnitCount == $TimeoutCount);
       if (!defined $LogFailures and @$LogErrors == 1)
       {
         # Could not open the file
@@ -595,4 +595,4 @@ FatalTAError(undef, $TAError, $PossibleCrash) if (defined $TAError);
 # Wrap up
 #
 
-WrapUpAndExit($NewStatus, $TaskFailures, undef, $TaskTimedOut || $TimedOut);
+WrapUpAndExit($NewStatus, $TaskFailures, undef, $TaskTimedOut);

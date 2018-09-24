@@ -277,23 +277,23 @@ a list of extra errors, and whether the test timed out.
 =back
 =cut
 
-sub ParseWineTestReport($$$$)
+sub ParseWineTestReport($$$)
 {
-  my ($FileName, $IsWineTest, $IsSuite, $TaskTimedOut) = @_;
+  my ($FileName, $IsWineTest, $TaskTimedOut) = @_;
 
   my $LogFile;
   if (!open($LogFile, "<", $FileName))
   {
     my $BaseName = basename($FileName);
-    return (undef, ["Unable to open '$BaseName' for reading: $!"], undef);
+    return (undef, undef, undef, ["Unable to open '$BaseName' for reading: $!"]);
   }
 
   my $Parser = {
     IsWineTest => $IsWineTest,
-    IsSuite => $IsSuite,
     TaskTimedOut => $TaskTimedOut,
 
-    TimedOut => undef,
+    TestUnitCount => 0,
+    TimeoutCount => 0,
     Failures => undef,
     Errors => [],
   };
@@ -309,6 +309,7 @@ sub ParseWineTestReport($$$$)
       # Close the previous test unit
       _CloseTestUnit($Parser, $Cur, 0) if ($Cur->{Dll} ne "");
       $Cur = _NewCurrentUnit($Dll, $Unit);
+      $Parser->{TestUnitCount}++;
 
       # Recognize skipped messages in case we need to skip tests in the VMs
       $Cur->{Rc} = 0 if ($Type eq "skipped");
@@ -414,7 +415,7 @@ sub ParseWineTestReport($$$$)
         # so record the failure but don't add an error message.
         $Parser->{Failures}++;
         $Cur->{IsBroken} = 1;
-        $Parser->{TimedOut} = $Parser->{IsSuite};
+        $Parser->{TimeoutCount}++;
       }
       elsif ((!$Pid and !%{$Cur->{Pids}}) or
              ($Pid and !$Cur->{Pids}->{$Pid} and !$Cur->{Pids}->{0}))
@@ -445,7 +446,8 @@ sub ParseWineTestReport($$$$)
   _CloseTestUnit($Parser, $Cur, 1);
   close($LogFile);
 
-  return ($Parser->{Failures}, $Parser->{Errors}, $Parser->{TimedOut});
+  return ($Parser->{TestUnitCount}, $Parser->{TimeoutCount},
+          $Parser->{Failures}, $Parser->{Errors});
 }
 
 

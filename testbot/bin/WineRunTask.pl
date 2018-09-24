@@ -523,13 +523,13 @@ if (!defined $TA->Wait($Pid, $Timeout, $Keepalive))
   }
 }
 
-my $TimedOut;
 Debug(Elapsed($Start), " Retrieving the report file to '$RptFileName'\n");
 if ($TA->GetFile($RptFileName, "$TaskDir/$RptFileName"))
 {
   chmod 0664, "$TaskDir/$RptFileName";
 
-  (my $LogFailures, my $LogErrors, $TimedOut) = ParseWineTestReport("$TaskDir/$RptFileName", $IsWineTest, $Step->Type eq "suite", $TaskTimedOut);
+  my ($TestUnitCount, $TimeoutCount, $LogFailures, $LogErrors) = ParseWineTestReport("$TaskDir/$RptFileName", $IsWineTest, $TaskTimedOut);
+  $TaskTimedOut = 1 if ($TestUnitCount == $TimeoutCount);
   if (!defined $LogFailures and @$LogErrors == 1)
   {
     # Could not open the file
@@ -563,4 +563,4 @@ FatalTAError(undef, $TAError, $PossibleCrash) if (defined $TAError);
 # Wrap up
 #
 
-WrapUpAndExit($NewStatus, $TaskFailures, undef, $TaskTimedOut || $TimedOut);
+WrapUpAndExit($NewStatus, $TaskFailures, undef, $TaskTimedOut);
