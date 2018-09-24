@@ -106,20 +106,33 @@ sub SubmitSubset($$$)
   my ($CombinedFile, $CombinedFileName) = OpenNewFile("$DataDir/staging", "_patch");
   return "Could not create a combined patch file: $!" if (!$CombinedFile);
 
-  my $Parts = $self->Parts;
+  my $ErrMessage;
   for (my $PartNo = 1; $PartNo <= $MaxPart; $PartNo++)
   {
-    my $Part = $Parts->GetItem($PartNo);
-    if (defined $Part and
-        open(my $PartFile, "<" , "$DataDir/patches/" . $Part->Patch->Id))
+    my $Part = $self->Parts->GetItem($PartNo);
+    if (!defined $Part)
+    {
+      $ErrMessage = "Could not find part $PartNo / $MaxPart";
+      last;
+    }
+
+    if (open(my $PartFile, "<" , "$DataDir/patches/" . $Part->Patch->Id))
     {
       print $CombinedFile $_ for (<$PartFile>);
       close($PartFile);
     }
+    else
+    {
+      $ErrMessage = "Could not open part $PartNo for reading: $!";
+      last;
+    }
   }
   close($CombinedFile);
 
-  my $ErrMessage = $FinalPatch->Submit($CombinedFileName, 1);
+  if (!defined $ErrMessage)
+  {
+    $ErrMessage = $FinalPatch->Submit($CombinedFileName, 1);
+  }
   unlink($CombinedFileName);
 
   return $ErrMessage;
