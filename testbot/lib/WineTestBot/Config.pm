@@ -95,13 +95,13 @@ $MaxTaskTries = 3;
 # Exe build timeouts (in seconds)
 # - For a full build
 $ExeBuildNativeTimeout = 60;
-$ExeBuildTestTimeout = 2 * 60;
+$ExeBuildTestTimeout = 4 * 60;
 # - For a single module
 $ExeModuleTimeout = 30;
 
 # Wine build timeouts (in seconds)
 # - For a full build
-$WineBuildTimeout = 20 * 60;
+$WineBuildTimeout = 25 * 60;
 # - For a single module
 $WineModuleTimeout = 60;
 
