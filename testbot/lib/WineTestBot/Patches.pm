@@ -266,7 +266,7 @@ sub Submit($$$)
   if ($NewJob->Steps->IsEmpty())
   {
     # This may be a Wine patch but there is no suitable VM to test it!
-    if ($Impacts->{UnitCount})
+    if ($BuildVMs->IsEmpty() and $WineVMs->IsEmpty())
     {
       $self->Disposition("No build or test VM!");
     }
