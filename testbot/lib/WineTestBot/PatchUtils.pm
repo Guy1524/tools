@@ -31,7 +31,8 @@ the Wine builds.
 =cut
 
 use Exporter 'import';
-our @EXPORT = qw(GetPatchImpacts UpdateWineData GetBuildTimeout);
+our @EXPORT = qw(GetPatchImpacts LastPartSeparator UpdateWineData
+                 GetBuildTimeout);
 
 use List::Util qw(min max);
 
@@ -150,6 +151,11 @@ my $IgnoredPathsRe = join('|',
   'tools/winemaker/',
 );
 
+sub LastPartSeparator()
+{
+  return "===== TestBot: Last patchset part =====\n";
+}
+
 sub _CreateTestInfo($$$)
 {
   my ($Impacts, $Root, $Dir) = @_;
@@ -261,9 +267,9 @@ configure, whether it impacts the tests, etc.
 =back
 =cut
 
-sub GetPatchImpacts($;$)
+sub GetPatchImpacts($)
 {
-  my ($PatchFileName, $PastImpacts) = @_;
+  my ($PatchFileName) = @_;
 
   my $fh;
   return undef if (!open($fh, "<", $PatchFileName));
@@ -281,25 +287,7 @@ sub GetPatchImpacts($;$)
   };
   _LoadWineFiles();
 
-  if ($PastImpacts)
-  {
-    # Update the list of Wine files so we correctly recognize patchset parts
-    # that modify new Wine files.
-    my $WineFiles = $PastImpacts->{WineFiles} || $_WineFiles;
-    map { $Impacts->{WineFiles}->{$_} = 1 } keys %{$WineFiles};
-    map { $Impacts->{WineFiles}->{$_} = 1 } keys %{$PastImpacts->{NewFiles}};
-    map { delete $Impacts->{WineFiles}->{$_} } keys %{$PastImpacts->{DeletedFiles}};
-
-    foreach my $PastInfo (values %{$PastImpacts->{Tests}})
-    {
-      foreach my $File (keys %{$PastInfo->{Files}})
-      {
-        _HandleFile($Impacts, "$PastInfo->{Path}/$File",
-                    $PastInfo->{Files}->{$File} eq "rm" ? "rm" : 0);
-      }
-    }
-  }
-
+  my $PastImpacts;
   my ($Path, $Change);
   while (my $Line = <$fh>)
   {
@@ -331,6 +319,50 @@ sub GetPatchImpacts($;$)
       _HandleFile($Impacts, $1, $Change || "modify");
       $Path = undef;
       $Change = "";
+    }
+    elsif ($Line eq LastPartSeparator())
+    {
+      # All the diffs so far belongs to previous parts of this patchset.
+      # But:
+      # - Only the last part must be taken into account to determine if a
+      #   rebuild and testing is needed.
+      # - Yet if a rebuild is needed the previous parts' patches will impact
+      #   the scope of the rebuild so that information must be preserved.
+      # So save current impacts in $PastImpacts and reset the current state.
+      $PastImpacts = {};
+
+      # Build a copy of the Wine files list reflecting the current situation.
+      $Impacts->{WineFiles} = { %$_WineFiles } if (!$Impacts->{WineFiles});
+      map { $Impacts->{WineFiles}->{$_} = 1 } keys %{$Impacts->{NewFiles}};
+      map { delete $Impacts->{WineFiles}->{$_} } keys %{$Impacts->{DeletedFiles}};
+      $Impacts->{NewFiles} = {};
+      $Impacts->{DeletedFiles} = {};
+
+      # The modules impacted by previous parts will still need to be built,
+      # but only if the last part justifies a build. So make a backup.
+      $PastImpacts->{BuildModules} = $Impacts->{BuildModules};
+      $Impacts->{BuildModules} = {};
+
+      # Also backup the build-related fields.
+      foreach my $Field ("Autoconf", "MakeMakefiles",
+                         "PatchedRoot", "PatchedModules", "PatchedTests")
+      {
+        $PastImpacts->{$Field} = $Impacts->{$Field};
+        $Impacts->{$Field} = undef;
+      }
+
+      # Reset the status of all test unit files to not modified.
+      foreach my $TestInfo (values %{$Impacts->{Tests}})
+      {
+        foreach my $File (keys %{$TestInfo->{Files}})
+        {
+          if ($TestInfo->{Files}->{$File} ne "rm")
+          {
+            $TestInfo->{Files}->{$File} = 0;
+          }
+        }
+      }
+      $Impacts->{ModuleUnitCount} = $Impacts->{TestUnitCount} = 0;
     }
     else
     {

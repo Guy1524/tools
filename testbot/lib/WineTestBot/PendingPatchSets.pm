@@ -42,6 +42,7 @@ use WineTestBot::WineTestBotObjects;
 our @ISA = qw(WineTestBot::WineTestBotItem);
 
 use WineTestBot::Config;
+use WineTestBot::PatchUtils;
 use WineTestBot::Utils;
 
 
@@ -116,6 +117,10 @@ sub SubmitSubset($$$)
       last;
     }
 
+    if ($PartNo == $MaxPart and $PartNo > 1)
+    {
+      print $CombinedFile LastPartSeparator();
+    }
     if (open(my $PartFile, "<" , "$DataDir/patches/" . $Part->Patch->Id))
     {
       print $CombinedFile $_ for (<$PartFile>);

@@ -132,10 +132,7 @@ sub Submit($$$)
 {
   my ($self, $PatchFileName, $IsSet) = @_;
 
-  my $PastImpacts;
-  $PastImpacts = GetPatchImpacts($PatchFileName) if ($IsSet);
-  my $Impacts = GetPatchImpacts("$DataDir/patches/" . $self->Id, $PastImpacts);
-
+  my $Impacts = GetPatchImpacts($PatchFileName);
   if (!$Impacts->{PatchedRoot} and !$Impacts->{PatchedModules} and
       !$Impacts->{PatchedTests})
   {
