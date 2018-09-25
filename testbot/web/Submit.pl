@@ -745,13 +745,9 @@ sub OnPrev($)
   return $self->{Page} == 3 ? $self->OnPage3Prev() : $self->OnPage2Prev();
 }
 
-sub OnSubmit($)
+sub SubmitJob($$$)
 {
-  my ($self) = @_;
-
-  return !1 if (!$self->Validate());
-  my $BaseName = $self->ValidateAndGetFileName("FileName");
-  return !1 if (!$BaseName);
+  my ($self, $BaseName, $Staging) = @_;
 
   # See also Patches::Submit() in lib/WineTestBot/Patches.pm
 
@@ -778,11 +774,7 @@ sub OnSubmit($)
   # Add steps and tasks for the 32 and 64-bit tests
   my $FileType = $self->GetParam("FileType");
   my $Impacts;
-  if ($FileType eq "patch")
-  {
-    my $TmpStagingFullPath = $self->GetTmpStagingFullPath($BaseName);
-    $Impacts = GetPatchImpacts($TmpStagingFullPath);
-  }
+  $Impacts = GetPatchImpacts($Staging) if ($FileType eq "patch");
 
   my $BuildStep;
   foreach my $Bits ("32", "64")
@@ -913,8 +905,7 @@ sub OnSubmit($)
   }
 
   # Stage the test patch/executable so the job can pick it up
-  my $TmpStagingFullPath = $self->GetTmpStagingFullPath($BaseName);
-  if (!rename($TmpStagingFullPath, "$DataDir/staging/job". $NewJob->Id ."_$BaseName"))
+  if (!rename($Staging, "$DataDir/staging/job". $NewJob->Id ."_$BaseName"))
   {
     $self->{ErrMessage} = "Could not stage '$BaseName': $!\n";
     return !1;
@@ -941,6 +932,41 @@ sub OnSubmit($)
 
   $self->Redirect("/JobDetails.pl?Key=". $NewJob->GetKey()); # does not return
   exit;
+}
+
+sub OnSubmit($)
+{
+  my ($self) = @_;
+
+  return !1 if (!$self->Validate());
+  my $BaseName = $self->ValidateAndGetFileName("FileName");
+  return !1 if (!$BaseName);
+
+  # Rename the staging file to avoid race conditions if the user clicks on
+  # Submit multiple times
+  my $OldStaging = $self->GetTmpStagingFullPath($BaseName);
+  my $Staging = CreateNewLink($OldStaging, "$DataDir/staging", $BaseName);
+  if (!defined $Staging)
+  {
+    $self->{ErrMessage} = "Could not rename '$BaseName': $!";
+    return !1;
+  }
+  if (!unlink $OldStaging)
+  {
+    unlink $Staging;
+    $self->{ErrMessage} = $!{ENOENT} ?
+        "$BaseName has already been submitted or has expired" :
+        "Could not remove the staging '$BaseName' file: $!";
+    return !1;
+  }
+
+  if (!$self->SubmitJob($BaseName, $Staging))
+  {
+    # Restore the file for the next attempt
+    rename($Staging, $OldStaging);
+    return !1;
+  }
+  return 1;
 }
 
 sub OnShowAllVMs($)
