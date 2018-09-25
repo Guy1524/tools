@@ -481,4 +481,7 @@ if ($NewStatus eq 'completed')
 # Wrap up
 #
 
-WrapUpAndExit($NewStatus, undef, $TaskTimedOut);
+# In case of a regular build failure retrying is pointless. But in case of a
+# timeout the VM host may be less busy next time and since the snapshot is
+# unchanged we can retry.
+WrapUpAndExit($NewStatus, $TaskTimedOut, $TaskTimedOut);
