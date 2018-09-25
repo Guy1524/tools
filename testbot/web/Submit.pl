@@ -276,10 +276,6 @@ sub GenerateFields($)
           $Status = " [". $VM->Status ."]";
           $Checked = undef;
         }
-        elsif ($VM->Type eq "wine")
-        {
-          $Checked = undef;
-        }
         if ($Checked and
             ($self->GetParam("Page") == 1 || $self->GetParam($FieldName)))
         {
@@ -876,7 +872,7 @@ sub SubmitJob($$$)
           my $WineStep = $Steps->Add();
           $WineStep->FileName($BaseName);
           $WineStep->FileType($FileType);
-          $WineStep->Type("build");
+          $WineStep->Type("single");
           $WineStep->DebugLevel($self->GetParam("DebugLevel"));
           $WineStep->ReportSuccessfulTests(defined($self->GetParam("ReportSuccessfulTests")));
           $Tasks = $WineStep->Tasks;
@@ -884,7 +880,8 @@ sub SubmitJob($$$)
         if (!defined $Timeout)
         {
           my $Builds = { $Build => 1 };
-          $Timeout = GetBuildTimeout($Impacts, $Builds);
+          $Timeout = GetBuildTimeout($Impacts, $Builds) +
+                     GetTestTimeout($Impacts, $Builds);
         }
 
         # Then add a task for this VM

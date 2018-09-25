@@ -215,7 +215,7 @@ sub AddJob($$$)
     Debug("  $VMKey $Build\n");
     my $Task = $Tasks->Add();
     $Task->VM($VMs->GetItem($VMKey));
-    $Task->Timeout($SuiteTimeout);
+    $Task->Timeout(GetTestTimeout(undef, { $Build => 1 }));
   }
 
   # Save it all
@@ -318,7 +318,7 @@ sub AddReconfigJob($)
         my $Task = $NewStep->Tasks->Add();
         $Task->VM($VM);
         $Task->CmdLineArg($Build);
-        $Task->Timeout($SuiteTimeout);
+        $Task->Timeout(GetTestTimeout(undef, { $Build => 1 }));
       }
     }
   }

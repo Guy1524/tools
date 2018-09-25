@@ -245,7 +245,7 @@ sub Submit($$$)
     my $NewStep = $NewJob->Steps->Add();
     $NewStep->FileName("patch.diff");
     $NewStep->FileType("patch");
-    $NewStep->Type("build");
+    $NewStep->Type("single");
     $NewStep->DebugLevel(0);
 
     # And a task for each VM
@@ -258,7 +258,8 @@ sub Submit($$$)
       $Task->VM($VM);
       # Only verify that the win32 version compiles
       my $Builds = { "win32" => 1 };
-      $Task->Timeout(GetBuildTimeout($Impacts, $Builds));
+      $Task->Timeout(GetBuildTimeout($Impacts, $Builds) +
+                     GetTestTimeout($Impacts, $Builds));
       $Task->CmdLineArg(join(",", keys %$Builds));
     }
   }

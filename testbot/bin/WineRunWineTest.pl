@@ -382,7 +382,7 @@ if (!$VM->GetDomain()->IsPoweredOn())
   FatalError("The VM is not powered on\n");
 }
 
-if ($Step->Type ne "build" and $Step->Type ne "suite")
+if ($Step->Type ne "build" and $Step->Type ne "suite" and $Step->Type ne "single")
 {
   FatalError("Unexpected step type '". $Step->Type ."' found\n");
 }
@@ -422,7 +422,12 @@ if (defined $FileName)
 
 my $Script = "#!/bin/sh\n".
              "( set -x\n".
-             "  ../bin/build/WineTest.pl ";
+             "  export WINETEST_DEBUG=". $Step->DebugLevel ."\n";
+if ($Step->ReportSuccessfulTests)
+{
+  $Script .= "  export WINETEST_REPORT_SUCCESS=1\n";
+}
+$Script .= "  ../bin/build/WineTest.pl ";
 if ($Step->Type eq "suite")
 {
   my $BaseTag = BuildTag($VM->Name);
@@ -460,7 +465,7 @@ Debug(Elapsed($Start), " Starting the script\n");
 my $Pid = $TA->Run(["./task"], 0);
 if (!$Pid)
 {
-  FatalTAError($TA, "Failed to start the task");
+  FatalTAError($TA, "Failed to start the test");
 }
 
 
@@ -530,8 +535,9 @@ elsif (!defined $TAError)
   $TAError = "An error occurred while retrieving the task log: ". $TA->GetLastError();
 }
 
+
 #
-# Grab the test logs if any
+# Grab the test reports if any
 #
 
 if ($Step->Type ne "build")
@@ -585,14 +591,45 @@ if ($Step->Type ne "build")
 Debug(Elapsed($Start), " Disconnecting\n");
 $TA->Disconnect();
 
-# Report the task errors even though they may have been caused by
-# TestAgent trouble.
-LogTaskError($ErrMessage) if (defined $ErrMessage);
-FatalTAError(undef, $TAError, $PossibleCrash) if (defined $TAError);
+
+#
+# Grab a copy of the reference logs
+#
+
+# Note that this may be a bit inaccurate right after a Wine commit.
+# See WineSendLog.pl for more details.
+if ($NewStatus eq 'completed')
+{
+  my $LatestDir = "$DataDir/latest";
+  my $StepDir = $Step->GetDir();
+  my $BuildList = $Task->CmdLineArg;
+  $BuildList =~ s/ .*$//;
+  foreach my $Build (split /,/, $BuildList)
+  {
+    my $RptFileName = "$Build.report";
+    my $RefReport = $Task->VM->Name ."_$RptFileName";
+    for my $Suffix ("", ".err")
+    {
+      if (-f "$LatestDir/$RefReport$Suffix")
+      {
+        unlink "$StepDir/$RefReport$Suffix";
+        if (!link "$LatestDir/$RefReport$Suffix", "$StepDir/$RefReport$Suffix")
+        {
+          Error "Could not link '$RefReport$Suffix': $!\n";
+        }
+      }
+    }
+  }
+}
 
 
 #
 # Wrap up
 #
+
+# Report the task errors even though they may have been caused by
+# TestAgent trouble.
+LogTaskError($ErrMessage) if (defined $ErrMessage);
+FatalTAError(undef, $TAError, $PossibleCrash) if (defined $TAError);
 
 WrapUpAndExit($NewStatus, $TaskFailures, undef, $TaskTimedOut);

@@ -33,7 +33,7 @@ use vars qw (@ISA @EXPORT @EXPORT_OK $UseSSL $LogDir $DataDir $BinDir
              $WinePatchToOverride $WinePatchCc
              $ExeBuildNativeTimeout $ExeBuildTestTimeout $ExeModuleTimeout
              $WineBuildTimeout $WineModuleTimeout $TimeoutMargin
-             $SuiteTimeout $SingleTimeout $MaxUnitSize
+             $SuiteTimeout $SingleTimeout $SingleAvgTime $MaxUnitSize
              $TagPrefix $ProjectName $PatchesMailingList $LDAPServer
              $LDAPBindDN $LDAPSearchBase $LDAPSearchFilter
              $LDAPRealNameAttribute $LDAPEMailAttribute $AgentPort $Tunnel
@@ -49,7 +49,7 @@ require Exporter;
              $RobotEMail $WinePatchToOverride $WinePatchCc $SuiteTimeout
              $ExeBuildNativeTimeout $ExeBuildTestTimeout $ExeModuleTimeout
              $WineBuildTimeout $WineModuleTimeout $TimeoutMargin
-             $SuiteTimeout $SingleTimeout $MaxUnitSize
+             $SuiteTimeout $SingleTimeout $SingleAvgTime $MaxUnitSize
              $TagPrefix $ProjectName $PatchesMailingList
              $LDAPServer $LDAPBindDN $LDAPSearchBase $LDAPSearchFilter
              $LDAPRealNameAttribute $LDAPEMailAttribute $AgentPort $Tunnel
@@ -112,8 +112,10 @@ $TimeoutMargin = 2 * 60;
 # Test timeouts (in seconds)
 # - For the whole test suite
 $SuiteTimeout = 30 * 60;
-# - For a single test
+# - For the first two tests
 $SingleTimeout = 2 * 60;
+# - For extra tests
+$SingleAvgTime = 2;
 
 # Maximum amount of traces for a test unit.
 $MaxUnitSize = 32 * 1024;

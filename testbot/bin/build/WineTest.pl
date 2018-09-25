@@ -107,6 +107,46 @@ sub DailyWineTest($$$$$)
   return 1;
 }
 
+sub TestPatch($$$)
+{
+  my ($Targets, $Build, $Impacts) = @_;
+
+  return 1 if (!$Targets->{"test$Build"});
+
+  my @TestList;
+  foreach my $Module (sort keys %{$Impacts->{Tests}})
+  {
+    my $TestInfo = $Impacts->{Tests}->{$Module};
+    if ($TestInfo->{All})
+    {
+      push @TestList, $Module;
+    }
+    else
+    {
+      foreach my $Unit (sort keys %{$TestInfo->{Units}})
+      {
+        push @TestList, "$Module:$Unit";
+      }
+    }
+  }
+  return 1 if (!@TestList);
+
+  InfoMsg "\nRunning the tests in the $Build Wine\n";
+  SetupWineEnvironment($Build);
+
+  # Run WineTest. Ignore the exit code since it returns non-zero whenever
+  # there are test failures.
+  RunWine($Build, "./programs/winetest/winetest.exe.so",
+          "-c -o '../$Build.report' -t test-$Build ". join(" ", @TestList));
+  if (!-f "$Build.report")
+  {
+    LogMsg "WineTest did not produce a report file\n";
+    return 0;
+  }
+
+  return 1;
+}
+
 
 #
 # Setup and command line processing
@@ -226,6 +266,20 @@ if (!defined $Usage)
       $Usage = 2;
     }
   }
+  else
+  {
+    foreach my $Build ("win32", "wow32", "wow64")
+    {
+      $Targets->{"test$Build"} = 1 if ($Targets->{$Build});
+    }
+    if ($Targets->{"wow32"} or $Targets->{"wow64"})
+    {
+      # Always rebuild both WoW targets before running the tests to make sure
+      # we don't run into issues caused by the two Wine builds being out of
+      # sync.
+      $Targets->{"wow32"} = $Targets->{"wow64"} = 1;
+    }
+  }
 
   if (!defined $FileName and $Action eq "testpatch")
   {
@@ -247,7 +301,7 @@ if (defined $Usage)
   print "Tests the specified patch or runs WineTest in Wine.\n";
   print "\n";
   print "Where:\n";
-  print "  --testpatch  Verify that the patch compiles.\n";
+  print "  --testpatch  Verify that the patch compiles and run the impacted tests.\n";
   print "  --winetest   Run WineTest and submit the result to the website.\n";
   print "  --no-submit  Do not submit the WineTest results to the website.\n";
   print "  TARGETS      Is a comma-separated list of targets for the specified action.\n";
@@ -282,7 +336,10 @@ if ($Action eq "testpatch")
   exit(1) if (!$Impacts or
               !BuildWine($Targets, "win32") or
               !BuildWine($Targets, "wow64") or
-              !BuildWine($Targets, "wow32"));
+              !BuildWine($Targets, "wow32") or
+              !TestPatch($Targets, "win32", $Impacts) or
+              !TestPatch($Targets, "wow64", $Impacts) or
+              !TestPatch($Targets, "wow32", $Impacts));
 }
 elsif ($Action eq "winetest")
 {

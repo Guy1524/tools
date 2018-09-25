@@ -32,7 +32,7 @@ the Wine builds.
 
 use Exporter 'import';
 our @EXPORT = qw(GetPatchImpacts LastPartSeparator UpdateWineData
-                 GetBuildTimeout);
+                 GetBuildTimeout GetTestTimeout);
 
 use List::Util qw(min max);
 
@@ -476,6 +476,21 @@ sub GetBuildTimeout($$)
   }
 
   return $ExeTimeout + $WineTimeout;
+}
+
+sub GetTestTimeout($$)
+{
+  my ($Impacts, $Builds) = @_;
+
+  my $Timeout = $SuiteTimeout;
+  if ($Impacts)
+  {
+    my $UnitCount = $Impacts->{TestUnitCount};
+    my $TestsTimeout = min(2, $UnitCount) * $SingleTimeout +
+                       max(0, $UnitCount - 2) * $SingleAvgTime;
+    $Timeout = min($SuiteTimeout, $TestsTimeout);
+  }
+  return scalar(keys %$Builds) * $Timeout;
 }
 
 1;
