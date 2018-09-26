@@ -287,7 +287,7 @@ EOF
     foreach my $LogName (@{$JobErrors->{$Key}->{LogNames}})
     {
       my $LogErrors = $JobErrors->{$Key}->{$LogName};
-      my $RefFileName = "$DataDir/latest". $StepTask->VM->Name ."_$LogName";
+      my $RefFileName = $StepTask->GetFullFileName($StepTask->VM->Name ."_$LogName");
       my ($NewGroups, $NewErrors, $_NewIndices) = GetNewLogErrors($RefFileName, $LogErrors->{Groups}, $LogErrors->{Errors});
       if (!$NewGroups)
       {
