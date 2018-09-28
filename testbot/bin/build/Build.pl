@@ -78,6 +78,7 @@ sub BuildTestExecutables($$$)
   my (@BuildDirs, @TestExes);
   foreach my $TestInfo (values %{$Impacts->{Tests}})
   {
+    next if (!$TestInfo->{UnitCount});
     push @BuildDirs, $TestInfo->{Path};
     my $TestExe = "$TestInfo->{Path}/$TestInfo->{ExeBase}.exe";
     push @TestExes, $TestExe;
