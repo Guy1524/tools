@@ -300,6 +300,11 @@ sub GetPatchImpacts($)
       $Impacts->{PatchedRoot} = $Impacts->{MakeMakefiles} = 1;
       $Impacts->{IsWinePatch} = 1;
     }
+    elsif ($Line =~ m=^--- \w+/server/protocol\.def$=)
+    {
+      $Impacts->{PatchedRoot} = $Impacts->{MakeRequests} = 1;
+      $Impacts->{IsWinePatch} = 1;
+    }
     elsif ($Line =~ m=^--- /dev/null$=)
     {
       $Change = "new";
@@ -344,7 +349,7 @@ sub GetPatchImpacts($)
       $Impacts->{BuildModules} = {};
 
       # Also backup the build-related fields.
-      foreach my $Field ("Autoconf", "MakeMakefiles",
+      foreach my $Field ("Autoconf", "MakeMakefiles", "MakeRequests",
                          "PatchedRoot", "PatchedModules", "PatchedTests")
       {
         $PastImpacts->{$Field} = $Impacts->{$Field};
@@ -435,6 +440,7 @@ sub GetPatchImpacts($)
     {
       $Impacts->{Autoconf} ||= $PastImpacts->{Autoconf};
       $Impacts->{MakeMakefiles} ||= $PastImpacts->{MakeMakefiles};
+      $Impacts->{MakeRequests} ||= $PastImpacts->{MakeRequests};
       $Impacts->{RebuildRoot} ||= $PastImpacts->{PatchedRoot};
       $Impacts->{RebuildModules} ||= $PastImpacts->{PatchedModules};
       map { $Impacts->{BuildModules}->{$_} = 1 } keys %{$PastImpacts->{BuildModules}};

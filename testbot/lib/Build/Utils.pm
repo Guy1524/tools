@@ -114,6 +114,17 @@ sub ApplyPatch($$)
   }
 
   my $Impacts = GetPatchImpacts($PatchFile);
+  if ($Impacts->{MakeRequests})
+  {
+    InfoMsg "\nRunning make_requests\n";
+    system("cd '$DataDir/$Dir' && set -x && ./tools/make_requests");
+    if ($? != 0)
+    {
+      LogMsg "make_requests failed\n";
+      return undef;
+    }
+  }
+
   if ($Impacts->{MakeMakefiles})
   {
     InfoMsg "\nRunning make_makefiles\n";
