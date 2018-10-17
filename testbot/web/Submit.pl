@@ -604,10 +604,16 @@ sub DetermineFileType($$)
     }
     else
     {
-      my $TestInfo = (values %{$Impacts->{Tests}})[0];
-      $FileType = "patch";
-      $ExeBase = $TestInfo->{ExeBase};
-      $TestUnit = (keys %{$TestInfo->{Units}})[0];
+      foreach my $TestInfo (values %{$Impacts->{Tests}})
+      {
+        if ($TestInfo->{UnitCount})
+        {
+          $FileType = "patch";
+          $ExeBase = $TestInfo->{ExeBase};
+          $TestUnit = (keys %{$TestInfo->{Units}})[0];
+          last;
+        }
+      }
     }
   }
   elsif ($FileType eq "dll32" || $FileType eq "dll64" || $FileType eq "zip")
