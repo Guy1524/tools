@@ -130,7 +130,7 @@ sub GetLogLineCategory($)
       $Line =~ /: error: / or
       $Line =~ /^make: [*]{3} No rule to make target / or
       $Line =~ /^Makefile:[0-9]+: recipe for target .* failed$/ or
-      $Line =~ /^(?:Build|Reconfig|Task): (?!ok)/ or
+      $Line =~ /^Task: (?!ok)/ or
       # Typical perl errors
       _IsPerlError($Line))
   {
@@ -152,7 +152,7 @@ sub GetLogLineCategory($)
   }
   if (# Build messages
       $Line =~ /^\+ \S/ or
-      $Line =~ /^(?:Build|Reconfig|Task): ok/)
+      $Line =~ /^Task: ok/)
   {
     return "info";
   }
