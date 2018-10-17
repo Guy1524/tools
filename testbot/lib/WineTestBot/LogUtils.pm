@@ -45,6 +45,27 @@ use WineTestBot::Config; # For $MaxUnitSize
 =pod
 =over 12
 
+=item C<_IsPerlError()>
+
+Returns true if the string looks like a Perl error message.
+
+=back
+=cut
+
+sub _IsPerlError($)
+{
+  my ($Str) = @_;
+
+  return $Str =~ /^Use of uninitialized value / ||
+         $Str =~ /^Undefined subroutine / ||
+         $Str =~ /^Global symbol / ||
+         $Str =~ /^Possible precedence issue /;
+}
+
+
+=pod
+=over 12
+
 =item C<ParseTaskLog()>
 
 Returns ok if the task was successful and an error code otherwise.
@@ -71,11 +92,7 @@ sub ParseTaskLog($)
         $Result = "badpatch";
         last; # Should be the last and most specific message
       }
-      elsif ($Line =~ /^Task: / or
-             # Typical perl errors
-             $Line =~ /^Use of uninitialized value / or
-             $Line =~ /^Undefined subroutine / or
-             $Line =~ /^Global symbol /)
+      elsif ($Line =~ /^Task: / or _IsPerlError($Line))
       {
         $Result = "failed";
       }
@@ -115,9 +132,7 @@ sub GetLogLineCategory($)
       $Line =~ /^Makefile:[0-9]+: recipe for target .* failed$/ or
       $Line =~ /^(?:Build|Reconfig|Task): (?!ok)/ or
       # Typical perl errors
-      $Line =~ /^Use of uninitialized value / or
-      $Line =~ /^Undefined subroutine / or
-      $Line =~ /^Global symbol /)
+      _IsPerlError($Line))
   {
     return "error";
   }
