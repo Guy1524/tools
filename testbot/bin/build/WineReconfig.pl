@@ -37,6 +37,9 @@ sub BEGIN
   $::BuildEnv = 1;
 }
 
+use File::Basename;
+use File::Path;
+
 use Build::Utils;
 use WineTestBot::Config;
 
@@ -94,6 +97,16 @@ sub UpdateWineBuilds($$)
 sub UpdateWinePrefixes($)
 {
   my ($Targets) = @_;
+
+  # Make sure no obsolete wineprefix is left behind in case WineReconfig
+  # is called with a different set of targets
+  foreach my $Dir (glob("'$DataDir/wineprefix-*'"))
+  {
+    if (basename($Dir) =~ /^(wineprefix-[a-zA-Z0-9\@_.-]+)$/) # untaint
+    {
+      rmtree("$DataDir/$1");
+    }
+  }
 
   # Set up brand new WinePrefixes ready for use for testing.
   # This way we do it once instead of doing it for every test, thus saving
