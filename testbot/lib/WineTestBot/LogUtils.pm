@@ -83,7 +83,11 @@ sub ParseTaskLog($)
     foreach my $Line (<$LogFile>)
     {
       chomp $Line;
-      if ($Line eq "Task: ok")
+      if ($Line eq "Task: tests")
+      {
+        ; # Ignore it for now
+      }
+      elsif ($Line eq "Task: ok")
       {
         $Result ||= "ok";
       }
@@ -122,6 +126,12 @@ sub GetLogLineCategory($)
 {
   my ($Line) = @_;
 
+  if (# Build messages
+      $Line =~ /^\+ \S/ or
+      $Line =~ /^Task: (?:ok|tests)/)
+  {
+    return "info";
+  }
   if (# Git errors
       $Line =~ /^CONFLICT / or
       $Line =~ /^error: patch failed:/ or
@@ -130,7 +140,7 @@ sub GetLogLineCategory($)
       $Line =~ /: error: / or
       $Line =~ /^make: [*]{3} No rule to make target / or
       $Line =~ /^Makefile:[0-9]+: recipe for target .* failed$/ or
-      $Line =~ /^Task: (?!ok)/ or
+      $Line =~ /^Task: / or
       # Typical perl errors
       _IsPerlError($Line))
   {
@@ -149,12 +159,6 @@ sub GetLogLineCategory($)
       $Line =~ / opcode of failed request: /)
   {
     return "boterror";
-  }
-  if (# Build messages
-      $Line =~ /^\+ \S/ or
-      $Line =~ /^Task: ok/)
-  {
-    return "info";
   }
 
   return "none";
