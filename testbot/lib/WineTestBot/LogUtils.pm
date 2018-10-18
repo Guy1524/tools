@@ -83,11 +83,11 @@ sub ParseTaskLog($)
     foreach my $Line (<$LogFile>)
     {
       chomp $Line;
-      if ($Line =~ /^Task: ok$/)
+      if ($Line eq "Task: ok")
       {
         $Result ||= "ok";
       }
-      elsif ($Line =~ /^Task: Patch failed to apply$/)
+      elsif ($Line eq "Task: Patch failed to apply")
       {
         $Result = "badpatch";
         last; # Should be the last and most specific message
