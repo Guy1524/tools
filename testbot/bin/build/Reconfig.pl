@@ -42,6 +42,7 @@ sub BEGIN
 
 use Build::Utils;
 use WineTestBot::Config;
+use WineTestBot::Missions;
 
 
 #
@@ -81,9 +82,9 @@ sub BuildNative($)
 
 sub BuildCross($$$)
 {
-  my ($Targets, $NoRm, $Build) = @_;
+  my ($TaskMissions, $NoRm, $Build) = @_;
 
-  return 1 if (!$Targets->{$Build});
+  return 1 if (!$TaskMissions->{Builds}->{$Build});
   # FIXME Temporary code to ensure compatibility during the transition
   my $OldDir = $Build eq "exe32" ? "build-mingw32" : "build-mingw64";
   if (-d "$DataDir/$OldDir" and !-d "$DataDir/wine-$Build")
@@ -113,11 +114,11 @@ sub BuildCross($$$)
 
 sub UpdateWineBuilds($$)
 {
-  my ($Targets, $NoRm) = @_;
+  my ($TaskMissions, $NoRm) = @_;
 
   return BuildNative($NoRm) &&
-         BuildCross($Targets, $NoRm, "exe32") &&
-         BuildCross($Targets, $NoRm, "exe64");
+         BuildCross($TaskMissions, $NoRm, "exe32") &&
+         BuildCross($TaskMissions, $NoRm, "exe64");
 }
 
 
@@ -128,10 +129,7 @@ sub UpdateWineBuilds($$)
 $ENV{PATH} = "/usr/lib/ccache:/usr/bin:/bin";
 delete $ENV{ENV};
 
-my %AllTargets;
-map { $AllTargets{$_} = 1 } qw(exe32 exe64);
-
-my ($Usage, $OptUpdate, $OptBuild, $OptNoRm, $TargetList);
+my ($Usage, $OptUpdate, $OptBuild, $OptNoRm, $MissionStatement);
 while (@ARGV)
 {
   my $Arg = shift @ARGV;
@@ -158,9 +156,9 @@ while (@ARGV)
     $Usage = 2;
     last;
   }
-  elsif (!defined $TargetList)
+  elsif (!defined $MissionStatement)
   {
-    $TargetList = $Arg;
+    $MissionStatement = $Arg;
   }
   else
   {
@@ -171,23 +169,33 @@ while (@ARGV)
 }
 
 # Check and untaint parameters
-my $Targets;
+my $TaskMissions;
 if (!defined $Usage)
 {
   if (!$OptUpdate and !$OptBuild)
   {
     $OptUpdate = $OptBuild = 1;
   }
-  $TargetList = join(",", keys %AllTargets) if (!defined $TargetList);
-  foreach my $Target (split /,/, $TargetList)
+  $MissionStatement ||= "exe32:exe64";
+  my ($ErrMessage, $Missions) = ParseMissionStatement($MissionStatement);
+  if (defined $ErrMessage)
   {
-    if (!$AllTargets{$Target})
-    {
-      Error "invalid target name $Target\n";
-      $Usage = 2;
-      last;
-    }
-    $Targets->{$Target} = 1;
+    Error "$ErrMessage\n";
+    $Usage = 2;
+  }
+  elsif (!@$Missions)
+  {
+    Error "Empty mission statement\n";
+    $Usage = 2;
+  }
+  elsif (@$Missions > 1)
+  {
+    Error "Cannot specify missions for multiple tasks\n";
+    $Usage = 2;
+  }
+  else
+  {
+    $TaskMissions = $Missions->[0];
   }
 }
 if (defined $Usage)
@@ -198,17 +206,17 @@ if (defined $Usage)
     Error "try '$Name0 --help' for more information\n";
     exit $Usage;
   }
-  print "Usage: $Name0 [--update] [--build [--no-rm]] [--help] [TARGETS]\n";
+  print "Usage: $Name0 [--update] [--build [--no-rm]] [--help] [MISSIONS]\n";
   print "\n";
   print "Updates Wine to the latest version and recompiles it so the host is ready to build executables for the Windows tests.\n";
   print "\n";
   print "Where:\n";
   print "  --update     Update Wine's source code.\n";
   print "  --build      Update the Wine builds.\n";
-  print "  TARGETS      Is a comma-separated list of reconfiguration targets. By default\n";
-  print "               every target is run.\n";
-  print "               - exe32: Rebuild the 32 bit Windows test executables.\n";
-  print "               - exe64: Rebuild the 64 bit Windows test executables.\n";
+  print "  MISSIONS     Is a colon-separated list of missions. By default the following\n";
+  print "               missions are run.\n";
+  print "               - exe32: Build the 32 bit Windows test executables.\n";
+  print "               - exe64: Build the 64 bit Windows test executables.\n";
   print "  --no-rm      Don't rebuild from scratch.\n";
   print "  --help       Shows this usage message.\n";
   exit 0;
@@ -233,7 +241,7 @@ if (! -d "$DataDir/staging" and ! mkdir "$DataDir/staging")
 exit(1) if (!BuildNativeTestAgentd() or !BuildWindowsTestAgentd());
 exit(1) if (!BuildTestLauncher());
 exit(1) if ($OptUpdate and !GitPull("wine"));
-exit(1) if ($OptBuild and !UpdateWineBuilds($Targets, $OptNoRm));
+exit(1) if ($OptBuild and !UpdateWineBuilds($TaskMissions, $OptNoRm));
 
 LogMsg "ok\n";
 exit;
