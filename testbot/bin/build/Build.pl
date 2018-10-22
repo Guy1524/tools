@@ -46,6 +46,7 @@ sub BEGIN
 
 use Build::Utils;
 use WineTestBot::Config;
+use WineTestBot::Missions;
 use WineTestBot::Utils;
 
 
@@ -71,9 +72,9 @@ sub BuildNative()
 
 sub BuildTestExecutables($$$)
 {
-  my ($Targets, $Impacts, $Build) = @_;
+  my ($TaskMissions, $Impacts, $Build) = @_;
 
-  return 1 if (!$Targets->{$Build});
+  return 1 if (!$TaskMissions->{Builds}->{$Build});
 
   my (@BuildDirs, @TestExes);
   foreach my $TestInfo (values %{$Impacts->{Tests}})
@@ -116,10 +117,7 @@ sub BuildTestExecutables($$$)
 $ENV{PATH} = "/usr/lib/ccache:/usr/bin:/bin";
 delete $ENV{ENV};
 
-my %AllTargets;
-map { $AllTargets{$_} = 1 } qw(exe32 exe64);
-
-my ($Usage, $PatchFile, $TargetList);
+my ($Usage, $PatchFile, $MissionStatement);
 while (@ARGV)
 {
   my $Arg = shift @ARGV;
@@ -152,9 +150,9 @@ while (@ARGV)
       last;
     }
   }
-  elsif (!defined $TargetList)
+  elsif (!defined $MissionStatement)
   {
-    $TargetList = $Arg;
+    $MissionStatement = $Arg;
   }
   else
   {
@@ -165,7 +163,7 @@ while (@ARGV)
 }
 
 # Check and untaint parameters
-my $Targets;
+my $TaskMissions;
 if (!defined $Usage)
 {
   if (!defined $PatchFile)
@@ -174,17 +172,26 @@ if (!defined $Usage)
     $Usage = 2;
   }
 
-  $TargetList = join(",", keys %AllTargets) if (!defined $TargetList);
-  foreach my $Target (split /[,:]/, $TargetList)
+  $MissionStatement = "exe32:exe64" if (!defined $MissionStatement);
+  my ($ErrMessage, $Missions) = ParseMissionStatement($MissionStatement);
+  if (defined $ErrMessage)
   {
-    $Target = "exe$1" if ($Target =~ /^(32|64)$/);
-    if (!$AllTargets{$Target})
-    {
-      Error "invalid target name $Target\n";
-      $Usage = 2;
-      last;
-    }
-    $Targets->{$Target} = 1;
+    Error "$ErrMessage\n";
+    $Usage = 2;
+  }
+  elsif (!@$Missions)
+  {
+    Error "Empty mission statement\n";
+    $Usage = 2;
+  }
+  elsif (@$Missions > 1)
+  {
+    Error "Cannot specify missions for multiple tasks\n";
+    $Usage = 2;
+  }
+  else
+  {
+    $TaskMissions = $Missions->[0];
   }
 }
 if (defined $Usage)
@@ -195,16 +202,16 @@ if (defined $Usage)
     Error "try '$Name0 --help' for more information\n";
     exit $Usage;
   }
-  print "Usage: $Name0 [--help] PATCHFILE TARGETS\n";
+  print "Usage: $Name0 [--help] PATCHFILE [MISSIONS]\n";
   print "\n";
   print "Applies the specified patch and rebuilds the Wine test executables.\n";
   print "\n";
   print "Where:\n";
   print "  PATCHFILE Is the staging file containing the patch to build.\n";
-  print "  TARGETS   Is a comma-separated list of build targets. By default every\n";
-  print "            target is run.\n";
-  print "            - exe32: Rebuild the 32 bit Windows test executables.\n";
-  print "            - exe64: Rebuild the 64 bit Windows test executables.\n";
+  print "  MISSIONS  Is a colon-separated list of missions. By default all supported\n";
+  print "            missions are run.\n";
+  print "            - exe32: Build the 32 bit Windows test executables.\n";
+  print "            - exe64: Build the 64 bit Windows test executables.\n";
   print "  --help    Shows this usage message.\n";
   exit 0;
 }
@@ -224,8 +231,8 @@ my $Impacts = ApplyPatch("wine", $PatchFile);
 
 if (!$Impacts or
     ($Impacts->{PatchedRoot} and !BuildNative()) or
-    !BuildTestExecutables($Targets, $Impacts, "exe32") or
-    !BuildTestExecutables($Targets, $Impacts, "exe64"))
+    !BuildTestExecutables($TaskMissions, $Impacts, "exe32") or
+    !BuildTestExecutables($TaskMissions, $Impacts, "exe64"))
 {
   exit(1);
 }

@@ -339,13 +339,13 @@ if ($Step->FileType ne "patch")
 # Figure out what to build
 #
 
-my (%Builds, %TestExes);
+my (%Missions, %TestExes);
 foreach my $TestStep (@{$Job->Steps->GetItems()})
 {
   if (($TestStep->PreviousNo || 0) == $Step->No and
       $TestStep->FileType =~ /^exe/)
   {
-    $Builds{$TestStep->FileType} = 1;
+    $Missions{$TestStep->FileType} = 1;
     $TestExes{$TestStep->FileName} = $TestStep->FileType;
   }
 }
@@ -364,7 +364,7 @@ if (!$TA->SendFile($FileName, "staging/patch.diff", 0))
 }
 my $Script = "#!/bin/sh\n".
              "( set -x\n".
-             "  ../bin/build/Build.pl patch.diff ". join(":", sort keys %Builds) ."\n".
+             "  ../bin/build/Build.pl patch.diff ". join(":", sort keys %Missions) ."\n".
              ") >Build.log 2>&1\n";
 Debug(Elapsed($Start), " Sending the script: [$Script]\n");
 if (!$TA->SendFileFromString($Script, "task", $TestAgent::SENDFILE_EXE))
