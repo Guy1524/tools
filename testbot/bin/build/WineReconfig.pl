@@ -42,6 +42,7 @@ use File::Path;
 
 use Build::Utils;
 use WineTestBot::Config;
+use WineTestBot::Missions;
 
 
 #
@@ -50,9 +51,9 @@ use WineTestBot::Config;
 
 sub BuildWine($$$$)
 {
-  my ($Targets, $NoRm, $Build, $Extras) = @_;
+  my ($TaskMissions, $NoRm, $Build, $Extras) = @_;
 
-  return 1 if (!$Targets->{$Build});
+  return 1 if (!$TaskMissions->{Builds}->{$Build});
   # FIXME Temporary code to ensure compatibility during the transition
   my $OldDir = "build-$Build";
   if (-d "$DataDir/$OldDir" and !-d "$DataDir/wine-$Build")
@@ -82,11 +83,11 @@ sub BuildWine($$$$)
 
 sub UpdateWineBuilds($$)
 {
-  my ($Targets, $NoRm) = @_;
+  my ($TaskMissions, $NoRm) = @_;
 
-  return BuildWine($Targets, $NoRm, "win32", "") &&
-         BuildWine($Targets, $NoRm, "wow64", "--enable-win64") &&
-         BuildWine($Targets, $NoRm, "wow32", "--with-wine64='$DataDir/wine-wow64'");
+  return BuildWine($TaskMissions, $NoRm, "win32", "") &&
+         BuildWine($TaskMissions, $NoRm, "wow64", "--enable-win64") &&
+         BuildWine($TaskMissions, $NoRm, "wow32", "--with-wine64='$DataDir/wine-wow64'");
 }
 
 
@@ -96,7 +97,7 @@ sub UpdateWineBuilds($$)
 
 sub UpdateWinePrefixes($)
 {
-  my ($Targets) = @_;
+  my ($TaskMissions) = @_;
 
   # Make sure no obsolete wineprefix is left behind in case WineReconfig
   # is called with a different set of targets
@@ -113,7 +114,7 @@ sub UpdateWinePrefixes($)
   # time. Note that this requires using a different wineprefix for each build.
   foreach my $Build ("win32", "wow64", "wow32")
   {
-    next if (!$Targets->{$Build});
+    next if (!$TaskMissions->{Builds}->{$Build});
 
     # Wait for the wineprefix creation to complete so it is really done
     # before the snapshot gets updated.
@@ -136,10 +137,7 @@ sub UpdateWinePrefixes($)
 $ENV{PATH} = "/usr/lib/ccache:/usr/bin:/bin";
 delete $ENV{ENV};
 
-my %AllTargets;
-map { $AllTargets{$_} = 1 } qw(win32 wow32 wow64);
-
-my ($Usage, $OptUpdate, $OptBuild, $OptNoRm, $OptAddOns, $OptWinePrefix, $TargetList);
+my ($Usage, $OptUpdate, $OptBuild, $OptNoRm, $OptAddOns, $OptWinePrefix, $MissionStatement);
 while (@ARGV)
 {
   my $Arg = shift @ARGV;
@@ -174,9 +172,9 @@ while (@ARGV)
     $Usage = 2;
     last;
   }
-  elsif (!defined $TargetList)
+  elsif (!defined $MissionStatement)
   {
-    $TargetList = $Arg;
+    $MissionStatement = $Arg;
   }
   else
   {
@@ -187,23 +185,33 @@ while (@ARGV)
 }
 
 # Check and untaint parameters
-my $Targets;
+my $TaskMissions;
 if (!defined $Usage)
 {
   if (!$OptUpdate and !$OptBuild and !$OptAddOns and !$OptWinePrefix)
   {
     $OptUpdate = $OptBuild = $OptAddOns = $OptWinePrefix = 1;
   }
-  $TargetList = join(",", keys %AllTargets) if (!defined $TargetList);
-  foreach my $Target (split /,/, $TargetList)
+  $MissionStatement ||= "win32:wow32:wow64";
+  my ($ErrMessage, $Missions) = ParseMissionStatement($MissionStatement);
+  if (defined $ErrMessage)
   {
-    if (!$AllTargets{$Target})
-    {
-      Error "invalid target name $Target\n";
-      $Usage = 2;
-      last;
-    }
-    $Targets->{$Target} = 1;
+    Error "$ErrMessage\n";
+    $Usage = 2;
+  }
+  elsif (!@$Missions)
+  {
+    Error "Empty mission statement\n";
+    $Usage = 2;
+  }
+  elsif (@$Missions > 1)
+  {
+    Error "Cannot specify missions for multiple tasks\n";
+    $Usage = 2;
+  }
+  else
+  {
+    $TaskMissions = $Missions->[0];
   }
 }
 if (defined $Usage)
@@ -215,7 +223,7 @@ if (defined $Usage)
     exit $Usage;
   }
   print "Usage: $Name0 [--update] [--build [--no-rm]] [--addons] [--wineprefix]\n";
-  print "                       [--help] [TARGETS]\n";
+  print "                       [--help] [MISSIONS]\n";
   print "\n";
   print "Performs all the tasks needed for the host to be ready to test new patches: update the Wine source and addons, and rebuild the Wine binaries.\n";
   print "\n";
@@ -225,11 +233,11 @@ if (defined $Usage)
   print "  --addons     Update the Gecko and Mono Wine addons.\n";
   print "  --wineprefix Update the wineprefixes.\n";
   print "If none of the above actions is specified they are all performed.\n";
-  print "  TARGETS      Is a comma-separated list of targets to process. By default all\n";
-  print "               targets are processed.\n";
-  print "               - win32: Apply the above to the regular 32 bit Wine.\n";
-  print "               - wow32: Apply the above to the 32 bit WoW Wine.\n";
-  print "               - wow64: Apply the above to the 64 bit WoW Wine.\n";
+  print "  MISSIONS     Is a colon-separated list of missions. By default the\n";
+  print "               following missions are run.\n";
+  print "               - win32: Build the regular 32 bit Wine.\n";
+  print "               - wow32: Build the 32 bit WoW Wine.\n";
+  print "               - wow64: Build the 64 bit WoW Wine.\n";
   print "  --no-rm      Don't rebuild from scratch.\n";
   print "  --help       Shows this usage message.\n";
   exit 0;
@@ -255,8 +263,8 @@ if ($DataDir =~ /'/)
 exit(1) if (!BuildNativeTestAgentd());
 exit(1) if ($OptUpdate and !GitPull("wine"));
 exit(1) if ($OptAddOns and !UpdateAddOns());
-exit(1) if ($OptBuild and !UpdateWineBuilds($Targets, $OptNoRm));
-exit(1) if ($OptWinePrefix and !UpdateWinePrefixes($Targets));
+exit(1) if ($OptBuild and !UpdateWineBuilds($TaskMissions, $OptNoRm));
+exit(1) if ($OptWinePrefix and !UpdateWinePrefixes($TaskMissions));
 
 LogMsg "ok\n";
 exit;
