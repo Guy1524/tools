@@ -30,6 +30,7 @@ use WineTestBot::WineTestBotObjects;
 our @ISA = qw(WineTestBot::WineTestBotItem);
 
 use WineTestBot::Config;
+use WineTestBot::Missions;
 
 
 sub GetStepDir($)
@@ -68,34 +69,50 @@ sub GetTitle($)
 {
   my ($self) = @_;
 
-  my $Title = "";
-  if ($self->Type eq "single")
+  my @TitleParts;
+  if ($self->Type eq "build")
   {
-    if ($self->FileType eq "exe32")
-    {
-      $Title .= "32 bit ";
-    }
-    elsif ($self->FileType eq "exe64")
-    {
-      $Title .= "64 bit ";
-    }
-    $Title .= $self->CmdLineArg || "";
+    push @TitleParts, "build";
   }
-  elsif ($self->Type eq "build")
+  elsif ($self->FileType eq "exe32")
   {
-    $Title = "build";
+    push @TitleParts, "32 bit";
   }
-  $Title =~ s/\s*$//;
-
-  if ($Title)
+  elsif ($self->FileType eq "exe64")
   {
-    $Title = $self->VM->Name . " (" . $Title . ")";
+    push @TitleParts, "64 bit";
   }
   else
   {
-    $Title = $self->VM->Name;
+    my ($ErrMessage, $Missions) = ParseMissionStatement($self->Missions);
+    if (!defined $ErrMessage and @$Missions == 1)
+    {
+      my $Builds = $Missions->[0]->{Builds};
+      if ($Builds->{build})
+      {
+        push @TitleParts, "build";
+      }
+      elsif ($Builds->{wow64} and ($Builds->{win32} or $Builds->{wow32}))
+      {
+        push @TitleParts, "32 & 64 bit";
+      }
+      elsif ($Builds->{win32} or $Builds->{wow32})
+      {
+        push @TitleParts, "32 bit";
+      }
+      elsif ($Builds->{wow64})
+      {
+        push @TitleParts, "64 bit";
+      }
+    }
+  }
+  if ($self->Type ne "suite" and $self->CmdLineArg)
+  {
+    push @TitleParts, $self->CmdLineArg;
   }
 
+  my $Title = $self->VM->Name;
+  $Title .= " (@TitleParts)" if (@TitleParts);
   return $Title;
 }
 
@@ -148,6 +165,7 @@ sub _initialize($$)
       $StepTask->Timeout($Task->Timeout);
       $StepTask->FileName($Step->FileName);
       $StepTask->FileType($Step->FileType);
+      $StepTask->Missions($Task->Missions);
       $StepTask->CmdLineArg($Task->CmdLineArg);
       $StepTask->Started($Task->Started);
       $StepTask->Ended($Task->Ended);
@@ -179,6 +197,7 @@ my @PropertyDescriptors = (
   CreateBasicPropertyDescriptor("Timeout", "Timeout", !1, 1, "N", 4),
   CreateBasicPropertyDescriptor("FileName", "File name", !1, !1, "A", 100),
   CreateBasicPropertyDescriptor("FileType", "File Type", !1, 1, "A", 32),
+  CreateBasicPropertyDescriptor("Missions", "Missions", !1, 1, "A", 256),
   CreateBasicPropertyDescriptor("CmdLineArg", "Command line args", !1, !1, "A", 256),
   CreateBasicPropertyDescriptor("Started", "Execution started", !1, !1, "DT", 19),
   CreateBasicPropertyDescriptor("Ended", "Execution ended", !1, !1, "DT", 19),

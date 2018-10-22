@@ -298,6 +298,7 @@ my @PropertyDescriptors = (
   CreateEnumPropertyDescriptor("Status", "Status",  !1,  1, ['queued', 'running', 'completed', 'badpatch', 'badbuild', 'boterror', 'canceled', 'skipped']),
   CreateItemrefPropertyDescriptor("VM", "VM", !1,  1, \&CreateVMs, ["VMName"]),
   CreateBasicPropertyDescriptor("Timeout", "Timeout", !1, 1, "N", 4),
+  CreateBasicPropertyDescriptor("Missions", "Missions", !1, 1, "A", 256),
   CreateBasicPropertyDescriptor("CmdLineArg", "Command line args", !1, !1, "A", 256),
   CreateBasicPropertyDescriptor("Started", "Execution started", !1, !1, "DT", 19),
   CreateBasicPropertyDescriptor("Ended", "Execution ended", !1, !1, "DT", 19),

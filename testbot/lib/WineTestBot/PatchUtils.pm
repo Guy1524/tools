@@ -457,10 +457,10 @@ sub GetPatchImpacts($)
 
 sub GetBuildTimeout($$)
 {
-  my ($Impacts, $Builds) = @_;
+  my ($Impacts, $TaskMissions) = @_;
 
   my ($ExeCount, $WineCount);
-  map {$_ =~ /^exe/ ? $ExeCount++ : $WineCount++ } keys %$Builds;
+  map {$_ =~ /^exe/ ? $ExeCount++ : $WineCount++ } keys %{$TaskMissions->{Builds}};
 
   # Set $ModuleCount to 0 if a full rebuild is needed
   my $ModuleCount = (!$Impacts or $Impacts->{RebuildRoot}) ? 0 :
@@ -486,7 +486,7 @@ sub GetBuildTimeout($$)
 
 sub GetTestTimeout($$)
 {
-  my ($Impacts, $Builds) = @_;
+  my ($Impacts, $TaskMissions) = @_;
 
   my $Timeout = $SuiteTimeout;
   if ($Impacts)
@@ -496,7 +496,7 @@ sub GetTestTimeout($$)
                        max(0, $UnitCount - 2) * $SingleAvgTime;
     $Timeout = min($SuiteTimeout, $TestsTimeout);
   }
-  return scalar(keys %$Builds) * $Timeout;
+  return @{$TaskMissions->{Missions}} * $Timeout;
 }
 
 1;

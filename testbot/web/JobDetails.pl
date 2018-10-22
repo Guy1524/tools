@@ -398,6 +398,7 @@ EOF
     print "<details><summary>",
           $self->CGI->escapeHTML($VM->Description || $VM->Name), "</summary>",
           $self->CGI->escapeHTML($VM->Details || "No details!"),
+          ($StepTask->Missions ? "<br>Missions: ". $StepTask->Missions : ""),
           "</details>\n";
 
     my $MoreInfo = $self->{More}->{$Key};

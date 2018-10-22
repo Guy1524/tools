@@ -45,6 +45,7 @@ use WineTestBot::Engine::Notify;
 use WineTestBot::Jobs;
 use WineTestBot::Log;
 use WineTestBot::LogUtils;
+use WineTestBot::Missions;
 use WineTestBot::Utils;
 use WineTestBot::VMs;
 
@@ -391,6 +392,13 @@ if ($Step->FileType ne "exe32" and $Step->FileType ne "exe64")
   FatalError("Unexpected file type '". $Step->FileType ."' found for ". $Step->Type ." step\n");
 }
 
+my ($ErrMessage, $Missions) = ParseMissionStatement($Task->Missions);
+FatalError "$ErrMessage\n" if (defined $ErrMessage);
+FatalError "Empty mission statement\n" if (!@$Missions);
+FatalError "Cannot specify missions for multiple tasks\n" if (@$Missions > 1);
+FatalError "Cannot specify multiple missions\n" if (@{$Missions->[0]->{Missions}} > 1);
+my $Mission = $Missions->[0]->{Missions}->[0];
+
 
 #
 # Setup the VM
@@ -477,8 +485,8 @@ elsif ($Step->Type eq "suite")
   $Info =~ s/"/\\"/g;
   $Info =~ s/%/%%/g;
   $Info =~ s/%/%%/g;
-  $Script .= "-q -o $RptFileName -t $Tag -m \"$EMail\" -i \"$Info\"\r\n".
-             "$FileName -q -s $RptFileName\r\n";
+  $Script .= "-q -o $RptFileName -t $Tag -m \"$EMail\" -i \"$Info\"\r\n";
+  $Script .= "$FileName -q -s $RptFileName\r\n" if (!$Mission->{nosubmit});
 }
 Debug(Elapsed($Start), " Sending the script: [$Script]\n");
 if (!$TA->SendFileFromString($Script, "script.bat", $TestAgent::SENDFILE_EXE))

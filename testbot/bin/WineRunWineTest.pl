@@ -41,13 +41,14 @@ $Name0 =~ s+^.*/++;
 
 
 use WineTestBot::Config;
+use WineTestBot::Engine::Notify;
 use WineTestBot::Jobs;
+use WineTestBot::Missions;
 use WineTestBot::PatchUtils;
-use WineTestBot::VMs;
 use WineTestBot::Log;
 use WineTestBot::LogUtils;
 use WineTestBot::Utils;
-use WineTestBot::Engine::Notify;
+use WineTestBot::VMs;
 
 
 #
@@ -220,6 +221,8 @@ sub LogTaskError($)
   }
 }
 
+my $TaskMissions;
+
 sub WrapUpAndExit($;$$$)
 {
   my ($Status, $TestFailures, $Retry, $TimedOut) = @_;
@@ -287,9 +290,7 @@ sub WrapUpAndExit($;$$$)
 
   if ($Step->Type eq 'suite' and $Status eq 'completed' and !$TimedOut)
   {
-    my $BuildList = $Task->CmdLineArg;
-    $BuildList =~ s/ .*$//;
-    foreach my $Build (split /,/, $BuildList)
+    foreach my $Build (keys %{$TaskMissions->{Builds}})
     {
       # Keep the old report if the new one is missing
       my $RptFileName = "$Build.report";
@@ -392,6 +393,12 @@ if (($Step->Type eq "suite" and $Step->FileType ne "none") or
   FatalError("Unexpected file type '". $Step->FileType ."' found for ". $Step->Type ." step\n");
 }
 
+my ($ErrMessage, $Missions) = ParseMissionStatement($Task->Missions);
+FatalError "$ErrMessage\n" if (defined $ErrMessage);
+FatalError "Empty mission statement\n" if (!@$Missions);
+FatalError "Cannot specify missions for multiple tasks\n" if (@$Missions > 1);
+$TaskMissions = $Missions->[0];
+
 
 #
 # Setup the VM
@@ -431,7 +438,7 @@ $Script .= "  ../bin/build/WineTest.pl ";
 if ($Step->Type eq "suite")
 {
   my $BaseTag = BuildTag($VM->Name);
-  $Script .= "--winetest ". $Task->CmdLineArg ." $BaseTag ";
+  $Script .= "--winetest ". $Task->Missions ." $BaseTag ";
   if (defined $WebHostName)
   {
     my $StepTask = 100 * $StepNo + $TaskNo;
@@ -447,7 +454,7 @@ if ($Step->Type eq "suite")
 }
 else
 {
-  $Script .= "--testpatch ". $Task->CmdLineArg ." patch.diff";
+  $Script .= "--testpatch ". $Task->Missions ." patch.diff";
 }
 $Script .= "\n) >Task.log 2>&1\n";
 Debug(Elapsed($Start), " Sending the script: [$Script]\n");
@@ -475,7 +482,7 @@ if (!$Pid)
 #
 
 my $NewStatus = 'completed';
-my ($TaskFailures, $TaskTimedOut, $ErrMessage, $TAError, $PossibleCrash);
+my ($TaskFailures, $TaskTimedOut, $TAError, $PossibleCrash);
 Debug(Elapsed($Start), " Waiting for the script (", $Task->Timeout, "s timeout)\n");
 if (!defined $TA->Wait($Pid, $Task->Timeout, 60))
 {
@@ -542,9 +549,7 @@ elsif (!defined $TAError)
 
 if ($Step->Type ne "build")
 {
-  my $BuildList = $Task->CmdLineArg;
-  $BuildList =~ s/ .*$//;
-  foreach my $Build (split /,/, $BuildList)
+  foreach my $Build (keys %{$TaskMissions->{Builds}})
   {
     my $RptFileName = "$Build.report";
     Debug(Elapsed($Start), " Retrieving '$RptFileName'\n");
@@ -602,9 +607,7 @@ if ($NewStatus eq 'completed')
 {
   my $LatestDir = "$DataDir/latest";
   my $StepDir = $Step->GetDir();
-  my $BuildList = $Task->CmdLineArg;
-  $BuildList =~ s/ .*$//;
-  foreach my $Build (split /,/, $BuildList)
+  foreach my $Build (keys %{$TaskMissions->{Builds}})
   {
     my $RptFileName = "$Build.report";
     my $RefReport = $Task->VM->Name ."_$RptFileName";

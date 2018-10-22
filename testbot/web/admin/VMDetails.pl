@@ -67,6 +67,22 @@ sub Save($)
   return ! defined($self->{ErrMessage});
 }
 
+sub GenerateFooter($)
+{
+  my ($self) = @_;
+  print "<p></p><div class='CollectionBlock'><table>\n";
+  print "<thead><tr><th class='Record'>Legend</th></tr></thead>\n";
+  print "<tbody><tr><td class='Record'>\n";
+
+  print "<p>The Missions syntax is <i>mission1:mission2:...|mission3|...</i> where <i>mission1</i> and <i>mission2</i> will be run in the same task, and <i>mission3</i> in a separate task.<br>\n";
+  print "Each mission is composed of a build and options separated by commas: <i>build,option1=value,option2,...</i>. The value can be omitted for boolean options and defaults to true.<br>\n";
+  print "The supported builds are <i>build</i> for build VMs; <i>exe32</i> and <i>exe64</i> for Windows VMs;<i> win32</i>, <i>wow32</i> and <i>wow64</i> for Wine VMs.</p>\n";
+  print "<p>On Wine VMs:<br>\n";
+  print "If set, the <i>nosubmit</i> option specifies that the WineTest results should not be published online.</p>\n";
+  print "</td></tr></tbody>\n";
+  print "</table></div>\n";
+  $self->SUPER::GenerateFooter();
+}
 
 package main;
 

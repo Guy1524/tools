@@ -40,12 +40,13 @@ use Encode qw/decode/;
 use File::Basename;
 
 use WineTestBot::Config;
+use WineTestBot::Engine::Notify;
 use WineTestBot::Jobs;
+use WineTestBot::Missions;
 use WineTestBot::PatchUtils;
 use WineTestBot::Users;
 use WineTestBot::Utils;
 use WineTestBot::VMs;
-use WineTestBot::Engine::Notify;
 
 
 sub InitializeNew($$)
@@ -175,23 +176,8 @@ sub Submit($$$)
   $BuildVMs->AddFilter("Role", ["base"]);
   if ($Impacts->{TestUnitCount} and !$BuildVMs->IsEmpty())
   {
-    # Create the Build Step
-    my $BuildStep = $NewJob->Steps->Add();
-    $BuildStep->FileName("patch.diff");
-    $BuildStep->FileType("patch");
-    $BuildStep->Type("build");
-    $BuildStep->DebugLevel(0);
-
-    # Save the build step so the others can reference it.
-    my ($ErrKey, $ErrProperty, $ErrMessage) = $Jobs->Save();
-    if (defined($ErrMessage))
-    {
-      $self->Disposition("Failed to submit build step");
-      return $ErrMessage;
-    }
-
     # Create steps for the Windows tests
-    my $Builds;
+    my ($BuildStep, $BuildMissions);
     foreach my $Module (sort keys %{$Impacts->{Tests}})
     {
       my $TestInfo = $Impacts->{Tests}->{$Module};
@@ -202,26 +188,54 @@ sub Submit($$$)
           my $WinVMs = CreateVMs();
           $WinVMs->AddFilter("Type", $Bits eq "32" ? ["win32", "win64"] : ["win64"]);
           $WinVMs->AddFilter("Role", ["base"]);
-          if (!$WinVMs->IsEmpty())
-          {
-            # Create one Step per (module, unit, bitness) combination
-            my $NewStep = $NewJob->Steps->Add();
-            $NewStep->PreviousNo($BuildStep->No);
-            my $FileName = $TestInfo->{ExeBase};
-            $FileName .= "64" if ($Bits eq "64");
-            $NewStep->FileName("$FileName.exe");
-            $NewStep->FileType("exe$Bits");
-            $Builds->{"exe$Bits"} = 1;
+          my $SortedKeys = $WinVMs->SortKeysBySortOrder($WinVMs->GetKeys());
 
-            # And a task for each VM
-            my $Tasks = $NewStep->Tasks;
-            my $SortedKeys = $WinVMs->SortKeysBySortOrder($WinVMs->GetKeys());
-            foreach my $VMKey (@$SortedKeys)
+          my $Tasks;
+          foreach my $VMKey (@$SortedKeys)
+          {
+            my $VM = $WinVMs->GetItem($VMKey);
+            my ($ErrMessage, $Missions) = ParseMissionStatement($VM->Missions);
+            next if (defined $ErrMessage);
+
+            foreach my $TaskMissions (@$Missions)
             {
-              my $VM = $WinVMs->GetItem($VMKey);
+              next if (!$TaskMissions->{Builds}->{"exe$Bits"});
+
+              if (!$BuildStep)
+              {
+                # Create the Build Step
+                $BuildStep = $NewJob->Steps->Add();
+                $BuildStep->FileName("patch.diff");
+                $BuildStep->FileType("patch");
+                $BuildStep->Type("build");
+                $BuildStep->DebugLevel(0);
+
+                # Save the build step so the others can reference it.
+                my ($ErrKey, $ErrProperty, $ErrMessage) = $Jobs->Save();
+                if (defined($ErrMessage))
+                {
+                  $self->Disposition("Failed to submit build step");
+                  return $ErrMessage;
+                }
+              }
+
+              if (!$Tasks)
+              {
+                # Create one Step per (module, unit, bitness) combination
+                my $NewStep = $NewJob->Steps->Add();
+                $NewStep->PreviousNo($BuildStep->No);
+                my $FileName = $TestInfo->{ExeBase};
+                $FileName .= "64" if ($Bits eq "64");
+                $NewStep->FileName("$FileName.exe");
+                $NewStep->FileType("exe$Bits");
+                $BuildMissions->{Builds}->{"exe$Bits"} = 1;
+                $Tasks = $NewStep->Tasks;
+              }
+
               my $Task = $Tasks->Add();
               $Task->VM($VM);
               $Task->Timeout($SingleTimeout);
+              $Task->Missions($TaskMissions->{Statement});
               $Task->CmdLineArg($Unit);
             }
           }
@@ -229,38 +243,48 @@ sub Submit($$$)
       }
     }
 
-    # Add the build task
-    my $BuildVM = ${$BuildVMs->GetItems()}[0];
-    my $BuildTask = $BuildStep->Tasks->Add();
-    $BuildTask->VM($BuildVM);
-    $BuildTask->Timeout(GetBuildTimeout($Impacts, $Builds));
+    if ($BuildStep)
+    {
+      # Add the build task
+      my $BuildVM = ${$BuildVMs->GetItems()}[0];
+      my $BuildTask = $BuildStep->Tasks->Add();
+      $BuildTask->VM($BuildVM);
+      $BuildMissions->{Statement} = join(":", keys %{$BuildMissions->{Builds}});
+      $BuildTask->Timeout(GetBuildTimeout($Impacts, $BuildMissions));
+      $BuildTask->Missions($BuildMissions->{Statement});
+    }
   }
 
   my $WineVMs = CreateVMs();
   $WineVMs->AddFilter("Type", ["wine"]);
   $WineVMs->AddFilter("Role", ["base"]);
-  if (!$WineVMs->IsEmpty())
-  {
-    # Add a Wine step to the job
-    my $NewStep = $NewJob->Steps->Add();
-    $NewStep->FileName("patch.diff");
-    $NewStep->FileType("patch");
-    $NewStep->Type("single");
-    $NewStep->DebugLevel(0);
+  my $SortedKeys = $WineVMs->SortKeysBySortOrder($WineVMs->GetKeys());
 
-    # And a task for each VM
-    my $Tasks = $NewStep->Tasks;
-    my $SortedKeys = $WineVMs->SortKeysBySortOrder($WineVMs->GetKeys());
-    foreach my $VMKey (@$SortedKeys)
+  my $Tasks;
+  foreach my $VMKey (@$SortedKeys)
+  {
+    my $VM = $WineVMs->GetItem($VMKey);
+    my ($ErrMessage, $Missions) = ParseMissionStatement($VM->Missions);
+    next if (defined $ErrMessage);
+
+    foreach my $TaskMissions (@$Missions)
     {
-      my $VM = $WineVMs->GetItem($VMKey);
+      if (!$Tasks)
+      {
+        # Add a Wine step to the job
+        my $TestStep = $NewJob->Steps->Add();
+        $TestStep->FileName("patch.diff");
+        $TestStep->FileType("patch");
+        $TestStep->Type("single");
+        $TestStep->DebugLevel(0);
+        $Tasks = $TestStep->Tasks;
+      }
+
       my $Task = $Tasks->Add();
       $Task->VM($VM);
-      # Only verify that the win32 version compiles
-      my $Builds = { "win32" => 1 };
-      $Task->Timeout(GetBuildTimeout($Impacts, $Builds) +
-                     GetTestTimeout($Impacts, $Builds));
-      $Task->CmdLineArg(join(",", keys %$Builds));
+      $Task->Timeout(GetBuildTimeout($Impacts, $TaskMissions) +
+                     GetTestTimeout($Impacts, $TaskMissions));
+      $Task->Missions($TaskMissions->{Statement});
     }
   }
 

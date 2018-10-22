@@ -36,6 +36,7 @@ use WineTestBot::Branches;
 use WineTestBot::Config;
 use WineTestBot::Engine::Notify;
 use WineTestBot::Jobs;
+use WineTestBot::Missions;
 use WineTestBot::PatchUtils;
 use WineTestBot::Steps;
 use WineTestBot::Utils;
@@ -814,13 +815,18 @@ sub SubmitJob($$$)
           my $Task = $BuildStep->Tasks->Add();
           $Task->VM($BuildVM);
 
-          my $Builds = { "exe32" => 1 };
-          $Builds->{"exe64"} = 1 if defined $self->GetParam("Run64");
-          $Task->Timeout(GetBuildTimeout($Impacts, $Builds));
+          my $MissionStatement = "exe32";
+          $MissionStatement .= ":exe64" if (defined $self->GetParam("Run64"));
+          my ($ErrMessage, $Missions) = ParseMissionStatement($MissionStatement);
+          if (!defined $ErrMessage)
+          {
+            $Task->Timeout(GetBuildTimeout($Impacts, $Missions->[0]));
+            $Task->Missions($Missions->[0]);
 
-          # Save the build step so the others can reference it
-          my ($ErrKey, $ErrProperty, $ErrMessage) = $Jobs->Save();
-          if (defined($ErrMessage))
+            # Save the build step so the others can reference it
+            (my $ErrKey, my $ErrProperty, $ErrMessage) = $Jobs->Save();
+          }
+          if (defined $ErrMessage)
           {
             $self->{ErrMessage} = $ErrMessage;
             return !1;
@@ -851,51 +857,53 @@ sub SubmitJob($$$)
       my $Task = $Tasks->Add();
       $Task->VM($VM);
       $Task->Timeout($SingleTimeout);
+      $Task->Missions("exe$Bits");
       $Task->CmdLineArg($self->GetParam("CmdLineArg"));
     }
   }
 
   if ($FileType eq "patch")
   {
-    my $Tasks;
+    my ($Tasks, $MissionStatement, $Timeout);
     my $VMs = CreateVMs();
     $VMs->AddFilter("Type", ["wine"]);
     my $SortedKeys = $VMs->SortKeysBySortOrder($VMs->GetKeys());
-    foreach my $Build ("win32", "wow64")
+    foreach my $VMKey (@$SortedKeys)
     {
-      next if ($Build eq "wow64" and !defined($self->GetParam("Run64")));
+      my $VM = $VMs->GetItem($VMKey);
+      my $FieldName = "vm_" . $self->CGI->escapeHTML($VMKey);
+      next if (!$self->GetParam($FieldName)); # skip unselected VMs
 
-      my $Timeout;
-      foreach my $VMKey (@$SortedKeys)
+      if (!$Tasks)
       {
-        my $VM = $VMs->GetItem($VMKey);
-        my $FieldName = "vm_" . $self->CGI->escapeHTML($VMKey);
-        next if (!$self->GetParam($FieldName)); # skip unselected VMs
+        # First create the Wine test step
+        my $WineStep = $Steps->Add();
+        $WineStep->FileName($BaseName);
+        $WineStep->FileType($FileType);
+        $WineStep->Type("single");
+        $WineStep->DebugLevel($self->GetParam("DebugLevel"));
+        $WineStep->ReportSuccessfulTests(defined($self->GetParam("ReportSuccessfulTests")));
+        $Tasks = $WineStep->Tasks;
 
-        if (!$Tasks)
-        {
-          # First create the Wine test step
-          my $WineStep = $Steps->Add();
-          $WineStep->FileName($BaseName);
-          $WineStep->FileType($FileType);
-          $WineStep->Type("single");
-          $WineStep->DebugLevel($self->GetParam("DebugLevel"));
-          $WineStep->ReportSuccessfulTests(defined($self->GetParam("ReportSuccessfulTests")));
-          $Tasks = $WineStep->Tasks;
-        }
-        if (!defined $Timeout)
-        {
-          my $Builds = { $Build => 1 };
-          $Timeout = GetBuildTimeout($Impacts, $Builds) +
-                     GetTestTimeout($Impacts, $Builds);
-        }
+        $MissionStatement = "win32";
+        $MissionStatement.= ":wow64" if (defined $self->GetParam("Run64"));
 
-        # Then add a task for this VM
-        my $Task = $Tasks->Add();
-        $Task->VM($VM);
-        $Task->CmdLineArg($Build);
-        $Task->Timeout($Timeout);
+        my ($ErrMessage, $Missions) = ParseMissionStatement($MissionStatement);
+        if (defined $ErrMessage)
+        {
+          $self->{ErrMessage} = $ErrMessage;
+          return !1;
+        }
+        $Missions = $Missions->[0];
+        $Timeout = GetBuildTimeout($Impacts, $Missions) +
+                   GetTestTimeout($Impacts, $Missions);
       }
+
+      # Then add a task for this VM
+      my $Task = $Tasks->Add();
+      $Task->VM($VM);
+      $Task->Timeout($Timeout);
+      $Task->Missions($MissionStatement);
     }
   }
 

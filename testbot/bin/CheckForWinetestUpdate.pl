@@ -53,6 +53,7 @@ use WineTestBot::Config;
 use WineTestBot::Engine::Notify;
 use WineTestBot::Jobs;
 use WineTestBot::Log;
+use WineTestBot::Missions;
 use WineTestBot::PatchUtils;
 use WineTestBot::Users;
 use WineTestBot::Utils;
@@ -201,21 +202,38 @@ sub AddJob($$$)
   $NewJob->Priority($BaseJob && $Build eq "exe32" ? 8 : 9);
   $NewJob->Remarks($Remarks);
 
-  # Add a step to the job
-  my $Steps = $NewJob->Steps;
-  my $NewStep = $Steps->Add();
-  $NewStep->Type("suite");
-  $NewStep->FileName($LatestBaseName);
-  $NewStep->FileType($Build);
-
   # Add a task for each VM
-  my $Tasks = $NewStep->Tasks;
+  my $Tasks;
   foreach my $VMKey (@{$VMs->SortKeysBySortOrder($VMs->GetKeys())})
   {
-    Debug("  $VMKey $Build\n");
-    my $Task = $Tasks->Add();
-    $Task->VM($VMs->GetItem($VMKey));
-    $Task->Timeout(GetTestTimeout(undef, { $Build => 1 }));
+    my $VM = $VMs->GetItem($VMKey);
+    my ($ErrMessage, $Missions) = ParseMissionStatement($VM->Missions);
+    if (defined $ErrMessage)
+    {
+      Debug("$VMKey has an invalid mission statement: $!\n");
+      next;
+    }
+
+    foreach my $TaskMissions (@$Missions)
+    {
+      next if (!$TaskMissions->{Builds}->{$Build});
+
+      if (!$Tasks)
+      {
+        # Add a step to the job
+        my $TestStep = $NewJob->Steps->Add();
+        $TestStep->Type("suite");
+        $TestStep->FileName($LatestBaseName);
+        $TestStep->FileType($Build);
+        $Tasks = $TestStep->Tasks;
+      }
+
+      Debug("  $VMKey $Build\n");
+      my $Task = $Tasks->Add();
+      $Task->VM($VM);
+      $Task->Timeout($SuiteTimeout);
+      $Task->Missions($TaskMissions->{Statement});
+    }
   }
 
   # Save it all
@@ -245,9 +263,6 @@ sub AddJob($$$)
 
   return 1;
 }
-
-my @ExeBuilds = qw(exe32 exe64);
-my @WineBuilds = qw(win32 wow32 wow64);
 
 sub AddReconfigJob($)
 {
@@ -287,9 +302,23 @@ sub AddReconfigJob($)
     Debug("  $VMKey $VMType reconfig\n");
     my $Task = $BuildStep->Tasks->Add();
     $Task->VM($VM);
-    my $Builds;
-    map { $Builds->{$_} = 1 } ($VMType eq "wine" ? @WineBuilds : @ExeBuilds);
-    $Task->Timeout(GetBuildTimeout(undef, $Builds));
+
+    # Merge all the tasks into one so we only recreate the base snapshot once
+    my $MissionStatement = $VMType ne "wine" ? "exe32:exe64" :
+                           MergeMissionStatementTasks($VM->Missions);
+    my ($ErrMessage, $Missions) = ParseMissionStatement($MissionStatement);
+    if (defined $ErrMessage)
+    {
+      Debug("$VMKey has an invalid mission statement: $!\n");
+      next;
+    }
+    if (@$Missions != 1)
+    {
+      Debug("Found no mission or too many task missions for $VMKey\n");
+      next;
+    }
+    $Task->Timeout(GetBuildTimeout(undef, $Missions->[0]));
+    $Task->Missions($Missions->[0]->{Statement});
   }
 
   # Save the build step so the others can reference it.
@@ -303,22 +332,38 @@ sub AddReconfigJob($)
   if ($VMType eq "wine")
   {
     # Add steps to run WineTest on Wine
-    foreach my $Build (@WineBuilds)
+    my $Tasks;
+    foreach my $VMKey (@$SortedKeys)
     {
-      # Add a step to the job
-      my $NewStep = $Steps->Add();
-      $NewStep->PreviousNo($BuildStep->No);
-      $NewStep->Type("suite");
-      $NewStep->FileType("none");
-
-      foreach my $VMKey (@$SortedKeys)
+      my $VM = $VMs->GetItem($VMKey);
+      # Move all the missions into separate tasks so we don't have one very
+      # long task hogging the VM forever. Note that this also ok because the
+      # WineTest tasks don't have to recompile Wine.
+      my $MissionStatement = SplitMissionStatementTasks($VM->Missions);
+      my ($ErrMessage, $Missions) = ParseMissionStatement($MissionStatement);
+      if (defined $ErrMessage)
       {
-        my $VM = $VMs->GetItem($VMKey);
-        Debug("  $VMKey $Build\n");
-        my $Task = $NewStep->Tasks->Add();
+        Debug("$VMKey has an invalid mission statement: $!\n");
+        next;
+      }
+
+      foreach my $TaskMissions (@$Missions)
+      {
+        if (!$Tasks)
+        {
+          # Add a step to the job
+          my $TestStep = $Steps->Add();
+          $TestStep->PreviousNo($BuildStep->No);
+          $TestStep->Type("suite");
+          $TestStep->FileType("none");
+          $Tasks = $TestStep->Tasks;
+        }
+
+        Debug("  $VMKey $TaskMissions->{Statement}\n");
+        my $Task = $Tasks->Add();
         $Task->VM($VM);
-        $Task->CmdLineArg($Build);
-        $Task->Timeout(GetTestTimeout(undef, { $Build => 1 }));
+        $Task->Timeout(GetTestTimeout(undef, $TaskMissions));
+        $Task->Missions($TaskMissions->{Statement});
       }
     }
   }

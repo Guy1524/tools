@@ -151,6 +151,7 @@ use ObjectModel::BackEnd;
 use WineTestBot::Config;
 use WineTestBot::Engine::Notify;
 use WineTestBot::LibvirtDomain;
+use WineTestBot::Missions;
 use WineTestBot::RecordGroups;
 use WineTestBot::TestAgent;
 
@@ -302,6 +303,24 @@ sub KillChild($)
   $self->ChildPid(undef);
 }
 
+sub PutColValue($$$)
+{
+  my ($self, $ColName, $Value) = @_;
+
+  $self->SUPER::PutColValue($ColName, $Value);
+  if ($self->{IsModified} and ($ColName eq "Type" or $ColName eq "Missions"))
+  {
+    $self->{ValidateMissions} = 1;
+  }
+}
+
+my $_SupportedMissions = {
+  "build" => { "build" => 1 },
+  "win32" => { "exe32" => 1 },
+  "win64" => { "exe32" => 1, "exe64" => 1 },
+  "wine"  => { "win32" => 1, "wow32" => 1, "wow64" => 1 },
+};
+
 sub Validate($)
 {
   my ($self) = @_;
@@ -311,6 +330,27 @@ sub Validate($)
   {
     return ("Role", "Only win32, win64 and wine VMs can have a role of '" . $self->Role . "'");
   }
+  if ($self->{ValidateMissions})
+  {
+    my ($ErrMessage, $Missions) = ParseMissionStatement($self->Missions);
+    return ("Missions", $ErrMessage) if (defined $ErrMessage);
+    foreach my $TaskMissions (@$Missions)
+    {
+      if ($self->Type ne "wine" and @{$TaskMissions->{Missions}} > 1)
+      {
+        return ("Missions", "Only wine VMs can handle more than one mission per task");
+      }
+      foreach my $Mission (@{$TaskMissions->{Missions}})
+      {
+        if (!$_SupportedMissions->{$self->Type}->{$Mission->{Build}})
+        {
+          return ("Missions", ucfirst($self->Type) ." VMs only support ". join(", ", sort keys %{$_SupportedMissions->{$self->Type}}) ." missions");
+        }
+      }
+    }
+    delete $self->{ValidateMissions};
+  }
+
   return $self->SUPER::Validate();
 }
 
@@ -666,6 +706,7 @@ my @PropertyDescriptors = (
   CreateBasicPropertyDescriptor("SortOrder", "Display order", !1, 1, "N", 3),
   CreateEnumPropertyDescriptor("Type", "Type of VM", !1, 1, ['win32', 'win64', 'build', 'wine']),
   CreateEnumPropertyDescriptor("Role", "VM Role", !1, 1, ['extra', 'base', 'winetest', 'retired', 'deleted']),
+  CreateBasicPropertyDescriptor("Missions", "Missions", !1, 1, "A", 256),
   CreateEnumPropertyDescriptor("Status", "Current status", !1, 1, ['dirty', 'reverting', 'sleeping', 'idle', 'running', 'off', 'offline', 'maintenance']),
   CreateBasicPropertyDescriptor("Errors", "Errors", !1, !1, "N", 2),
   CreateBasicPropertyDescriptor("ChildPid", "Child process id", !1, !1, "N", 5),
