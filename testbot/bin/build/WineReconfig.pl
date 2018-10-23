@@ -54,14 +54,6 @@ sub BuildWine($$$$)
   my ($TaskMissions, $NoRm, $Build, $Extras) = @_;
 
   return 1 if (!$TaskMissions->{Builds}->{$Build});
-  # FIXME Temporary code to ensure compatibility during the transition
-  my $OldDir = "build-$Build";
-  if (-d "$DataDir/$OldDir" and !-d "$DataDir/wine-$Build")
-  {
-    rename("$DataDir/$OldDir", "$DataDir/wine-$Build");
-    # Add a symlink from compatibility with older server-side TestBot scripts
-    symlink("wine-$Build", "$DataDir/$OldDir");
-  }
   mkdir "$DataDir/wine-$Build" if (!-d "$DataDir/wine-$Build");
 
   # If $NoRm is not set, rebuild from scratch to make sure cruft will not
