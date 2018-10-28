@@ -80,12 +80,13 @@ sub ParseTaskLog($)
   if (open(my $LogFile, "<", $FileName))
   {
     my $Result;
+    my $Type = "build";
     foreach my $Line (<$LogFile>)
     {
       chomp $Line;
       if ($Line eq "Task: tests")
       {
-        ; # Ignore it for now
+        $Type = "tests";
       }
       elsif ($Line eq "Task: ok")
       {
@@ -102,9 +103,9 @@ sub ParseTaskLog($)
       }
     }
     close($LogFile);
-    return $Result || "missing";
+    return ($Result || "missing", $Type);
   }
-  return "nolog:Unable to open the task log for reading: $!";
+  return ("nolog:Unable to open the task log for reading: $!", undef);
 }
 
 

@@ -490,14 +490,9 @@ if (!defined $TA->Wait($Pid, $Task->Timeout, 60))
   if ($ErrMessage =~ /timed out waiting for the child process/)
   {
     $ErrMessage = "The task timed out\n";
-    if ($Step->Type eq "build")
-    {
-      $NewStatus = "badbuild";
-    }
-    else
-    {
-      $TaskFailures = 1;
-    }
+    # We don't know if the timeout was caused by the build or the tests.
+    # Until we get the task log assume it's the tests' fault.
+    $TaskFailures = 1;
     $TaskTimedOut = 1;
   }
   else
@@ -511,30 +506,37 @@ if (!defined $TA->Wait($Pid, $Task->Timeout, 60))
 Debug(Elapsed($Start), " Retrieving 'Task.log'\n");
 if ($TA->GetFile("Task.log", "$TaskDir/log"))
 {
-  my $Result = ParseTaskLog("$TaskDir/log");
+  my ($Result, $Type) = ParseTaskLog("$TaskDir/log");
   if ($Result eq "ok")
   {
-    # We must have gotten the full log and the build did succeed.
-    # So forget any prior error.
+    # We must have gotten the full log and the task completed successfully
+    # (with or without test failures). So clear any previous errors, including
+    # $TaskFailures since there was not really a timeout after all.
     $NewStatus = "completed";
-    $TAError = $ErrMessage = undef;
+    $TaskFailures = $TAError = $ErrMessage = $PossibleCrash = undef;
   }
   elsif ($Result eq "badpatch")
   {
     # This too is conclusive enough to ignore other errors.
     $NewStatus = "badpatch";
-    $TAError = $ErrMessage = undef;
+    $TaskFailures = $TAError = $ErrMessage = $PossibleCrash = undef;
   }
   elsif ($Result =~ s/^nolog://)
   {
     FatalError("$Result\n", "retry");
   }
-  elsif ($Result ne "missing" or $Step->Type ne "suite")
+  elsif ($Type eq "build")
   {
-    # There is no build and thus no result line when running WineTest.
-    # Otherwise if the result line is missing we probably already have an
-    # error message that explains why.
+    # The error happened before the tests started so blame the build.
     $NewStatus = "badbuild";
+    $TaskFailures = $PossibleCrash = undef;
+  }
+  elsif (!$TaskTimedOut and !defined $TAError)
+  {
+    # Did WineTest.pl crash?
+    $NewStatus = "boterror";
+    $TaskFailures = undef;
+    $PossibleCrash = 1;
   }
 }
 elsif (!defined $TAError)

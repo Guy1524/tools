@@ -388,7 +388,7 @@ if (!defined $TA->Wait($Pid, $Task->Timeout, 60))
 Debug(Elapsed($Start), " Retrieving 'Reconfig.log'\n");
 if ($TA->GetFile("Reconfig.log", "$TaskDir/log"))
 {
-  my $Result = ParseTaskLog("$TaskDir/log");
+  my ($Result, $_Type) = ParseTaskLog("$TaskDir/log");
   if ($Result eq "ok")
   {
     # We must have gotten the full log and the build did succeed.

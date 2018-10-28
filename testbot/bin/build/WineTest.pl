@@ -75,12 +75,24 @@ sub BuildWine($$)
 # Test helpers
 #
 
+my $InTests;
+
+sub SetupTest($$)
+{
+  my ($Test, $Mission) = @_;
+
+  LogMsg "tests\n" if (!$InTests);
+  $InTests = 1;
+
+  InfoMsg "\n$Running $Test in the $Mission->{Build} Wine\n";
+  SetupWineEnvironment($Mission->{Build});
+}
+
 sub DailyWineTest($$$$)
 {
   my ($Mission, $NoSubmit, $BaseTag, $Args) = @_;
 
-  InfoMsg "\nRunning WineTest in the $Mission->{Build} Wine\n";
-  SetupWineEnvironment($Mission->{Build});
+  SetupTest("WineTest", $Mission);
 
   # Run WineTest. Ignore the exit code since it returns non-zero whenever
   # there are test failures.
@@ -128,8 +140,7 @@ sub TestPatch($$)
   }
   return 1 if (!@TestList);
 
-  InfoMsg "\nRunning the tests in the $Mission->{Build} Wine\n";
-  SetupWineEnvironment($Mission->{Build});
+  SetupTest("the tests", $Mission);
 
   # Run WineTest. Ignore the exit code since it returns non-zero whenever
   # there are test failures.
