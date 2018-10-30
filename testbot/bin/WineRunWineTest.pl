@@ -383,7 +383,7 @@ if (!$VM->GetDomain()->IsPoweredOn())
   FatalError("The VM is not powered on\n");
 }
 
-if ($Step->Type ne "build" and $Step->Type ne "suite" and $Step->Type ne "single")
+if ($Step->Type ne "suite" and $Step->Type ne "single")
 {
   FatalError("Unexpected step type '". $Step->Type ."' found\n");
 }
@@ -497,7 +497,7 @@ if (!defined $TA->Wait($Pid, $Task->Timeout, 60))
   }
   else
   {
-    $PossibleCrash = 1 if ($Step->Type ne "build");
+    $PossibleCrash = 1;
     $TAError = "An error occurred while waiting for the task to complete: $ErrMessage";
     $ErrMessage = undef;
   }
@@ -549,49 +549,46 @@ elsif (!defined $TAError)
 # Grab the test reports if any
 #
 
-if ($Step->Type ne "build")
+foreach my $Build (keys %{$TaskMissions->{Builds}})
 {
-  foreach my $Build (keys %{$TaskMissions->{Builds}})
+  my $RptFileName = "$Build.report";
+  Debug(Elapsed($Start), " Retrieving '$RptFileName'\n");
+  if ($TA->GetFile($RptFileName, "$TaskDir/$RptFileName"))
   {
-    my $RptFileName = "$Build.report";
-    Debug(Elapsed($Start), " Retrieving '$RptFileName'\n");
-    if ($TA->GetFile($RptFileName, "$TaskDir/$RptFileName"))
-    {
-      chmod 0664, "$TaskDir/$RptFileName";
+    chmod 0664, "$TaskDir/$RptFileName";
 
-      my ($TestUnitCount, $TimeoutCount, $LogFailures, $LogErrors) = ParseWineTestReport("$TaskDir/$RptFileName", 1, $TaskTimedOut);
-      $TaskTimedOut = 1 if ($TestUnitCount == $TimeoutCount);
-      if (!defined $LogFailures and @$LogErrors == 1)
-      {
-        # Could not open the file
-        $NewStatus = 'boterror';
-        Error "Unable to open '$RptFileName' for reading: $!\n";
-        LogTaskError("Unable to open '$RptFileName' for reading: $!\n");
-      }
-      else
-      {
-        # $LogFailures can legitimately be undefined in case of a timeout
-        $TaskFailures += $LogFailures || 0;
-        if (@$LogErrors and open(my $Log, ">", "$TaskDir/$RptFileName.err"))
-        {
-          # Save the extra errors detected by ParseWineTestReport() in
-          # $RptFileName.err:
-          # - This keep the .report file clean.
-          # - Each .err file can be matched to its corresponding .report, even
-          #   if there are multiple .report files in the directory.
-          # - The .err file can be moved to the latest directory next to the
-          #   reference report.
-          print $Log "$_\n" for (@$LogErrors);
-          close($Log);
-        }
-      }
-    }
-    elsif (!defined $TAError and
-           $TA->GetLastError() !~ /: No such file or directory/)
+    my ($TestUnitCount, $TimeoutCount, $LogFailures, $LogErrors) = ParseWineTestReport("$TaskDir/$RptFileName", 1, $TaskTimedOut);
+    $TaskTimedOut = 1 if ($TestUnitCount == $TimeoutCount);
+    if (!defined $LogFailures and @$LogErrors == 1)
     {
-      $TAError = "An error occurred while retrieving $RptFileName: ". $TA->GetLastError();
+      # Could not open the file
       $NewStatus = 'boterror';
+      Error "Unable to open '$RptFileName' for reading: $!\n";
+      LogTaskError("Unable to open '$RptFileName' for reading: $!\n");
     }
+    else
+    {
+      # $LogFailures can legitimately be undefined in case of a timeout
+      $TaskFailures += $LogFailures || 0;
+      if (@$LogErrors and open(my $Log, ">", "$TaskDir/$RptFileName.err"))
+      {
+        # Save the extra errors detected by ParseWineTestReport() in
+        # $RptFileName.err:
+        # - This keep the .report file clean.
+        # - Each .err file can be matched to its corresponding .report, even
+        #   if there are multiple .report files in the directory.
+        # - The .err file can be moved to the latest directory next to the
+        #   reference report.
+        print $Log "$_\n" for (@$LogErrors);
+        close($Log);
+      }
+    }
+  }
+  elsif (!defined $TAError and
+         $TA->GetLastError() !~ /: No such file or directory/)
+  {
+    $TAError = "An error occurred while retrieving $RptFileName: ". $TA->GetLastError();
+    $NewStatus = 'boterror';
   }
 }
 
