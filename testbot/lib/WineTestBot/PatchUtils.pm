@@ -216,6 +216,7 @@ sub _HandleFile($$$)
 
     my $Module = _CreateTestInfo($Impacts, $Root, $Dir);
     $Impacts->{PatchedModules} = 1;
+    $Impacts->{Tests}->{$Module}->{PatchedModule} = 1;
 
     if ($File eq "Makefile.in" and $Change ne "modify")
     {
@@ -407,20 +408,23 @@ sub GetPatchImpacts($)
     $TestInfo->{Units} = {};
     foreach my $File (keys %{$TestInfo->{Files}})
     {
-      # Skip unmodified files
-      next if (!$TestInfo->{All} and !$TestInfo->{Files}->{$File});
-
       my $Base = $File;
       # Non-C files are not test units
       next if ($Base !~ s/(?:\.c|\.spec)$//);
       # Helper dlls are not test units
       next if (exists $TestInfo->{Files}->{"$Base.spec"});
+      # Don't try running a deleted test unit obviously
+      next if ($TestInfo->{Files}->{$File} eq "rm");
 
-      if (($TestInfo->{All} or $TestInfo->{Files}->{$File}) and
-             $TestInfo->{Files}->{$File} ne "rm")
+      if ($TestInfo->{All} or $TestInfo->{Files}->{$File})
       {
-        # Only new/modified test units are impacted
         $TestInfo->{Units}->{$Base} = 1;
+        $Impacts->{ModuleUnitCount}++;
+      }
+      elsif ($TestInfo->{PatchedModule})
+      {
+        # The module has been patched so this test unit is impacted indirectly.
+        $Impacts->{ModuleUnitCount}++;
       }
     }
 
