@@ -84,7 +84,7 @@ sub SetupTest($$)
   LogMsg "tests\n" if (!$InTests);
   $InTests = 1;
 
-  InfoMsg "\n$Running $Test in the $Mission->{Build} Wine\n";
+  InfoMsg "\nRunning $Test in the $Mission->{Build} Wine\n";
   SetupWineEnvironment($Mission->{Build});
 }
 
