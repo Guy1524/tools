@@ -231,7 +231,7 @@ int platform_settime(uint64_t epoch, uint32_t leeway)
 
     tv.tv_sec = epoch;
     tv.tv_usec = 0;
-    if (!settimeofday(&tv, NULL))
+    if (settimeofday(&tv, NULL))
     {
         set_status(ST_ERROR, "failed to set the time: %s", strerror(errno));
         return 0;
