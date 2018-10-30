@@ -122,25 +122,48 @@ sub TestPatch($$)
 {
   my ($Mission, $Impacts) = @_;
 
+  return 1 if ($Mission->{test} eq "build");
+
   my @TestList;
-  foreach my $Module (sort keys %{$Impacts->{Tests}})
+  if ($Mission->{test} eq "all" and
+      ($Impacts->{PatchedRoot} or $Impacts->{PatchedModules}))
   {
-    my $TestInfo = $Impacts->{Tests}->{$Module};
-    if ($TestInfo->{All})
+    push @TestList, "-m", "do.not.submit";
+  }
+  else
+  {
+    foreach my $Module (sort keys %{$Impacts->{Tests}})
     {
-      push @TestList, $Module;
-    }
-    else
-    {
-      foreach my $Unit (sort keys %{$TestInfo->{Units}})
+      my $TestInfo = $Impacts->{Tests}->{$Module};
+      if ($TestInfo->{All} or
+          ($Mission->{test} eq "module" and $TestInfo->{PatchedModule}))
       {
-        push @TestList, "$Module:$Unit";
+        # When given a module name WineTest runs all its tests.
+        # But make sure the module actually has tests first!
+        push @TestList, $Module if (%{$TestInfo->{Units}});
+      }
+      else
+      {
+        foreach my $Unit (sort keys %{$TestInfo->{Units}})
+        {
+          push @TestList, "$Module:$Unit";
+        }
       }
     }
+    return 1 if (!@TestList);
   }
-  return 1 if (!@TestList);
 
   SetupTest("the tests", $Mission);
+  if (!-d $ENV{WINEPREFIX})
+  {
+    # FIXME Wait for the wineserver as a workaround for bug 41713.
+    my $ErrMessage = CreateWinePrefix($Mission, "wait");
+    if (defined $ErrMessage)
+    {
+      LogMsg "Could not create the $Mission->{Build} wineprefix: $ErrMessage\n";
+      return 0;
+    }
+  }
 
   # Run WineTest. Ignore the exit code since it returns non-zero whenever
   # there are test failures.

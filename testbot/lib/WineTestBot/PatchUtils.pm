@@ -492,15 +492,26 @@ sub GetTestTimeout($$)
 {
   my ($Impacts, $TaskMissions) = @_;
 
-  my $Timeout = $SuiteTimeout;
-  if ($Impacts)
+  my $Timeout = 0;
+  foreach my $Mission (@{$TaskMissions->{Missions}})
   {
-    my $UnitCount = $Impacts->{TestUnitCount};
-    my $TestsTimeout = min(2, $UnitCount) * $SingleTimeout +
-                       max(0, $UnitCount - 2) * $SingleAvgTime;
-    $Timeout = min($SuiteTimeout, $TestsTimeout);
+    if (!$Impacts or ($Mission->{test} eq "all" and
+                      ($Impacts->{PatchedRoot} or $Impacts->{PatchedModules})))
+    {
+      $Timeout += $SuiteTimeout;
+    }
+    elsif ($Mission->{test} ne "build")
+    {
+      # Note: If only test units have been patched then
+      #       ModuleUnitCount == TestUnitCount.
+      my $UnitCount = $Mission->{test} eq "test" ? $Impacts->{TestUnitCount} :
+                                                   $Impacts->{ModuleUnitCount};
+      my $TestsTimeout = min(2, $UnitCount) * $SingleTimeout +
+                         max(0, $UnitCount - 2) * $SingleAvgTime;
+      $Timeout += min($SuiteTimeout, $TestsTimeout);
+    }
   }
-  return @{$TaskMissions->{Missions}} * $Timeout;
+  return $Timeout;
 }
 
 1;

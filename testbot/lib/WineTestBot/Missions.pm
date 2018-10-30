@@ -64,7 +64,11 @@ sub ParseMissionStatement($)
       }
       $Build = $1; # untaint
       $TaskMissions->{Builds}->{$Build} = 1;
-      my $Mission = { Build => $Build, Statement => $Statement };
+      my $Mission = {
+        Build => $Build,
+        Statement => $Statement,
+        test => "test", # Set the default value
+      };
       push @{$TaskMissions->{Missions}}, $Mission;
 
       foreach my $Option (@Options)
