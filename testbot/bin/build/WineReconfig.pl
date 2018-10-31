@@ -108,12 +108,12 @@ sub UpdateWinePrefixes($)
   {
     next if ($Mission->{test} eq "build");
 
-    SetupWineEnvironment($Build);
+    SetupWineEnvironment($Mission->{Build});
     InfoMsg "\nRecreating the $Mission->{Build} wineprefix\n";
 
     # Wait for the wineprefix creation to complete so it is really done
     # before the snapshot gets updated.
-    my $ErrMessage = CreateWinePrefix($Build, "wait");
+    my $ErrMessage = CreateWinePrefix($Mission->{Build}, "wait");
     if (defined $ErrMessage)
     {
       LogMsg "$ErrMessage\n";
