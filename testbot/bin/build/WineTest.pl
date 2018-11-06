@@ -192,7 +192,7 @@ my ($Usage, $OptNoSubmit, $MissionStatement, $FileName, $BaseTag);
 while (@ARGV)
 {
   my $Arg = shift @ARGV;
-  if ($Arg eq "--testpatch" or $Arg eq "build")
+  if ($Arg eq "--testpatch")
   {
     $Action = "testpatch";
   }
