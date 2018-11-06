@@ -140,7 +140,7 @@ sub TestPatch($$)
       {
         # When given a module name WineTest runs all its tests.
         # But make sure the module actually has tests first!
-        push @TestList, $Module if (%{$TestInfo->{Units}});
+        push @TestList, $Module if (%{$TestInfo->{Files}});
       }
       else
       {
