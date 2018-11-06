@@ -181,7 +181,7 @@ sub Submit($$$)
     foreach my $Module (sort keys %{$Impacts->{Tests}})
     {
       my $TestInfo = $Impacts->{Tests}->{$Module};
-      foreach my $Unit (sort keys %{$TestInfo->{Units}})
+      foreach my $PatchedUnit (sort keys %{$TestInfo->{PatchedUnits}})
       {
         foreach my $Bits ("32", "64")
         {
@@ -236,7 +236,7 @@ sub Submit($$$)
               $Task->VM($VM);
               $Task->Timeout($SingleTimeout);
               $Task->Missions($TaskMissions->{Statement});
-              $Task->CmdLineArg($Unit);
+              $Task->CmdLineArg($PatchedUnit);
             }
           }
         }

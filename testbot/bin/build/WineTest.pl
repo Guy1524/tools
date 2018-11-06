@@ -144,9 +144,9 @@ sub TestPatch($$)
       }
       else
       {
-        foreach my $Unit (sort keys %{$TestInfo->{Units}})
+        foreach my $PatchedUnit (sort keys %{$TestInfo->{PatchedUnits}})
         {
-          push @TestList, "$Module:$Unit";
+          push @TestList, "$Module:$PatchedUnit";
         }
       }
     }

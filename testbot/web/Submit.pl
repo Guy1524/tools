@@ -611,7 +611,7 @@ sub DetermineFileType($$)
         {
           $FileType = "patch";
           $ExeBase = $TestInfo->{ExeBase};
-          $TestUnit = (keys %{$TestInfo->{Units}})[0];
+          $TestUnit = (keys %{$TestInfo->{PatchedUnits}})[0];
           last;
         }
       }

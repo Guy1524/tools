@@ -405,7 +405,7 @@ sub GetPatchImpacts($)
       }
     }
 
-    $TestInfo->{Units} = {};
+    $TestInfo->{PatchedUnits} = {};
     foreach my $File (keys %{$TestInfo->{Files}})
     {
       my $Base = $File;
@@ -418,7 +418,7 @@ sub GetPatchImpacts($)
 
       if ($TestInfo->{All} or $TestInfo->{Files}->{$File})
       {
-        $TestInfo->{Units}->{$Base} = 1;
+        $TestInfo->{PatchedUnits}->{$Base} = 1;
         $Impacts->{ModuleUnitCount}++;
       }
       elsif ($TestInfo->{PatchedModule})
@@ -428,7 +428,7 @@ sub GetPatchImpacts($)
       }
     }
 
-    $TestInfo->{UnitCount} = scalar(keys %{$TestInfo->{Units}});
+    $TestInfo->{UnitCount} = scalar(keys %{$TestInfo->{PatchedUnits}});
     $Impacts->{TestUnitCount} += $TestInfo->{UnitCount};
   }
 
