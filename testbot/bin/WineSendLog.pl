@@ -296,7 +296,7 @@ EOF
         $NewGroups = $LogErrors->{Groups};
         $NewErrors = $LogErrors->{Errors};
       }
-      elsif (!@$NewGroups)
+      if (!$NewGroups or !@$NewGroups)
       {
         # There is no new error
         next;
