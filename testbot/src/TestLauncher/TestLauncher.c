@@ -102,7 +102,7 @@ static BOOL AllImportedDllsPresent(const char *TestExeName, const char *Subtest)
    DWORD NR;
    DWORD NewPos;
    DWORD FileOffset;
-   char ModuleName[_MAX_PATH];
+   char ModuleName[MAX_PATH];
    BOOL Found;
    BOOL AllPresent;
 
@@ -284,10 +284,10 @@ int main(int argc, char *argv[])
    int Arg;
    DWORD Start, TimeOut;
    BOOL UsageError;
-   char TestExeFullName[_MAX_PATH];
+   char TestExeFullName[MAX_PATH];
    char *TestExeFileName;
    const char *Suffix;
-   char TestName[_MAX_PATH];
+   char TestName[MAX_PATH];
    const char *Subtest;
    int TestArg;
    char *CommandLine;
