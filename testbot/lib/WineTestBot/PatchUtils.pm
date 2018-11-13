@@ -60,13 +60,14 @@ sub UpdateWineData($)
 
   mkdir "$DataDir/latest" if (!-d "$DataDir/latest");
 
-  my $ErrMessage = `cd '$WineDir' && git ls-tree -r --name-only HEAD 2>&1 >'$DataDir/latest/winefiles.txt'`;
-  return $ErrMessage if ($? != 0);
+  my $ErrMessage = `cd '$WineDir' && git ls-tree -r --name-only HEAD 2>&1 >'$DataDir/latest/winefiles.txt' && egrep '^PARENTSRC *=' dlls/*/Makefile.in programs/*/Makefile.in >'$DataDir/latest/wine-parentsrc.txt'`;
+  return $? != 0 ? $ErrMessage : undef;
 }
 
 my $_TimeStamp;
 my $_WineFiles;
 my $_TestList;
+my $_WineParentDirs;
 
 =pod
 =over 12
@@ -107,6 +108,21 @@ sub _LoadWineFiles()
         next if ($File !~ /\.(?:c|spec)$/);
         $Module .= ".exe" if ($Root eq "programs");
         $_TestList->{$Module}->{$File} = 1;
+      }
+    }
+    close($fh);
+  }
+
+  $_WineParentDirs = {};
+  $FileName = "$DataDir/latest/wine-parentsrc.txt";
+  if (open(my $fh, "<", $FileName))
+  {
+    while (my $Line = <$fh>)
+    {
+      if ($Line =~ m~^\w+/([^/]+)/Makefile\.in:PARENTSRC *= *\.\./([^/\s]+)~)
+      {
+        my ($Child, $Parent) = ($1, $2);
+        $_WineParentDirs->{$Parent}->{$Child} = 1;
       }
     }
     close($fh);
@@ -212,11 +228,14 @@ sub _HandleFile($$$)
   }
   elsif ($FilePath =~ m~^(dlls|programs)/([^/]+)/([^/\s]+)$~)
   {
-    my ($Root, $Dir, $File) = ($1, $2, $3);
+    my ($Root, $PatchedDir, $File) = ($1, $2, $3);
 
-    my $Module = _CreateTestInfo($Impacts, $Root, $Dir);
+    foreach my $Dir ($PatchedDir, keys %{$_WineParentDirs->{$PatchedDir} || {}})
+    {
+      my $Module = _CreateTestInfo($Impacts, $Root, $Dir);
+      $Impacts->{Tests}->{$Module}->{PatchedModule} = 1;
+    }
     $Impacts->{PatchedModules} = 1;
-    $Impacts->{Tests}->{$Module}->{PatchedModule} = 1;
 
     if ($File eq "Makefile.in" and $Change ne "modify")
     {
