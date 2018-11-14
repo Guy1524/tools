@@ -103,17 +103,18 @@ sub UpdateWinePrefixes($)
 
   # Set up brand new WinePrefixes ready for use for testing.
   # This way we do it once instead of doing it for every test, thus saving
-  # time. Note that this requires using a different wineprefix for each build.
+  # time. Note that this requires using a different wineprefix for each
+  # mission.
   foreach my $Mission (@{$TaskMissions->{Missions}})
   {
     next if ($Mission->{test} eq "build");
 
-    SetupWineEnvironment($Mission->{Build});
-    InfoMsg "\nRecreating the $Mission->{Build} wineprefix\n";
+    my $BaseName = SetupWineEnvironment($Mission);
+    InfoMsg "\nRecreating the $BaseName wineprefix\n";
 
     # Wait for the wineprefix creation to complete so it is really done
     # before the snapshot gets updated.
-    my $ErrMessage = CreateWinePrefix($Mission->{Build}, "wait");
+    my $ErrMessage = CreateWinePrefix($Mission, "wait");
     if (defined $ErrMessage)
     {
       LogMsg "$ErrMessage\n";

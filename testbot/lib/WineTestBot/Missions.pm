@@ -26,7 +26,7 @@ WineTestBot::Missions - Missions parser and helper functions
 =cut
 
 use Exporter 'import';
-our @EXPORT = qw(DumpMissions ParseMissionStatement
+our @EXPORT = qw(DumpMissions GetMissionBaseName ParseMissionStatement
                  MergeMissionStatementTasks SplitMissionStatementTasks);
 
 
@@ -84,6 +84,12 @@ sub ParseMissionStatement($)
     }
   }
   return (undef, \@Missions);
+}
+
+sub GetMissionBaseName($)
+{
+  my ($Mission) = @_;
+  return $Mission->{Build};
 }
 
 sub MergeMissionStatementTasks($)

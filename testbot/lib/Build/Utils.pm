@@ -36,6 +36,7 @@ use Digest::SHA;
 use File::Path;
 
 use WineTestBot::Config;
+use WineTestBot::Missions;
 use WineTestBot::PatchUtils;
 use WineTestBot::Utils;
 
@@ -327,19 +328,22 @@ sub UpdateAddOns()
 
 sub SetupWineEnvironment($)
 {
-  my ($Build) = @_;
+  my ($Mission) = @_;
 
-  $ENV{WINEPREFIX} = "$DataDir/wineprefix-$Build";
+  my $BaseName = GetMissionBaseName($Mission);
+  $ENV{WINEPREFIX} = "$DataDir/wineprefix-$BaseName";
   $ENV{DISPLAY} ||= ":0.0";
+
+  return $BaseName;
 }
 
 sub RunWine($$$)
 {
-  my ($Build, $Cmd, $CmdArgs) = @_;
+  my ($Mission, $Cmd, $CmdArgs) = @_;
 
-  my $Magic = `cd '$DataDir/wine-$Build' && file $Cmd`;
+  my $Magic = `cd '$DataDir/wine-$Mission->{Build}' && file $Cmd`;
   my $Wine = ($Magic =~ /ELF 64/ ? "./wine64" : "./wine");
-  return system("cd '$DataDir/wine-$Build' && set -x && ".
+  return system("cd '$DataDir/wine-$Mission->{Build}' && set -x && ".
                 "time $Wine $Cmd $CmdArgs");
 }
 
@@ -348,24 +352,24 @@ sub RunWine($$$)
 # WinePrefix helpers
 #
 
-sub CreateWinePrefix($$)
+sub CreateWinePrefix($;$)
 {
-  my ($Build, $Wait) = @_;
+  my ($Mission, $Wait) = @_;
 
   return "\$WINEPREFIX is not set!" if (!$ENV{WINEPREFIX});
   rmtree($ENV{WINEPREFIX});
 
   # Crash dialogs cause delays so disable them
-  if (RunWine($Build, "./programs/reg/reg.exe.so", "ADD HKCU\\\\Software\\\\Wine\\\\WineDbg /v ShowCrashDialog /t REG_DWORD /d 0"))
+  if (RunWine($Mission, "./programs/reg/reg.exe.so", "ADD HKCU\\\\Software\\\\Wine\\\\WineDbg /v ShowCrashDialog /t REG_DWORD /d 0"))
   {
-    return "Failed to disable the $Build build crash dialogs: $!";
+    return "Failed to disable the crash dialogs: $!";
   }
 
   if ($Wait)
   {
     # Ensure the WinePrefix has been fully created and the registry files
     # saved before returning.
-    system("cd '$DataDir/wine-$Build' && ./server/wineserver -w");
+    system("cd '$DataDir/wine-$Mission->{Build}' && ./server/wineserver -w");
   }
 
   return undef;

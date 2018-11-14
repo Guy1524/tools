@@ -84,34 +84,34 @@ sub SetupTest($$)
   LogMsg "tests\n" if (!$InTests);
   $InTests = 1;
 
-  InfoMsg "\nRunning $Test in the $Mission->{Build} Wine\n";
-  SetupWineEnvironment($Mission->{Build});
+  my $BaseName = SetupWineEnvironment($Mission);
+  InfoMsg "\nRunning $Test in the $BaseName Wine\n";
+  return $BaseName;
 }
 
 sub DailyWineTest($$$$)
 {
   my ($Mission, $NoSubmit, $BaseTag, $Args) = @_;
 
-  SetupTest("WineTest", $Mission);
+  my $BaseName = SetupTest("WineTest", $Mission);
 
   # Run WineTest. Ignore the exit code since it returns non-zero whenever
   # there are test failures.
-  my $Tag = SanitizeTag("$BaseTag-$Mission->{Build}");
-  RunWine($Mission->{Build}, "./programs/winetest/winetest.exe.so",
-          "-c -o '../$Mission->{Build}.report' -t $Tag ".
-          ShArgv2Cmd(@$Args));
-  if (!-f "$Mission->{Build}.report")
+  my $Tag = SanitizeTag("$BaseTag-$BaseName");
+  RunWine($Mission, "./programs/winetest/winetest.exe.so",
+          "-c -o '../$BaseName.report' -t $Tag ". ShArgv2Cmd(@$Args));
+  if (!-f "$BaseName.report")
   {
-    LogMsg "WineTest did not produce a report file\n";
+    LogMsg "WineTest did not produce the $BaseName report\n";
     return 0;
   }
 
   # Send the report to the website
   if ((!$NoSubmit and !$Mission->{nosubmit}) and
-      RunWine($Mission->{Build}, "./programs/winetest/winetest.exe.so",
-              "-c -s '../$Mission->{Build}.report'"))
+      RunWine($Mission, "./programs/winetest/winetest.exe.so",
+              "-c -s '../$BaseName.report'"))
   {
-    LogMsg "WineTest failed to send the $Mission->{Build} report\n";
+    LogMsg "WineTest failed to send the $BaseName report\n";
     # Soldier on in case it's just a network issue
   }
 
@@ -153,26 +153,26 @@ sub TestPatch($$)
     return 1 if (!@TestList);
   }
 
-  SetupTest("the tests", $Mission);
+  my $BaseName = SetupTest("the tests", $Mission);
   if (!-d $ENV{WINEPREFIX})
   {
     # FIXME Wait for the wineserver as a workaround for bug 41713.
     my $ErrMessage = CreateWinePrefix($Mission, "wait");
     if (defined $ErrMessage)
     {
-      LogMsg "Could not create the $Mission->{Build} wineprefix: $ErrMessage\n";
+      LogMsg "Could not create the $BaseName wineprefix: $ErrMessage\n";
       return 0;
     }
   }
 
   # Run WineTest. Ignore the exit code since it returns non-zero whenever
   # there are test failures.
-  RunWine($Mission->{Build}, "./programs/winetest/winetest.exe.so",
-          "-c -o '../$Mission->{Build}.report' -t test-$Mission->{Build} ".
+  RunWine($Mission, "./programs/winetest/winetest.exe.so",
+          "-c -o '../$BaseName.report' -t do.not.submit ".
           join(" ", @TestList));
-  if (!-f "$Mission->{Build}.report")
+  if (!-f "$BaseName.report")
   {
-    LogMsg "WineTest did not produce a report file\n";
+    LogMsg "WineTest did not produce the $BaseName report\n";
     return 0;
   }
 
@@ -365,7 +365,7 @@ if ($DataDir =~ /'/)
 #
 
 # Clean up old reports
-map { unlink("$_.report") } keys %{$TaskMissions->{Builds}};
+unlink map { GetMissionBaseName($_) .".report" } @{$TaskMissions->{Missions}};
 
 my $Impacts;
 if ($Action eq "testpatch")

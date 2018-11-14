@@ -290,10 +290,10 @@ sub WrapUpAndExit($;$$$)
 
   if ($Step->Type eq 'suite' and $Status eq 'completed' and !$TimedOut)
   {
-    foreach my $Build (keys %{$TaskMissions->{Builds}})
+    foreach my $Mission (@{$TaskMissions->{Missions}})
     {
       # Keep the old report if the new one is missing
-      my $RptFileName = "$Build.report";
+      my $RptFileName = GetMissionBaseName($Mission) .".report";
       if (-f "$TaskDir/$RptFileName" and !-z "$TaskDir/$RptFileName")
       {
         # Update the VM's reference WineTest results for WineSendLog.pl
@@ -549,9 +549,9 @@ elsif (!defined $TAError)
 # Grab the test reports if any
 #
 
-foreach my $Build (keys %{$TaskMissions->{Builds}})
+foreach my $Mission (@{$TaskMissions->{Missions}})
 {
-  my $RptFileName = "$Build.report";
+  my $RptFileName = GetMissionBaseName($Mission) .".report";
   Debug(Elapsed($Start), " Retrieving '$RptFileName'\n");
   if ($TA->GetFile($RptFileName, "$TaskDir/$RptFileName"))
   {
@@ -606,9 +606,9 @@ if ($NewStatus eq 'completed')
 {
   my $LatestDir = "$DataDir/latest";
   my $StepDir = $Step->GetDir();
-  foreach my $Build (keys %{$TaskMissions->{Builds}})
+  foreach my $Mission (@{$TaskMissions->{Missions}})
   {
-    my $RptFileName = "$Build.report";
+    my $RptFileName = GetMissionBaseName($Mission) .".report";
     my $RefReport = $Task->VM->Name ."_$RptFileName";
     for my $Suffix ("", ".err")
     {
