@@ -596,11 +596,11 @@ sub GetLogFileNames($;$)
 }
 
 my %_LogFileLabels = (
-  "exe32.report" => "32 bit Windows report",
-  "exe64.report" => "64 bit Windows report",
-  "win32.report" => "32 bit Wine report",
-  "wow32.report" => "32 bit WoW Wine report",
-  "wow64.report" => "64 bit Wow Wine report",
+  "exe32.report" => "32 bit report",
+  "exe64.report" => "64 bit report",
+  "win32.report" => "32 bit report",
+  "wow32.report" => "32 bit WoW report",
+  "wow64.report" => "64 bit WoW report",
   "log"          => "task log",
   "old_log"      => "old logs",
 );
