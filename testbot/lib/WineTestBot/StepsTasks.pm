@@ -70,7 +70,11 @@ sub GetTitle($)
   my ($self) = @_;
 
   my @TitleParts;
-  if ($self->Type eq "build")
+  if ($self->Type eq "reconfig")
+  {
+    push @TitleParts, "Wine update";
+  }
+  elsif ($self->Type eq "build")
   {
     push @TitleParts, "build";
   }
