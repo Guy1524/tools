@@ -30,9 +30,11 @@ use Exporter 'import';
 our @EXPORT = qw(MakeSecureURL SecureConnection GenerateRandomString
                  OpenNewFile CreateNewFile CreateNewLink CreateNewDir
                  DurationToString BuildEMailRecipient IsValidFileName
-                 BuildTag SanitizeTag ShQuote ShArgv2Cmd);
+                 BuildTag SanitizeTag LocaleName ShQuote ShArgv2Cmd);
 
 use Fcntl;
+use Locale::Language;
+use Locale::Country;
 
 use WineTestBot::Config;
 
@@ -102,6 +104,17 @@ sub BuildEMailRecipient($$)
   }
 
   return $Recipient;
+}
+
+sub LocaleName($)
+{
+  my ($Locale) = @_;
+
+  if ($Locale =~ /^([a-z]+)_([A-Z]+)(?:\.|$)/)
+  {
+    return (code2language($1) || $1) .":". (code2country($2) || $2);
+  }
+  return $Locale;
 }
 
 

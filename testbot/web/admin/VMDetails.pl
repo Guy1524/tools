@@ -79,6 +79,7 @@ sub GenerateFooter($)
   print "The supported builds are <i>build</i> for build VMs; <i>exe32</i> and <i>exe64</i> for Windows VMs;<i> win32</i>, <i>wow32</i> and <i>wow64</i> for Wine VMs.</p>\n";
   print "<p>On Wine VMs:<br>\n";
   print "The <i>test</i> option can be set to <i>build</i> to only test building, <i>test</i> to only rerun patched tests, <i>module</i> to rerun all of a patched dll or program's tests, or <i>all</i> to always rerun all the tests.<br>\n";
+  print "The <i>lang</i> option can be set to run the tests in the specified \$LANG locale. The default is en_US (<i>.UTF-8</i> can be omitted).<br>\n";
   print "If set, the <i>nosubmit</i> option specifies that the WineTest results should not be published online.</p>\n";
   print "</td></tr></tbody>\n";
   print "</table></div>\n";

@@ -26,8 +26,11 @@ WineTestBot::Missions - Missions parser and helper functions
 =cut
 
 use Exporter 'import';
-our @EXPORT = qw(DumpMissions GetMissionBaseName ParseMissionStatement
+our @EXPORT = qw(DumpMissions GetMissionBaseName GetTaskMissionDescription
+                 ParseMissionStatement
                  MergeMissionStatementTasks SplitMissionStatementTasks);
+
+use WineTestBot::Utils;
 
 
 sub DumpMissions($$)
@@ -89,7 +92,45 @@ sub ParseMissionStatement($)
 sub GetMissionBaseName($)
 {
   my ($Mission) = @_;
-  return $Mission->{Build};
+
+  my $BaseName = $Mission->{Build};
+
+  # Option values may be tainted if they come from the command line
+  my $Lang = $Mission->{lang} || "";
+  $BaseName .= "_$1" if ($Lang =~ /^([a-zA-Z0-9\@_.-]+)$/); # untaint
+
+  return $BaseName;
+}
+
+sub GetTaskMissionDescription($)
+{
+  my ($TaskMission) = @_;
+
+  my $Builds = $TaskMission->{Builds};
+  my $Description =
+      $Builds->{build} ? "build" :
+      ($Builds->{exe64} and ($Builds->{exe32} or $Builds->{exe32})) ? "32 & 64 bit executable" :
+      $Builds->{exe32} ? "32 bit executable" :
+      $Builds->{exe64} ? "64 bit executable" :
+      ($Builds->{wow64} and ($Builds->{win32} or $Builds->{wow32})) ? "32 & 64 bit" :
+      $Builds->{win32} ? "32 bit" :
+      $Builds->{wow32} ? "32 bit WoW" :
+      "64 bit WoW";
+
+  my $Lang;
+  foreach my $Mission (@{$TaskMission->{Missions}})
+  {
+    next if (!$Mission->{lang});
+    if (defined $Lang)
+    {
+      $Description .= " + Locales";
+      $Lang = undef;
+      last;
+    }
+    $Lang = $Mission->{lang};
+  }
+  $Description .= " ". LocaleName($Lang) if ($Lang);
+  return $Description;
 }
 
 sub MergeMissionStatementTasks($)

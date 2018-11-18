@@ -36,6 +36,7 @@ use Algorithm::Diff;
 use File::Basename;
 
 use WineTestBot::Config; # For $MaxUnitSize
+use WineTestBot::Utils; # For LocaleName()
 
 
 #
@@ -578,31 +579,47 @@ sub GetLogFileNames($;$)
 {
   my ($Dir, $IncludeOld) = @_;
 
-  my @Candidates = ("exe32.report", "exe64.report",
-                    "win32.report", "wow32.report", "wow64.report",
-                    "log");
-  push @Candidates, "old_log" if ($IncludeOld);
+  my @Globs = qw(exe32.report exe32_*.report
+                 exe64.report exe64_*.report
+                 win32.report win32_*.report
+                 wow32.report wow32_*.report
+                 wow64.report wow64_*.report
+                 log);
+  push @Globs, "old_log" if ($IncludeOld);
 
-  my @Logs;
-  foreach my $FileName (@Candidates)
+  my (@Logs, %Seen);
+  foreach my $Glob (@Globs)
   {
-    if ((-f "$Dir/$FileName" and !-z "$Dir/$FileName") or
-        (-f "$Dir/$FileName.err" and !-z "$Dir/$FileName.err"))
+    foreach my $FileName (glob("'$Dir/$Glob*'"))
     {
-      push @Logs, $FileName;
+      my $LogName = basename($FileName);
+      if ($LogName !~ s/\.err$// and $LogName !~ /\.report$/ and
+          $LogName ne $Glob) # 'log' case
+      {
+        # Not a valid log filename (where does this file come from?)
+        next;
+      }
+      next if ($Seen{$LogName});
+      $Seen{$LogName} = 1;
+
+      if ((-f "$Dir/$LogName" and !-z "$Dir/$LogName") or
+          (-f "$Dir/$LogName.err" and !-z "$Dir/$LogName.err"))
+      {
+        push @Logs, $LogName;
+      }
     }
   }
   return \@Logs;
 }
 
 my %_LogFileLabels = (
-  "exe32.report" => "32 bit report",
-  "exe64.report" => "64 bit report",
-  "win32.report" => "32 bit report",
-  "wow32.report" => "32 bit WoW report",
-  "wow64.report" => "64 bit WoW report",
-  "log"          => "task log",
-  "old_log"      => "old logs",
+  "exe32.report" => '32 bit%s report',
+  "exe64.report" => '64 bit%s report',
+  "win32.report" => '32 bit%s report',
+  "wow32.report" => '32 bit%s WoW report',
+  "wow64.report" => '64 bit%s WoW report',
+  "log"          => 'task%s log',
+  "old_log"      => 'old%s logs',
 );
 
 =pod
@@ -618,7 +635,15 @@ Returns a user-friendly description of the content of the specified log file.
 sub GetLogLabel($)
 {
   my ($LogFileName) = @_;
-  return $_LogFileLabels{$LogFileName};
+
+  my $Extra = "";
+  if ($LogFileName =~ /^([^_]+)_(.*)\.report$/)
+  {
+    $LogFileName = "$1.report";
+    $Extra = " ". LocaleName($2);
+  }
+  my $Label = $_LogFileLabels{$LogFileName};
+  return defined $Label ? sprintf($Label, $Extra) : $LogFileName;
 }
 
 

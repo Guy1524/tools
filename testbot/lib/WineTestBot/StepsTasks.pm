@@ -91,23 +91,7 @@ sub GetTitle($)
     my ($ErrMessage, $Missions) = ParseMissionStatement($self->Missions);
     if (!defined $ErrMessage and @$Missions == 1)
     {
-      my $Builds = $Missions->[0]->{Builds};
-      if ($Builds->{build})
-      {
-        push @TitleParts, "build";
-      }
-      elsif ($Builds->{wow64} and ($Builds->{win32} or $Builds->{wow32}))
-      {
-        push @TitleParts, "32 & 64 bit";
-      }
-      elsif ($Builds->{win32} or $Builds->{wow32})
-      {
-        push @TitleParts, "32 bit";
-      }
-      elsif ($Builds->{wow64})
-      {
-        push @TitleParts, "64 bit";
-      }
+      push @TitleParts, GetTaskMissionDescription($Missions->[0]);
     }
   }
   if ($self->Type ne "suite" and $self->CmdLineArg)
