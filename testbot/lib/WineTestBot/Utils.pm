@@ -248,6 +248,8 @@ in another context.
 sub ShQuote($)
 {
   my ($Str)=@_;
+  return $Str if ($Str =~ /^[a-zA-Z0-9\/=:.,+_-]+$/);
+
   $Str =~ s%\\%\\\\%g;
   $Str =~ s%\$%\\\$%g;
   $Str =~ s%\"%\\\"%g;
@@ -269,7 +271,7 @@ See also ShQuote().
 
 sub ShArgv2Cmd(@)
 {
-  return join(' ', map { /[^a-zA-Z0-9\/.,+_-]/ ? ShQuote($_) : $_ } @_);
+  return join(' ', map { ShQuote($_) } @_);
 }
 
 1;
