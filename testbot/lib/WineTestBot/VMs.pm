@@ -315,7 +315,7 @@ sub PutColValue($$$)
 }
 
 my $_SupportedMissions = {
-  "build" => { "build" => 1 },
+  "build" => { "exe32" => 1, "exe64" => 1 },
   "win32" => { "exe32" => 1 },
   "win64" => { "exe32" => 1, "exe64" => 1 },
   "wine"  => { "win32" => 1, "wow32" => 1, "wow64" => 1 },
@@ -336,9 +336,10 @@ sub Validate($)
     return ("Missions", $ErrMessage) if (defined $ErrMessage);
     foreach my $TaskMissions (@$Missions)
     {
-      if ($self->Type ne "wine" and @{$TaskMissions->{Missions}} > 1)
+      if ($self->Type !~ /^(?:build|wine)$/ and
+          @{$TaskMissions->{Missions}} > 1)
       {
-        return ("Missions", "Only wine VMs can handle more than one mission per task");
+        return ("Missions", "Only the build and wine VMs can handle more than one mission per task");
       }
       foreach my $Mission (@{$TaskMissions->{Missions}})
       {
