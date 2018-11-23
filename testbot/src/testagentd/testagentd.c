@@ -1430,7 +1430,7 @@ int main(int argc, char** argv)
     }
     if (opt_usage)
     {
-        printf("Usage: %s [--debug] [--detach] [--help] PORT [SRCHOST]\n", name0);
+        printf("Usage: %s [--debug] [--detach] [--help] [--show-restarts] PORT [SRCHOST]\n", name0);
         printf("\n");
         printf("Provides a simple way to send/receive files and to run scripts on this host.\n");
         printf("\n");
