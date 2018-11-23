@@ -86,6 +86,7 @@ sub SetupTest($$)
 
   my $BaseName = SetupWineEnvironment($Mission);
   InfoMsg "\nRunning $Test in the $BaseName Wine\n";
+  InfoMsg "LANG=$ENV{LANG}\n";
   return $BaseName;
 }
 
