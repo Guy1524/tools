@@ -109,10 +109,26 @@ sub BuildEMailRecipient($$)
 sub LocaleName($)
 {
   my ($Locale) = @_;
+  $Locale ||= "en_US"; # default
 
-  if ($Locale =~ /^([a-z]+)_([A-Z]+)(?:\.|$)/)
+  if ($Locale =~ /^([a-z]+)_([A-Z]+)(?:\.[A-Z0-9-]+)?(?:@([a-z]+))?$/)
   {
-    return (code2language($1) || $1) .":". (code2country($2) || $2);
+    my ($Lang, $Country, $Modifier) = ($1, $2, $3);
+    my $Name = $Lang eq "kok" ? "Konkani" :
+               (code2language($Lang) || $Lang);
+    $Name =~ s/ \(.*$//;
+
+    if (uc($Lang) ne $Country)
+    {
+      my $CountryName = $Country eq "US" ? "USA" :
+                        $Country eq "GB" ? "Great Britain" :
+                        (code2country($Country) || $Country);
+      $CountryName =~ s/(?:, | \().*$//;
+      $Name .= ":$CountryName";
+    }
+
+    $Name .= " ($Modifier)" if ($Modifier);
+    return $Name;
   }
   return $Locale;
 }
