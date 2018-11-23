@@ -304,8 +304,9 @@ sub GenerateMoreInfoLink($$$$;$)
   my ($self, $LinkKey, $Label, $Set, $Value) = @_;
 
   my ($Action, $Url) = $self->GetMoreInfoLink($LinkKey, $Label, $Set, $Value);
+  my $Title = ($Value =~ /^(.*)\.report$/) ? " title='$1'" : "";
 
-  my $Html = "<a href='". $self->CGI->escapeHTML($Url) ."'>$Action $Label</a>";
+  my $Html = "<a href='". $self->CGI->escapeHTML($Url) ."'$Title>$Action $Label</a>";
   if ($Action eq "Hide")
   {
     $Html = "<span class='TaskMoreInfoSelected'>$Html</span>";
