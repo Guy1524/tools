@@ -337,7 +337,7 @@ sub SetupWineEnvironment($)
   my $Lang = $Mission->{lang} || "en_US";
   if ($Lang =~ /^[a-zA-Z0-9\@_.-]+$/)
   {
-    $Lang .= ".UTF-8" if ($Lang !~ /\./);
+    $Lang =~ s/(@[a-z]*$|$)/.UTF-8$1/ if ($Lang !~ /\./);
     $ENV{LANG} = $Lang;
   }
 
