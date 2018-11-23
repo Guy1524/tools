@@ -247,7 +247,7 @@ sub InitMoreInfo($)
     foreach my $Log (@{GetLogFileNames($TaskDir, 1)})
     {
       push @{$More->{$Key}->{Logs}}, $Log;
-      $More->{$Key}->{Full} = $Log if (uri_escape($Log) eq $Value);
+      $More->{$Key}->{Full} = $Log if ($Log eq $Value);
     }
     $More->{$Key}->{Full} ||= "";
   }
