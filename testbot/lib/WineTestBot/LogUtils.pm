@@ -130,6 +130,8 @@ sub GetLogLineCategory($)
 
   if (# Build messages
       $Line =~ /^\+ \S/ or
+      $Line =~ /^LANG=/ or
+      $Line =~ /^Running (?:the tests|WineTest) / or
       $Line =~ /^Task: (?:ok|tests)/)
   {
     return "info";
