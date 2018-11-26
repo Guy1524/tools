@@ -108,7 +108,6 @@ sub GetTaskMissionDescription($)
 
   my $Builds = $TaskMission->{Builds};
   my $Description =
-      $Builds->{build} ? "build" :
       ($Builds->{exe64} and ($Builds->{exe32} or $Builds->{exe32})) ? "32 & 64 bit executable" :
       $Builds->{exe32} ? "32 bit executable" :
       $Builds->{exe64} ? "64 bit executable" :
