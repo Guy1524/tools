@@ -334,6 +334,22 @@ sub GenerateBody($)
   _GenStatsLine($VMsStats, "error.count", "Transient errors", $SortedVMKeys);
 
   print "</tbody></table></div>\n";
+}
+
+sub GenerateFooter($)
+{
+  my ($self) = @_;
+  print "<p></p><div class='CollectionBlock'><table>\n";
+  print "<thead><tr><th class='Record'>Legend</th></tr></thead>\n";
+  print "<tbody><tr><td class='Record'>\n";
+
+  print "<p>The <b>Job rate</b> and <b>Task rate</b> show the average hourly rate at which jobs / tasks are submitted to the TestBot. The <b>Revert rate</b> shows how many reverts have been done per hour to run those tasks. Note that the job and task rates provide a first approximation upper limit on the average time a job or task can take to complete.</p>\n";
+  print "<p>The <b>Busy time</b> indicates how long the TestBot had at least one pending task and the <b>Busy %</b> shows how much of the wall clock time this represents. Note that the busy percentage and average <b>Job completion</b> times can be optimized by balancing the load on the different VM hosts.</p>\n";
+  print "<p>The average and maximum time statistics show how long the VMs spend in each state of their lifecycle. A VM starts in the powered off or dirty state. It is then <b>reverted</b> to a clean state with the right configuration for the tests. Then it goes into the <b>sleep</b> state during which it gets ready to run the tests. Depending on the VM configuration this may be immediate or may require booting the VM first. Then it goes into the <b>run</b> state while the tests are being uploaded, run, and the results retrieved. This means the test itself takes less time to run than indicated in this statistic. Also note that the <b>WineTest</b> and <b>Wine update</b> tasks are tallied separately because they take much longer than regular tasks. Once the tests complete the VM is marked <b>dirty</b> while it waits for the TestBot to decide whether to power it off, or immediately revert it for the next task.</p>\n";
+  print "<p>The errors section shows how many <b>Timeouts</b> occurred, that is how many tasks failed to complete within the alloted time; how many failed due to a <b>TestBot error</b>; and how many had to be rerun due to a <b>Transient error</b> such as a network connection issue.</p>\n";
+
+  print "</td></tr></tbody>\n";
+  print "</tbody></table></div>\n";
   print "<p class='GeneralFooterText'>Generated in ", Elapsed($self->{start}), " s</p>\n";
   print "</div>\n";
 }
