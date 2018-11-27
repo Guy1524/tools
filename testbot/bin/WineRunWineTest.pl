@@ -388,7 +388,7 @@ if ($Step->Type ne "suite" and $Step->Type ne "single")
   FatalError("Unexpected step type '". $Step->Type ."' found\n");
 }
 if (($Step->Type eq "suite" and $Step->FileType ne "none") or
-    ($Step->Type ne "suite" and $Step->FileType ne "patch"))
+    ($Step->Type ne "suite" and $Step->FileType !~ /^(?:exe32|exe64|patch)$/))
 {
   FatalError("Unexpected file type '". $Step->FileType ."' found for ". $Step->Type ." step\n");
 }
@@ -417,13 +417,14 @@ if (!$TA->SetTime())
   }
 }
 
-my $FileName = $Step->GetFullFileName();
+my $FileName = $Step->FileName;
 if (defined $FileName)
 {
   Debug(Elapsed($Start), " Sending '$FileName'\n");
-  if (!$TA->SendFile($FileName, "staging/patch.diff", 0))
+  my $Dst = $Step->FileType eq "patch" ? "patch.diff" : $FileName;
+  if (!$TA->SendFile($Step->GetFullFileName(), "staging/$Dst", 0))
   {
-    FatalTAError($TA, "Could not copy the patch to the VM");
+    FatalTAError($TA, "Could send '$FileName' to the VM");
   }
 }
 
@@ -452,9 +453,13 @@ if ($Step->Type eq "suite")
   }
   $Script .= join(" ", "-m", ShQuote($AdminEMail), "-i", ShQuote($Info));
 }
-else
+elsif ($Step->FileType eq "patch")
 {
   $Script .= "--testpatch ". $Task->Missions ." patch.diff";
+}
+else
+{
+  $Script .= join(" ", "--testexe", $Task->Missions, $FileName, $Task->CmdLineArg);
 }
 $Script .= "\n) >Task.log 2>&1\n";
 Debug(Elapsed($Start), " Sending the script: [$Script]\n");
@@ -557,7 +562,7 @@ foreach my $Mission (@{$TaskMissions->{Missions}})
   {
     chmod 0664, "$TaskDir/$RptFileName";
 
-    my ($TestUnitCount, $TimeoutCount, $LogFailures, $LogErrors) = ParseWineTestReport("$TaskDir/$RptFileName", 1, $TaskTimedOut);
+    my ($TestUnitCount, $TimeoutCount, $LogFailures, $LogErrors) = ParseWineTestReport("$TaskDir/$RptFileName", $Step->FileType eq "patch", $TaskTimedOut);
     $TaskTimedOut = 1 if ($TestUnitCount == $TimeoutCount);
     if (!defined $LogFailures and @$LogErrors == 1)
     {

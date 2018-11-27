@@ -180,6 +180,28 @@ sub TestPatch($$)
   return 1;
 }
 
+sub TestExe($$$)
+{
+  my ($Mission, $FileName, $Args) = @_;
+
+  my $BaseName = SetupTest("the tests", $Mission);
+  if (!-d $ENV{WINEPREFIX})
+  {
+    # FIXME Wait for the wineserver as a workaround for bug 41713.
+    my $ErrMessage = CreateWinePrefix($Mission, "wait");
+    if (defined $ErrMessage)
+    {
+      LogMsg "Could not create the $BaseName wineprefix: $ErrMessage\n";
+      return 0;
+    }
+  }
+
+  # Run the test executable
+  RunWine($Mission, "./TestLauncher.exe.so", "-t 120 ". ShArgv2Cmd($FileName, @$Args) ." >'../$BaseName.report'");
+
+  return 1;
+}
+
 
 #
 # Setup and command line processing
@@ -193,7 +215,11 @@ my ($Usage, $OptNoSubmit, $MissionStatement, $FileName, $BaseTag);
 while (@ARGV)
 {
   my $Arg = shift @ARGV;
-  if ($Arg eq "--testpatch")
+  if ($Arg eq "--testexe")
+  {
+    $Action = "testexe";
+  }
+  elsif ($Arg eq "--testpatch")
   {
     $Action = "testpatch";
   }
@@ -241,6 +267,11 @@ while (@ARGV)
     {
       Error "the '$Arg' filename contains invalid characters\n";
       $Usage = 2;
+      last;
+    }
+    if ($Action eq "testexe")
+    {
+      # The remainder are the executable's arguments
       last;
     }
   }
@@ -319,10 +350,18 @@ if (!defined $Usage)
     }
   }
 
-  if (!defined $FileName and $Action eq "testpatch")
+  if (!defined $FileName)
   {
-    Error "you must provide a patch to test\n";
-    $Usage = 2;
+    if ($Action eq "testexe")
+    {
+      Error "you must provide an executable to run\n";
+      $Usage = 2;
+    }
+    elsif ($Action eq "testpatch")
+    {
+      Error "you must provide a patch to test\n";
+      $Usage = 2;
+    }
   }
 }
 if (defined $Usage)
@@ -333,12 +372,14 @@ if (defined $Usage)
     Error "try '$Name0 --help' for more information\n";
     exit $Usage;
   }
-  print "Usage: $Name0 [--help] --testpatch MISSIONS PATCH\n";
+  print "Usage: $Name0 [--help] --testexe MISSIONS EXE ARGS...\n";
+  print "or     $Name0 [--help] --testpatch MISSIONS PATCH\n";
   print "or     $Name0 [--help] --winetest [--no-submit] MISSIONS BASETAG ARGS\n";
   print "\n";
   print "Tests the specified patch or runs WineTest in Wine.\n";
   print "\n";
   print "Where:\n";
+  print "  --testexe    Run the executable in Wine.\n";
   print "  --testpatch  Verify that the patch compiles and run the impacted tests.\n";
   print "  --winetest   Run WineTest and submit the result to the website.\n";
   print "  --no-submit  Do not submit the WineTest results to the website.\n";
@@ -346,6 +387,8 @@ if (defined $Usage)
   print "               - win32: The regular 32 bit Wine build.\n";
   print "               - wow32: The 32 bit WoW Wine build.\n";
   print "               - wow64: The 64 bit WoW Wine build.\n";
+  print "  EXE          Is the staging file containing the executable to run.\n";
+  print "  ARGS         Are the arguments for the test executable.\n";
   print "  PATCH        Is the staging file containing the patch to test.\n";
   print "  BASETAG      Is the tag for this WineTest run. Note that the build type is\n";
   print "               automatically added to this tag.\n";
@@ -379,7 +422,11 @@ if ($Action eq "testpatch")
 }
 foreach my $Mission (@{$TaskMissions->{Missions}})
 {
-  if ($Action eq "testpatch")
+  if ($Action eq "testexe")
+  {
+    exit(1) if (!TestExe($Mission, $FileName, \@ARGV));
+  }
+  elsif ($Action eq "testpatch")
   {
     exit(1) if (!TestPatch($Mission, $Impacts));
   }

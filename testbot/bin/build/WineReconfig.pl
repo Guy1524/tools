@@ -49,9 +49,9 @@ use WineTestBot::Missions;
 # Build helpers
 #
 
-sub BuildWine($$$$)
+sub BuildWine($$$$;$)
 {
-  my ($TaskMissions, $NoRm, $Build, $Extras) = @_;
+  my ($TaskMissions, $NoRm, $Build, $Extras, $WithWine) = @_;
 
   return 1 if (!$TaskMissions->{Builds}->{$Build});
   mkdir "$DataDir/wine-$Build" if (!-d "$DataDir/wine-$Build");
@@ -60,6 +60,7 @@ sub BuildWine($$$$)
   # accumulate
   InfoMsg "\nRebuilding the $Build Wine\n";
   my $CPUCount = GetCPUCount();
+  $Extras .= " --with-wine64='$WithWine'" if (defined $WithWine);
   system("cd '$DataDir/wine-$Build' && set -x && ".
          ($NoRm ? "" : "rm -rf * && ") .
          "time ../wine/configure $Extras && ".
@@ -67,6 +68,18 @@ sub BuildWine($$$$)
   if ($? != 0)
   {
     LogMsg "The $Build Wine build failed\n";
+    return !1;
+  }
+
+  # Compile TestLauncher
+  my $Bits = ($Build =~ /64/) ? "64" : "32";
+  $WithWine ||= ".";
+  system("cd '$DataDir/wine-$Build' && set -x && ".
+         "gcc -m$Bits -c -o TestLauncher.o ../../src/TestLauncher/TestLauncher.c -fPIC -Iinclude -I../wine/include && ".
+         "'$WithWine/tools/winegcc/winegcc' -B'$WithWine/tools/winebuild' --sysroot=. -m$Bits -o TestLauncher.exe.so TestLauncher.o");
+  if ($? != 0)
+  {
+    LogMsg "The $Build TestLauncher build failed\n";
     return !1;
   }
 
@@ -79,7 +92,7 @@ sub UpdateWineBuilds($$)
 
   return BuildWine($TaskMissions, $NoRm, "win32", "") &&
          BuildWine($TaskMissions, $NoRm, "wow64", "--enable-win64") &&
-         BuildWine($TaskMissions, $NoRm, "wow32", "--with-wine64='$DataDir/wine-wow64'");
+         BuildWine($TaskMissions, $NoRm, "wow32", "", "$DataDir/wine-wow64");
 }
 
 

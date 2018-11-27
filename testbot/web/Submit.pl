@@ -243,11 +243,7 @@ sub GenerateFields($)
       my $VMs = CreateVMs();
       if ($self->{FileType} eq "exe64")
       {
-          $VMs->AddFilter("Type", ["win64"]);
-      }
-      elsif ($self->{FileType} eq "exe32")
-      {
-          $VMs->AddFilter("Type", ["win32", "win64"]);
+          $VMs->AddFilter("Type", ["win64", "wine"]);
       }
       else
       {
@@ -808,7 +804,7 @@ sub SubmitJob($$$)
           if (!defined $ErrMessage)
           {
             $Task->Timeout(GetBuildTimeout($Impacts, $Missions->[0]));
-            $Task->Missions($Missions->[0]);
+            $Task->Missions($MissionStatement);
 
             # Save the build step so the others can reference it
             (my $ErrKey, my $ErrProperty, $ErrMessage) = $Jobs->Save();
@@ -849,49 +845,54 @@ sub SubmitJob($$$)
     }
   }
 
-  if ($FileType eq "patch")
+  my ($Tasks, $MissionStatement, $Timeout);
+  my $VMs = CreateVMs();
+  $VMs->AddFilter("Type", ["wine"]);
+  my $SortedKeys = $VMs->SortKeysBySortOrder($VMs->GetKeys());
+  foreach my $VMKey (@$SortedKeys)
   {
-    my ($Tasks, $MissionStatement, $Timeout);
-    my $VMs = CreateVMs();
-    $VMs->AddFilter("Type", ["wine"]);
-    my $SortedKeys = $VMs->SortKeysBySortOrder($VMs->GetKeys());
-    foreach my $VMKey (@$SortedKeys)
+    my $VM = $VMs->GetItem($VMKey);
+    my $FieldName = "vm_" . $self->CGI->escapeHTML($VMKey);
+    next if (!$self->GetParam($FieldName)); # skip unselected VMs
+
+    if (!$Tasks)
     {
-      my $VM = $VMs->GetItem($VMKey);
-      my $FieldName = "vm_" . $self->CGI->escapeHTML($VMKey);
-      next if (!$self->GetParam($FieldName)); # skip unselected VMs
+      # First create the Wine test step
+      my $WineStep = $Steps->Add();
+      $WineStep->FileName($BaseName);
+      $WineStep->FileType($FileType);
+      $WineStep->Type("single");
+      $WineStep->DebugLevel($self->GetParam("DebugLevel"));
+      $WineStep->ReportSuccessfulTests(defined($self->GetParam("ReportSuccessfulTests")));
+      $Tasks = $WineStep->Tasks;
 
-      if (!$Tasks)
+      $MissionStatement = ($FileType =~ /^(?:exe32|patch)$/) ? "win32" : "";
+      if ($FileType eq "exe64" or
+          ($FileType eq "patch" and defined $self->GetParam("Run64")))
       {
-        # First create the Wine test step
-        my $WineStep = $Steps->Add();
-        $WineStep->FileName($BaseName);
-        $WineStep->FileType($FileType);
-        $WineStep->Type("single");
-        $WineStep->DebugLevel($self->GetParam("DebugLevel"));
-        $WineStep->ReportSuccessfulTests(defined($self->GetParam("ReportSuccessfulTests")));
-        $Tasks = $WineStep->Tasks;
-
-        $MissionStatement = "win32";
-        $MissionStatement.= ":wow64" if (defined $self->GetParam("Run64"));
-
-        my ($ErrMessage, $Missions) = ParseMissionStatement($MissionStatement);
-        if (defined $ErrMessage)
-        {
-          $self->{ErrMessage} = $ErrMessage;
-          return !1;
-        }
-        $Missions = $Missions->[0];
-        $Timeout = GetBuildTimeout($Impacts, $Missions) +
-                   GetTestTimeout($Impacts, $Missions);
+        $MissionStatement .= ":wow64";
       }
+      $MissionStatement =~ s/^://;
 
-      # Then add a task for this VM
-      my $Task = $Tasks->Add();
-      $Task->VM($VM);
-      $Task->Timeout($Timeout);
-      $Task->Missions($MissionStatement);
+      my ($ErrMessage, $Missions) = ParseMissionStatement($MissionStatement);
+      if (defined $ErrMessage)
+      {
+        $self->{ErrMessage} = $ErrMessage;
+        return !1;
+      }
+      $Missions = $Missions->[0];
+      $Timeout = $FileType ne "patch" ?
+                 $SingleTimeout :
+                 GetBuildTimeout($Impacts, $Missions) +
+                 GetTestTimeout($Impacts, $Missions);
     }
+
+    # Then add a task for this VM
+    my $Task = $Tasks->Add();
+    $Task->VM($VM);
+    $Task->Timeout($Timeout);
+    $Task->Missions($MissionStatement);
+    $Task->CmdLineArg($self->GetParam("CmdLineArg")) if ($FileType ne "patch");
   }
 
   # Now save it all (or whatever's left to save)
