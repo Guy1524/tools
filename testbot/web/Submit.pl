@@ -713,7 +713,7 @@ sub OnPage2Prev($)
 {
   my ($self) = @_;
 
-  my $FileName = $self->GetParam("File");
+  my $FileName = $self->GetParam("FileName");
   if ($FileName)
   {
     my $StagingFileName = $self->GetTmpStagingFullPath(basename($FileName));
