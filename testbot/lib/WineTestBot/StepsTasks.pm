@@ -91,7 +91,7 @@ sub GetTitle($)
     my ($ErrMessage, $Missions) = ParseMissionStatement($self->Missions);
     if (!defined $ErrMessage and @$Missions == 1)
     {
-      push @TitleParts, GetTaskMissionDescription($Missions->[0]);
+      push @TitleParts, GetTaskMissionDescription($Missions->[0], $self->VM->Type);
     }
   }
   if ($self->Type ne "suite" and $self->CmdLineArg)

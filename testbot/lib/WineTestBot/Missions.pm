@@ -102,33 +102,42 @@ sub GetMissionBaseName($)
   return $BaseName;
 }
 
-sub GetTaskMissionDescription($)
+sub GetTaskMissionDescription($$)
 {
-  my ($TaskMission) = @_;
+  my ($TaskMission, $VMType) = @_;
 
   my $Builds = $TaskMission->{Builds};
   my $Description =
-      ($Builds->{exe32} and $Builds->{exe64}) ? "32 & 64 bit executable" :
-      $Builds->{exe32} ? "32 bit executable" :
-      $Builds->{exe64} ? "64 bit executable" :
+      ($Builds->{exe32} and $Builds->{exe64}) ? "32 & 64 bit" :
+      $Builds->{exe32} ? "32 bit" :
+      $Builds->{exe64} ? "64 bit" :
       ($Builds->{wow64} and ($Builds->{win32} or $Builds->{wow32})) ? "32 & 64 bit" :
       $Builds->{win32} ? "32 bit" :
       $Builds->{wow32} ? "32 bit WoW" :
       "64 bit WoW";
 
-  my $Lang;
-  foreach my $Mission (@{$TaskMission->{Missions}})
+  if ($Builds->{exe32} or $Builds->{exe64})
   {
-    next if (!$Mission->{lang});
-    if (defined $Lang)
-    {
-      $Description .= " + Locales";
-      $Lang = undef;
-      last;
-    }
-    $Lang = $Mission->{lang};
+    $Description .= ($VMType eq "build") ? " build" : " executable";
   }
-  $Description .= " ". LocaleName($Lang) if ($Lang);
+  else
+  {
+    my $Lang;
+    foreach my $Mission (@{$TaskMission->{Missions}})
+    {
+      next if (!$Mission->{lang});
+      if (defined $Lang)
+      {
+        $Description .= " + Locales";
+        $Lang = undef;
+        last;
+      }
+      $Lang = $Mission->{lang};
+    }
+    $Description .= " ". LocaleName($Lang) if ($Lang);
+    $Description .= " tests";
+  }
+
   return $Description;
 }
 
