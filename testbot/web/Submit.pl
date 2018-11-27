@@ -709,13 +709,6 @@ sub OnPage2Next($)
   return 1;
 }
 
-sub OnNext($)
-{
-  my ($self) = @_;
-
-  return $self->{Page} == 2 ? $self->OnPage2Next() : $self->OnPage1Next();
-}
-
 sub OnPage2Prev($)
 {
   my ($self) = @_;
@@ -741,12 +734,6 @@ sub OnPage3Prev($)
   return 1;
 }
 
-sub OnPrev($)
-{
-  my ($self) = @_;
-
-  return $self->{Page} == 3 ? $self->OnPage3Prev() : $self->OnPage2Prev();
-}
 
 sub SubmitJob($$$)
 {
@@ -1018,11 +1005,11 @@ sub OnAction($$)
 
   if ($Action eq "Next >")
   {
-    return $self->OnNext();
+    return $self->{Page} == 2 ? $self->OnPage2Next() : $self->OnPage1Next();
   }
   elsif ($Action eq "< Prev")
   {
-    return $self->OnPrev();
+    return $self->{Page} == 3 ? $self->OnPage3Prev() : $self->OnPage2Prev();
   }
   elsif ($Action eq "Submit")
   {
