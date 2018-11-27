@@ -139,11 +139,11 @@ sub ApplyPatch($$)
 
   if ($Impacts->{Autoconf})
   {
-    InfoMsg "\nRunning autoconf\n";
-    system("cd '$DataDir/$Dir' && set -x && autoconf");
+    InfoMsg "\nRunning autoreconf\n";
+    system("cd '$DataDir/$Dir' && set -x && autoreconf");
     if ($? != 0)
     {
-      LogMsg "Autoconf failed\n";
+      LogMsg "autoreconf failed\n";
       return undef;
     }
   }
