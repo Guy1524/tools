@@ -48,6 +48,9 @@ sub _initialize($$$)
   my ($self, $Request, $RequiredRole) = @_;
 
   $self->{Page} = $self->GetParam("Page") || 1;
+  # Page is a hidden parameter so fix it instead of issuing an error
+  $self->{Page} = 1 if ($self->{Page} !~ /^[1-4]$/);
+  $self->{LastPage} = $self->{Page};
 
   my @PropertyDescriptors1 = (
     CreateBasicPropertyDescriptor("Remarks", "Remarks", !1, !1, "A", 128),
@@ -132,8 +135,7 @@ sub GenerateFields($)
 {
   my ($self) = @_;
 
-  print "<div><input type='hidden' name='Page' value='", $self->{Page},
-        "'></div>\n";
+  print "<div><input type='hidden' name='Page' value='$self->{Page}'></div>\n";
   if ($self->{Page} == 1)
   {
     print "<div class='ItemProperty'><label>File</label>",
@@ -215,7 +217,7 @@ sub GenerateFields($)
     }
     if ($self->{Page} == 2)
     {
-      if ($self->GetParam("Page") == 3)
+      if ($self->{LastPage} == 3)
       {
         my $VMs = CreateVMs();
         # VMs that are only visible with ShowAll
@@ -274,7 +276,7 @@ sub GenerateFields($)
           $Checked = undef;
         }
         if ($Checked and
-            ($self->GetParam("Page") == 1 || $self->GetParam($FieldName)))
+            ($self->{LastPage} == 1 || $self->GetParam($FieldName)))
         {
           print " checked='checked'";
         }
@@ -454,7 +456,7 @@ sub Validate($)
 {
   my ($self) = @_;
 
-  if ($self->{Page} == 2 && $self->GetParam("Page") == 2)
+  if ($self->{Page} == 2 && $self->{LastPage} == 2)
   {
     my $VMSelected = !1;
     my $VMs = CreateVMs();
@@ -474,7 +476,7 @@ sub Validate($)
       return !1;
     }
   }
-  elsif ($self->{Page} == 3 && $self->GetParam("Page") == 3)
+  elsif ($self->{Page} == 3 && $self->{LastPage} == 3)
   {
     if (($self->GetParam("FileType") eq "patch" &&
          $self->GetParam("TestExecutable") !~ m/^[\w_.]+_test\.exe$/) ||
