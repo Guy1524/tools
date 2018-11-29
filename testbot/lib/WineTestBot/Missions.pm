@@ -125,14 +125,16 @@ sub GetTaskMissionDescription($$)
     my $Lang;
     foreach my $Mission (@{$TaskMission->{Missions}})
     {
-      next if (!$Mission->{lang});
-      if (defined $Lang)
+      if (!defined $Lang)
+      {
+        $Lang = $Mission->{lang} || "";
+      }
+      elsif ($Lang ne ($Mission->{lang} || ""))
       {
         $Description .= " + Locales";
         $Lang = undef;
         last;
       }
-      $Lang = $Mission->{lang};
     }
     $Description .= " ". LocaleName($Lang) if ($Lang);
     $Description .= " tests";
