@@ -336,22 +336,6 @@ if ($Step->FileType ne "patch")
 
 
 #
-# Figure out what to build
-#
-
-my (%Missions, %TestExes);
-foreach my $TestStep (@{$Job->Steps->GetItems()})
-{
-  if (($TestStep->PreviousNo || 0) == $Step->No and
-      $TestStep->FileType =~ /^exe/)
-  {
-    $Missions{$TestStep->FileType} = 1;
-    $TestExes{$TestStep->FileName} = $TestStep->FileType;
-  }
-}
-
-
-#
 # Run the build
 #
 
@@ -364,7 +348,7 @@ if (!$TA->SendFile($FileName, "staging/patch.diff", 0))
 }
 my $Script = "#!/bin/sh\n".
              "( set -x\n".
-             "  ../bin/build/Build.pl patch.diff ". join(":", sort keys %Missions) ."\n".
+             "  ../bin/build/Build.pl patch.diff ". $Task->Missions ."\n".
              ") >Build.log 2>&1\n";
 Debug(Elapsed($Start), " Sending the script: [$Script]\n");
 if (!$TA->SendFileFromString($Script, "task", $TestAgent::SENDFILE_EXE))
@@ -445,6 +429,16 @@ FatalTAError(undef, $TAError) if (defined $TAError);
 #
 # Grab the executables for the next steps
 #
+
+my %TestExes;
+foreach my $TestStep (@{$Job->Steps->GetItems()})
+{
+  if (($TestStep->PreviousNo || 0) == $Step->No and
+      $TestStep->FileType =~ /^exe/)
+  {
+    $TestExes{$TestStep->FileName} = $TestStep->FileType;
+  }
+}
 
 my $Impacts = GetPatchImpacts($FileName);
 my $StepDir = $Step->CreateDir();
