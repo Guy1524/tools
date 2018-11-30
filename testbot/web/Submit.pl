@@ -456,7 +456,7 @@ sub Validate($)
 {
   my ($self) = @_;
 
-  if ($self->{Page} == 2 && $self->{LastPage} == 2)
+  if ($self->{Page} == 2)
   {
     my $VMSelected = !1;
     my $VMs = CreateVMs();
@@ -476,7 +476,7 @@ sub Validate($)
       return !1;
     }
   }
-  elsif ($self->{Page} == 3 && $self->{LastPage} == 3)
+  elsif ($self->{Page} == 3)
   {
     if (($self->GetParam("FileType") eq "patch" &&
          $self->GetParam("TestExecutable") !~ m/^[\w_.]+_test\.exe$/) ||
