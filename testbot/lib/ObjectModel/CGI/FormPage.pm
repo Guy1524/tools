@@ -189,12 +189,8 @@ sub GetDisplayValue($$)
 {
   my ($self, $PropertyDescriptor) = @_;
 
-  my $Value;
-  if (defined($self->GetParam($PropertyDescriptor->GetName())))
-  {
-    $Value = $self->GetParam($PropertyDescriptor->GetName());
-  }
-  else
+  my $Value = $self->GetParam($PropertyDescriptor->GetName());
+  if (!defined $Value)
   {
     $Value = $self->GetPropertyValue($PropertyDescriptor);
   }
