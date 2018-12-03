@@ -45,6 +45,13 @@ sub CallGenerateFormEnd($)
   $self->{EnclosingPage}->GenerateFormEnd($self);
 }
 
+sub CallGenerateHeaderCell($$)
+{
+  my ($self, $PropertyDescriptor) = @_;
+
+  return $self->{EnclosingPage}->GenerateHeaderCell($self, $PropertyDescriptor);
+}
+
 sub CallGenerateHeaderRow($$$)
 {
   my ($self, $PropertyDescriptors, $Actions) = @_;

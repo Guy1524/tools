@@ -238,12 +238,25 @@ sub GenerateHeaderRow($$$)
   {
     if ($self->CallDisplayProperty($PropertyDescriptor))
     {
-      print "<th>", $self->escapeHTML($PropertyDescriptor->GetDisplayName()),
-            "</th>\n";
+      $self->CallGenerateHeaderCell($PropertyDescriptor);
     }
   }
 
   print "</tr>\n";
+}
+
+sub CallGenerateHeaderCell($$)
+{
+  my ($self, $PropertyDescriptor) = @_;
+
+  return $self->GenerateHeaderCell($PropertyDescriptor);
+}
+
+sub GenerateHeaderCell($$)
+{
+  my ($self, $PropertyDescriptor) = @_;
+  print "<th>", $self->escapeHTML($PropertyDescriptor->GetDisplayName()),
+        "</th>\n";
 }
 
 sub CallGenerateDataRow($$$$$$)

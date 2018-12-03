@@ -94,6 +94,13 @@ sub GenerateFormEnd($$)
   $CollectionBlock->GenerateFormEnd();
 }
 
+sub GenerateHeaderCell($$$)
+{
+  my ($self, $CollectionBlock, $PropertyDescriptor) = @_;
+
+  $CollectionBlock->GenerateHeaderCell($PropertyDescriptor);
+}
+
 sub GenerateHeaderRow($$$$)
 {
   my ($self, $CollectionBlock, $PropertyDescriptors, $Actions) = @_;
