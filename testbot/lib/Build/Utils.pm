@@ -348,10 +348,26 @@ sub RunWine($$$)
 {
   my ($Mission, $Cmd, $CmdArgs) = @_;
 
-  my $Magic = `cd '$DataDir/wine-$Mission->{Build}' && file $Cmd`;
-  my $Wine = ($Magic =~ /ELF 64/ ? "./wine64" : "./wine");
-  return system("cd '$DataDir/wine-$Mission->{Build}' && set -x && ".
-                "time $Wine $Cmd $CmdArgs");
+  my $WineDir = "$DataDir/wine-$Mission->{Build}";
+  $Cmd = "$WineDir/$Cmd" if ($Cmd =~ /\.exe\.so$/);
+
+  my $CurDir = "$ENV{WINEPREFIX}/dosdevices";
+  if (!-d $CurDir)
+  {
+    $CurDir = ".";
+  }
+  else
+  {
+    my $Dir = $Mission->{dir} || "";
+    # We cannot put colons in missions so restore the drive letter
+    $Dir = "$CurDir/c:/$Dir" if ($Dir !~ s~^([a-z])/~$CurDir/$1:/~);
+    $CurDir = -d $Dir ? $Dir : "$ENV{WINEPREFIX}/dosdevices/c:";
+  }
+
+  my $Magic = `file '$Cmd'`;
+  my $Wine = ($Magic =~ /ELF 64/ ? "$WineDir/wine64" : "$WineDir/wine");
+  return system("set -x && cd '$CurDir' && ".
+                "time '$Wine' '$Cmd' $CmdArgs");
 }
 
 
@@ -367,7 +383,7 @@ sub CreateWinePrefix($;$)
   rmtree($ENV{WINEPREFIX});
 
   # Crash dialogs cause delays so disable them
-  if (RunWine($Mission, "./programs/reg/reg.exe.so", "ADD HKCU\\\\Software\\\\Wine\\\\WineDbg /v ShowCrashDialog /t REG_DWORD /d 0"))
+  if (RunWine($Mission, "programs/reg/reg.exe.so", "ADD HKCU\\\\Software\\\\Wine\\\\WineDbg /v ShowCrashDialog /t REG_DWORD /d 0"))
   {
     return "Failed to disable the crash dialogs: $!";
   }
@@ -376,7 +392,8 @@ sub CreateWinePrefix($;$)
   {
     # Ensure the WinePrefix has been fully created and the registry files
     # saved before returning.
-    system("cd '$DataDir/wine-$Mission->{Build}' && ./server/wineserver -w");
+    my $WineDir = "$DataDir/wine-$Mission->{Build}";
+    system("'$WineDir/server/wineserver' -w");
   }
 
   return undef;

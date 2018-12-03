@@ -80,6 +80,7 @@ sub GenerateFooter($)
   print "<p>On Wine VMs:<br>\n";
   print "The <i>test</i> option can be set to <i>build</i> to only test building, <i>test</i> to only rerun patched tests, <i>module</i> to rerun all of a patched dll or program's tests, or <i>all</i> to always rerun all the tests.<br>\n";
   print "The <i>lang</i> option can be set to run the tests in the specified \$LANG locale. The default is en_US (<i>.UTF-8</i> can be omitted).<br>\n";
+  print "The <i>dir</i> option can be set to specify the directory in which to run the tests. A path starting with a single letter followed by a slash specifies the drive, for instance 'c/' for 'c:' (the default).<br>\n";
   print "If set, the <i>nosubmit</i> option specifies that the WineTest results should not be published online.</p>\n";
   print "</td></tr></tbody>\n";
   print "</table></div>\n";

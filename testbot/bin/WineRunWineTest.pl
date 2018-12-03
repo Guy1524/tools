@@ -439,7 +439,7 @@ $Script .= "  ../bin/build/WineTest.pl ";
 if ($Step->Type eq "suite")
 {
   my $BaseTag = BuildTag($VM->Name);
-  $Script .= "--winetest ". $Task->Missions ." $BaseTag ";
+  $Script .= "--winetest ". ShQuote($Task->Missions) ." $BaseTag ";
   if (defined $WebHostName)
   {
     my $StepTask = 100 * $StepNo + $TaskNo;
@@ -455,11 +455,11 @@ if ($Step->Type eq "suite")
 }
 elsif ($Step->FileType eq "patch")
 {
-  $Script .= "--testpatch ". $Task->Missions ." patch.diff";
+  $Script .= "--testpatch ". ShQuote($Task->Missions) ." patch.diff";
 }
 else
 {
-  $Script .= join(" ", "--testexe", $Task->Missions, $FileName, $Task->CmdLineArg);
+  $Script .= join(" ", "--testexe", ShQuote($Task->Missions), $FileName, $Task->CmdLineArg);
 }
 $Script .= "\n) >Task.log 2>&1\n";
 Debug(Elapsed($Start), " Sending the script: [$Script]\n");

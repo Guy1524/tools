@@ -47,6 +47,7 @@ use WineTestBot::VMs;
 use WineTestBot::Log;
 use WineTestBot::LogUtils;
 use WineTestBot::Missions;
+use WineTestBot::Utils;
 use WineTestBot::Engine::Notify;
 
 
@@ -346,7 +347,7 @@ my $Script = $VM->Type eq "wine" ? "WineReconfig.pl" : "Reconfig.pl";
 $Script = "#!/bin/sh\n".
           "( set -x\n".
           "  git pull &&\n".
-          "  ../bin/build/$Script ". MergeMissionStatementTasks($Task->Missions) ."\n".
+          "  ../bin/build/$Script ". ShQuote(MergeMissionStatementTasks($Task->Missions)) ."\n".
           ") >Reconfig.log 2>&1\n";
 my $TA = $VM->GetAgent();
 Debug(Elapsed($Start), " Sending the script: [$Script]\n");
