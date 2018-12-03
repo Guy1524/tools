@@ -33,8 +33,6 @@ our @EXPORT = qw(MakeSecureURL SecureConnection GenerateRandomString
                  BuildTag SanitizeTag LocaleName ShQuote ShArgv2Cmd);
 
 use Fcntl;
-use Locale::Language;
-use Locale::Country;
 
 use WineTestBot::Config;
 
@@ -106,6 +104,68 @@ sub BuildEMailRecipient($$)
   return $Recipient;
 }
 
+my $_LCLang;
+my $_LocaleLang;
+sub GetLanguageName($)
+{
+  my ($Code) = @_;
+  local $@;
+
+  return "Konkani" if ($Code eq "kok");
+
+  if (!defined $_LCLang)
+  {
+    eval
+    {
+      require Locale::Codes;
+      $_LCLang = new Locale::Codes 'language';
+      $_LCLang->show_errors(0);
+    };
+    if (!$_LCLang)
+    {
+      $_LCLang = 0;
+      $_LocaleLang = eval { require Locale::Language };
+    }
+  }
+  my $Name = $_LCLang ? ($_LCLang->code2name($Code) || $Code) :
+             $_LocaleLang ? eval { Locale::Language::code2language($Code) || $Code } :
+             $Code;
+  $Name =~ s/ \(.*$//;
+  return $Name;
+}
+
+my $_LCCountry;
+my $_LocaleCountry;
+sub GetCountryName($)
+{
+  my ($Code) = @_;
+  local $@;
+
+  return "USA" if ($Code eq "US");
+  return "Great Britain" if ($Code eq "GB");
+
+  if (!defined $_LCCountry)
+  {
+    eval
+    {
+      require Locale::Codes;
+      $_LCCountry = new Locale::Codes 'country';
+      $_LCCountry->show_errors(0);
+    };
+    if (!$_LCCountry)
+    {
+      $_LCCountry = 0;
+      $_LocaleCountry = eval { require Locale::Country };
+    }
+  }
+  my $Name =  $_LCCountry ? ($_LCCountry->code2name($Code) || $Code) :
+              $_LocaleCountry ? eval { Locale::Country::code2country($Code) || $Code } :
+              $Code;
+  $Name =~ s/(?:, | \().*$//;
+  return $Name;
+}
+
+
 sub LocaleName($)
 {
   my ($Locale) = @_;
@@ -114,18 +174,8 @@ sub LocaleName($)
   if ($Locale =~ /^([a-z]+)_([A-Z]+)(?:\.[A-Z0-9-]+)?(?:@([a-z]+))?$/)
   {
     my ($Lang, $Country, $Modifier) = ($1, $2, $3);
-    my $Name = $Lang eq "kok" ? "Konkani" :
-               (code2language($Lang) || $Lang);
-    $Name =~ s/ \(.*$//;
-
-    if (uc($Lang) ne $Country)
-    {
-      my $CountryName = $Country eq "US" ? "USA" :
-                        $Country eq "GB" ? "Great Britain" :
-                        (code2country($Country) || $Country);
-      $CountryName =~ s/(?:, | \().*$//;
-      $Name .= ":$CountryName";
-    }
+    my $Name = GetLanguageName($Lang);
+    $Name .= ":". GetCountryName($Country) if (uc($Lang) ne $Country);
 
     $Name .= " ($Modifier)" if ($Modifier);
     return $Name;
