@@ -26,12 +26,14 @@ use ObjectModel::CGI::CollectionPage;
 our @ISA = qw(ObjectModel::CGI::CollectionPage);
 
 use File::Basename;
+use POSIX qw(strftime);
 use URI::Escape;
 
 use WineTestBot::Config;
 use WineTestBot::Jobs;
 use WineTestBot::LogUtils;
 use WineTestBot::StepsTasks;
+use WineTestBot::Utils;
 use WineTestBot::Engine::Notify;
 
 
@@ -83,6 +85,21 @@ sub DisplayProperty($$$)
          $PropertyName eq "Timeout" || $PropertyName eq "FileName" ||
          $PropertyName eq "CmdLineArg" || $PropertyName eq "Started" ||
          $PropertyName eq "Ended" || $PropertyName eq "TestFailures";
+}
+
+sub GenerateHeaderCell($$$)
+{
+  my ($self, $CollectionBlock, $PropertyDescriptor) = @_;
+
+  my $PropertyName = $PropertyDescriptor->GetName();
+  if ($PropertyName eq "Ended")
+  {
+    print "<th><a class='title' title='Execution ended'>Time</a></th>\n";
+  }
+  else
+  {
+    return $self->SUPER::GenerateHeaderCell($CollectionBlock, $PropertyDescriptor);
+  }
 }
 
 sub GetItemActions($$)
@@ -570,6 +587,24 @@ sub GenerateDataCell($$$$$)
     else
     {
       $self->SUPER::GenerateDataCell($CollectionBlock, $StepTask, $PropertyDescriptor, $DetailsPage);
+    }
+  }
+  elsif ($PropertyName eq "Ended")
+  {
+    if (defined $StepTask->Ended)
+    {
+      my $Duration = $StepTask->Ended - $StepTask->Started;
+      my $TagId = "E". $StepTask->Id;
+      print "<td><a id='$TagId' class='title' title='",
+            strftime("%Y/%m/%d %H:%M:%S", localtime($StepTask->Ended)),
+            "'>", DurationToString($Duration), "</a>\n";
+      print "<script type='text/javascript'><!-- ShowDateTime(",
+            $StepTask->Ended, ",'$TagId'); --></script>\n";
+      print "</td>\n";
+    }
+    else
+    {
+      print "<td>&nbsp;</td>\n";
     }
   }
   else

@@ -81,12 +81,21 @@ function Pad2(n)
 {
     return n < 10 ? '0' + n : n;
 }
-function ShowDateTime(Sec1970)
+
+function ShowDateTime(Sec1970, Id, Attr)
 {
   var Dt = new Date(Sec1970 * 1000);
-  document.write(Dt.getFullYear() + '/' + Pad2(Dt.getMonth() + 1) + '/' +
-                 Pad2(Dt.getDate()) + ' ' + Pad2(Dt.getHours()) + ':' +
-                 Pad2(Dt.getMinutes()) + ':' + Pad2(Dt.getSeconds()));
+  var Pretty = Dt.getFullYear() + '/' + Pad2(Dt.getMonth() + 1) + '/' +
+               Pad2(Dt.getDate()) + ' ' + Pad2(Dt.getHours()) + ':' +
+               Pad2(Dt.getMinutes()) + ':' + Pad2(Dt.getSeconds())
+  if (Id != null)
+  {
+    document.getElementById(Id).setAttribute(Attr || "title", Pretty);
+  }
+  else
+  {
+    document.write(Pretty);
+  }
 }
 //--></script>
 EOF
@@ -450,7 +459,7 @@ sub GetDisplayValue($$$)
     {
       if (defined($Value))
       {
-$Value = 
+        $Value =
          "<noscript><div>" .
          strftime("%Y/%m/%d %H:%M:%S", localtime($Value)) . "</div></noscript>\n" .
 "<script type='text/javascript'><!--\n" .

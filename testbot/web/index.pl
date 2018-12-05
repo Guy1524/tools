@@ -24,10 +24,12 @@ package JobStatusBlock;
 use ObjectModel::CGI::CollectionBlock;
 our @ISA = qw(ObjectModel::CGI::CollectionBlock);
 
+use POSIX qw(strftime);
 use URI::Escape;
 
 use WineTestBot::Branches;
 use WineTestBot::Users;
+use WineTestBot::Utils;
 
 
 
@@ -64,6 +66,21 @@ sub DisplayProperty($$)
   }
 
   return $self->SUPER::DisplayProperty($PropertyDescriptor);
+}
+
+sub GenerateHeaderCell($$$)
+{
+  my ($self, $PropertyDescriptor) = @_;
+
+  my $PropertyName = $PropertyDescriptor->GetName()
+  if ($PropertyName eq "Ended")
+  {
+    print "<th><a class='title' title='Ended'>Time</a></th>\n";
+  }
+  else
+  {
+    return $self->SUPER::GenerateHeaderCell($PropertyDescriptor);
+  }
 }
 
 sub GetDisplayValue($$$)
@@ -134,6 +151,24 @@ sub GenerateDataCell($$$$)
       print $HTMLStatus;
     }
     print "</a></td>\n";
+  }
+  elsif ($PropertyName eq "Ended")
+  {
+    if (defined $Item->Ended)
+    {
+      my $Duration = $Item->Ended - $Item->Submitted;
+      my $TagId = "E". $Item->Id;
+      print "<td><a id='$TagId' class='title' title='",
+            strftime("%Y/%m/%d %H:%M:%S", localtime($Item->Ended)),
+            "'>", DurationToString($Duration), "</a>\n";
+      print "<script type='text/javascript'><!-- ShowDateTime(",
+            $Item->Ended, ",'$TagId'); --></script>\n";
+      print "</td>\n";
+    }
+    else
+    {
+      print "<td>&nbsp;</td>\n";
+    }
   }
   else
   {
