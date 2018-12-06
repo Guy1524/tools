@@ -791,10 +791,12 @@ sub _SendUInt64($$$)
 sub _SendString($$$;$)
 {
   my ($self, $Name, $Str, $Type) = @_;
+  $Type ||= 's';
+  debug("  SendString('$Name', '$Str', '$Type')\n");
 
-  debug("  SendString('$Name', '$Str')\n");
-  $Str .= "\0";
-  return $self->_SendEntryHeader($Name, $Type || 's', length($Str)) &&
+  # Add a trailing '\0' to strings to match the C convention.
+  $Str .= "\0" if ($Type eq 's');
+  return $self->_SendEntryHeader($Name, $Type, length($Str)) &&
          $self->_SendRawData($Name, $Str);
 }
 
