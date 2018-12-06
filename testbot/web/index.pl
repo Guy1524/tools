@@ -72,7 +72,7 @@ sub GenerateHeaderCell($$$)
 {
   my ($self, $PropertyDescriptor) = @_;
 
-  my $PropertyName = $PropertyDescriptor->GetName()
+  my $PropertyName = $PropertyDescriptor->GetName();
   if ($PropertyName eq "Ended")
   {
     print "<th><a class='title' title='Ended'>Time</a></th>\n";
