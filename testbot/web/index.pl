@@ -73,7 +73,11 @@ sub GenerateHeaderCell($$$)
   my ($self, $PropertyDescriptor) = @_;
 
   my $PropertyName = $PropertyDescriptor->GetName();
-  if ($PropertyName eq "Ended")
+  if ($PropertyName eq "Priority")
+  {
+    print "<th><a class='title' title='Higher values indicate a lower priority'>Nice</a></th>\n";
+  }
+  elsif ($PropertyName eq "Ended")
   {
     print "<th><a class='title' title='Ended'>Time</a></th>\n";
   }
