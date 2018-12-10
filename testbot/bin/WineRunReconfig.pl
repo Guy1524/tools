@@ -458,23 +458,28 @@ FatalTAError(undef, $TAError) if (defined $TAError);
 
 if ($NewStatus eq 'completed')
 {
-  Debug(Elapsed($Start), " Deleting the old ", $VM->IdleSnapshot, " snapshot\n");
-  $ErrMessage = $VM->GetDomain()->RemoveSnapshot();
-  if (defined $ErrMessage)
+  my $Domain = $VM->GetDomain();
+  my $IdleSnapshot = $VM->IdleSnapshot;
+  if ($Domain->HasSnapshot($IdleSnapshot))
   {
-    # It's not clear if the snapshot is still usable. Rather than try to figure
-    # it out now, let the next task deal with it.
-    FatalError("Could not remove the ". $VM->IdleSnapshot ." snapshot: $ErrMessage\n", "retry");
+    Debug(Elapsed($Start), " Deleting the old $IdleSnapshot snapshot\n");
+    $ErrMessage = $Domain->RemoveSnapshot();
+    if (defined $ErrMessage)
+    {
+      # It's not clear if the snapshot is still usable. Rather than try to
+      # figure it out now, let the next task deal with it.
+      FatalError("Could not remove the $IdleSnapshot snapshot: $ErrMessage\n", "retry");
+    }
   }
 
-  Debug(Elapsed($Start), " Recreating the ", $VM->IdleSnapshot, " snapshot\n");
-  $ErrMessage = $VM->GetDomain()->CreateSnapshot();
+  Debug(Elapsed($Start), " Recreating the $IdleSnapshot snapshot\n");
+  $ErrMessage = $Domain->CreateSnapshot();
   if (defined $ErrMessage)
   {
     # Without the snapshot the VM is not usable anymore but FatalError() will
     # just mark it as 'dirty'. It's only the next time it is used that the
     # problem will be noticed and that it will be taken offline.
-    FatalError("Could not recreate the ". $VM->IdleSnapshot ." snapshot: $ErrMessage\n");
+    FatalError("Could not recreate the $IdleSnapshot snapshot: $ErrMessage\n");
   }
 }
 
