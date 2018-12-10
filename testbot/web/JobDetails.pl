@@ -598,8 +598,9 @@ sub GenerateDataCell($$$$$)
       print "<td><a id='$TagId' class='title' title='",
             strftime("%Y/%m/%d %H:%M:%S", localtime($StepTask->Ended)),
             "'>", DurationToString($Duration), "</a>\n";
-      print "<script type='text/javascript'><!-- ShowDateTime(",
-            $StepTask->Ended, ",'$TagId'); --></script>\n";
+      print "<script type='text/javascript'><!--\n";
+      print "  ShowDateTime(", $StepTask->Ended, ",'$TagId');\n";
+      print "--></script>\n";
       print "</td>\n";
     }
     else

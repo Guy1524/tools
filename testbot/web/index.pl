@@ -161,8 +161,9 @@ sub GenerateDataCell($$$$)
       print "<td><a id='$TagId' class='title' title='",
             strftime("%Y/%m/%d %H:%M:%S", localtime($Item->Ended)),
             "'>", DurationToString($Duration), "</a>\n";
-      print "<script type='text/javascript'><!-- ShowDateTime(",
-            $Item->Ended, ",'$TagId'); --></script>\n";
+      print "<script type='text/javascript'><!--\n";
+      print "  ShowDateTime(", $Item->Ended, ",'$TagId');\n";
+      print "--></script>\n";
       print "</td>\n";
     }
     else
