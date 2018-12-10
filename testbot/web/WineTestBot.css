@@ -290,6 +290,18 @@ h2
   font-style: italic;
 }
 
+.MissionHeader
+{
+  font-size: small;
+  font-style: italic;
+}
+
+.Mission
+{
+  font-size: small;
+  font-style: italic;
+  color: navy;
+}
 
 .Screenshot
 {

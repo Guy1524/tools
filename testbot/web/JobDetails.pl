@@ -32,6 +32,7 @@ use URI::Escape;
 use WineTestBot::Config;
 use WineTestBot::Jobs;
 use WineTestBot::LogUtils;
+use WineTestBot::Missions;
 use WineTestBot::StepsTasks;
 use WineTestBot::Utils;
 use WineTestBot::Engine::Notify;
@@ -92,7 +93,11 @@ sub GenerateHeaderCell($$$)
   my ($self, $CollectionBlock, $PropertyDescriptor) = @_;
 
   my $PropertyName = $PropertyDescriptor->GetName();
-  if ($PropertyName eq "Ended")
+  if ($PropertyName eq "CmdLineArg")
+  {
+    print "<th>Arguments / <span class='MissionHeader'>Missions</span></th>\n";
+  }
+  elsif ($PropertyName eq "Ended")
   {
     print "<th><a class='title' title='Execution ended'>Time</a></th>\n";
   }
@@ -588,6 +593,24 @@ sub GenerateDataCell($$$$$)
     {
       $self->SUPER::GenerateDataCell($CollectionBlock, $StepTask, $PropertyDescriptor, $DetailsPage);
     }
+  }
+  elsif ($PropertyName eq "CmdLineArg")
+  {
+    my $Args = $self->escapeHTML($StepTask->CmdLineArg);
+    if ($Args eq "" or $StepTask->VM->Type eq "wine")
+    {
+      $Args .= "<br>" if ($Args ne "");
+      my ($ErrMessage, $Missions) = ParseMissionStatement($StepTask->Missions);
+      if (defined $ErrMessage)
+      {
+        $Args .= "<span class='Mission'>$ErrMessage</span>";
+      }
+      else
+      {
+        $Args .= "<span class='Mission'>". $self->escapeHTML(GetTaskMissionDescription($Missions->[0], $StepTask->VM->Type)) ."</span>";
+      }
+    }
+    print "<td>$Args</td>\n";
   }
   elsif ($PropertyName eq "Ended")
   {
