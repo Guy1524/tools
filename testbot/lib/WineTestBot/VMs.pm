@@ -748,12 +748,14 @@ sub SortKeysBySortOrder($$)
   foreach my $Key (@$Keys)
   {
     my $Item = $self->GetItem($Key);
-    $SortOrder{$Key} = [$RoleOrders{$Item->Role} || 0, $Item->SortOrder];
+    $SortOrder{$Key} = [$RoleOrders{$Item->Role} || 0, $Item->SortOrder, $Item->Name];
   }
 
   my @SortedKeys = sort {
     my ($soa, $sob) = ($SortOrder{$a}, $SortOrder{$b});
-    return @$soa[0] <=> @$sob[0] || @$soa[1] <=> @$sob[1];
+    return @$soa[0] <=> @$sob[0] ||
+           @$soa[1] <=> @$sob[1] ||
+           @$soa[2] cmp @$sob[2];
   } @$Keys;
   return \@SortedKeys;
 }
