@@ -174,6 +174,14 @@ sub _GetSnapshot($$)
   return (_eval_err() || "Snapshot '$SnapshotName' not found", undef, undef);
 }
 
+sub HasSnapshot($$)
+{
+  my ($self, $SnapshotName) = @_;
+
+  my ($ErrMessage, $Domain, $Snapshot) = $self->_GetSnapshot($SnapshotName);
+  return $ErrMessage ? 0 : 1;
+}
+
 sub GetSnapshotName($)
 {
   my ($self) = @_;
