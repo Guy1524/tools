@@ -1,0 +1,857 @@
+#!/usr/bin/perl -w
+# -*- Mode: Perl; perl-indent-level: 2; indent-tabs-mode: nil -*-
+#
+# Sets the locale of the specified Windows machine and, optionally,
+# updates or creates a new snapshot of the TestBot VM for it.
+#
+# Copyright 2018 Francois Gouget
+#
+# This library is free software; you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public
+# License as published by the Free Software Foundation; either
+# version 2.1 of the License, or (at your option) any later version.
+#
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with this library; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
+
+use strict;
+
+sub BEGIN
+{
+  if ($0 !~ m=^/=)
+  {
+    # Turn $0 into an absolute path so it can safely be used in @INC
+    require Cwd;
+    $0 = Cwd::cwd() . "/$0";
+  }
+  if ($0 =~ m=^(/.*)/[^/]+/[^/]+$=)
+  {
+    $::RootDir = $1;
+    unshift @INC, "$::RootDir/lib";
+  }
+}
+
+use WineTestBot::Config;
+use WineTestBot::Log;
+use WineTestBot::TestAgent;
+use WineTestBot::VMs;
+use WineTestBot::Utils;
+
+
+#
+# Error handling and logging
+#
+
+my $name0 = $0;
+$name0 =~ s+^.*/++;
+
+
+sub Warning(@)
+{
+  print STDERR "$name0:warning: ", @_;
+}
+
+sub Error(@)
+{
+  print STDERR "$name0:error: ", @_;
+}
+
+my $DryRun;
+my $Debug;
+sub Debug(@)
+{
+  print STDERR @_ if ($Debug or $DryRun);
+}
+
+sub Run(@)
+{
+  Debug("Running '", join("' '", @_), "'\n");
+  return 0 if ($DryRun);
+
+  my $Rc = system(@_);
+  Debug("-> exit code $Rc\n");
+  return $Rc;
+}
+
+my $Start = Time();
+sub FatalError(@)
+{
+  Error( @_);
+  Debug(Elapsed($Start), " Aborting\n");
+  exit(1);
+}
+
+
+#
+# Country and keyboard tables
+#
+
+my %Countries = (
+  "AF" =>   3, # Afganistan
+  "AL" =>   6, # Albania
+  "AM" =>   7, # Armenia
+  "AZ" =>   5, # Azerbaijan
+  "BA" =>  25, # Bosnia and Herzegovina
+  "BE" =>  21, # Belgium
+  "BG" =>  35, # Bulgaria
+  "BN" =>  37, # Brunei Darussalam
+  "BR" =>  32, # Brazil
+  "BY" =>  29, # Belarus
+  "CH" => 223, # Switzerland
+  "CN" =>  45, # China
+  "CS" => 271, # Serbia
+  "CZ" =>  75, # Czech Republic
+  "DE" =>  94, # Germany
+  "DK" =>  61, # Denmark
+  "EE" =>  70, # Estonia
+  "EG" =>  67, # Egypt
+  "ES" => 217, # Spain
+  "ET" =>  73, # Ethiopia
+  "FI" =>  77, # Finland
+  "FO" =>  81, # Faroe Islands
+  "FR" =>  84, # France
+  "GB" => 242, # Great-Britain
+  "GR" =>  98, # Greece
+  "HR" => 108, # Croatia
+  "HU" => 109, # Hungary
+  "ID" => 111, # Indonesia
+  "IE" =>  68, # Ireland
+  "IL" => 117, # Israel
+  "IN" => 113, # India
+  "IR" => 116, # Iran
+  "IS" => 110, # Iceland
+  "IT" => 118, # Italy
+  "JP" => 122, # Japan
+  "KE" => 129, # Kenya
+  "KG" => 130, # Kyrgyzstan
+  "KR" => 134, # Korea
+  "KZ" => 137, # Kazakhstan
+  "LT" => 141, # Lithuania
+  "LV" => 140, # Latvia
+  "MA" => 159, # Morocco
+  "MK" => 16618, # Macedonia
+  "MN" => 154, # Mongolia
+  "MV" => 165, # Maldives
+  "MY" => 167, # Malaysia
+  "NL" => 176, # Netherlands
+  "NO" => 177, # Norway
+  "PK" => 190, # Pakistan
+  "PL" => 191, # Poland
+  "PT" => 193, # Portugal
+  "RO" => 200, # Romania
+  "RU" => 203, # Russia
+  "SA" => 205, # Saudi Arabia
+  "SE" => 221, # Sweden
+  "SI" => 212, # Slovenia
+  "SK" => 143, # Slovakia
+  "SN" => 210, # Senegal
+  "TH" => 227, # Thailand
+  "TR" => 235, # Turkey
+  "TW" => 237, # Taiwan
+  "UA" => 241, # Ukraine
+  "US" => 244, # USA
+  "UZ" => 247, # Uzbekistan
+  "VN" => 251, # Vietnam
+  "ZA" => 209, # South Africa
+);
+
+my %Keyboards = (
+  "af-ZA" => ["0436:00000409"], # Afrikaans - South Africa
+  "ar-EG" => ["0c01:00000401"], # Arabic - Egypt
+  "ar-MA" => ["1801:00020401", "040c:0000040c"], # Arabic - Morocco
+  "be-BY" => ["0423:00000423", "0419:00000419"], # Belarusian - Belarus
+  "bg-BG" => ["0402:00030402", "0409:00020409"], # Bulgarian - Bulgaria
+  "br-FR" => ["047e:0000040c"], # Breton - France
+  "ca-ES" => ["0403:0000040a"], # Catalan - Spain
+  "cs-CZ" => ["0405:00000405"], # Czech - Czech Republic
+  "cy-GB" => ["0452:00000452", "0809:00000809"], # Welsh - Great Britain
+  "da-DK" => ["0406:00000406", "0409:00000406"], # Danish - Denmark
+  "de-DE" => ["0407:00000407"], # German - Germany
+  "dv-MV" => ["0465:00000465"], # Divehi - Maldives
+  "el-GR" => ["0408:00000408"], # Greek - Greece
+  "en-GB" => ["0809:00000809"], # English - Great Britain
+  "en-US" => undef, # English - United States
+  "es-ES" => ["0c0a:0000040a"], # Spanish - Spain
+  "et-EE" => ["0425:00000425"], # Estonian - Estonia
+  "eu-ES" => ["042d:0000040a"], # Basque - Basque
+  "fa-IR" => ["0429:00000429"], # Persian
+  "fi-FI" => ["040b:0000040b"], # Finnish - Finland
+  "fo-FO" => ["0438:00000406"], # Faroese - Faroe Islands
+  "fr-FR" => ["040c:0000040c"], # French - France
+  "ga-IE" => ["083c:00001809"], # Irish - Ireland
+  "gd-GB" => ["0491:00011809"], # Scottish Gaelic - Great Britain
+  "gl-ES" => ["0456:0000040a"], # Galician - Galician
+  "gu-IN" => ["0447:00000447"], # Gujarati - India (Gujarati Script)
+
+   # Note : Windows >= 8 probably uses 040d:0002040d instead
+  "he-IL" => ["040d:0000040d"], # Hebrew - Israel
+
+  "hi-IN" => ["0439:00010439"], # Hindi - India
+  "hr-HR" => ["041a:0000041a"], # Croatian - Croatia
+  "hu-HU" => ["040e:0000040e"], # Hungarian - Hungary
+  "hy-AM" => ["042b:0002042b"], # Armenian - Armenia
+  "id-ID" => ["0421:00000409"], # Indonesian - Indonesia
+  "is-IS" => ["040f:0000040f"], # Icelandic - Iceland
+  "it-CH" => ["0810:0000100c", "0810:00000410"], # Italian - Switzerland
+  "it-IT" => ["0410:00000410"], # Italian - Italy
+  "ja-JP" => ["0411:{03B5835F-F03C-411B-9CE2-AA23E1171E36}{A76C93D9-5523-4E90-AAFA-4DB112F9AC76}"], # Japanese - Japan
+  "ka-GE" => ["0437:00010437"], # Georgian - Georgia
+  "kk-KZ" => ["043f:0000043f"], # Kazakh - Kazakhstan
+  "kn-IN" => ["044b:0000044b"], # Kannada - India (Kannada Script)
+  "ko-KR" => ["0412:{A028AE76-01B1-46C2-99C4-ACD9858AE02F}{B5FE1F02-D5F2-4445-9C03-C568F23C99A1}"], # Korean(Extended Wansung) - Korea
+  "ky-KG" => ["0440:00000440"], # Kyrgyz - Kyrgyzstan
+  "lt-LT" => ["0427:00010427"], # Lithuanian - Lithuania
+
+  # Note: Windows >= 8 probably uses 0426:00020426 instead
+  "lv-LV" => ["0426:00000426"], # Latvian - Standard
+
+  "mk-MK" => ["042f:0001042f"], # Macedonian
+  "ml-IN" => ["044c:0000044c"], # Malayalam - India (Malayalam Script)
+  "mn-MN" => ["0450:00000450"], # Mongolian (Cyrillic) - Mongolia
+  "mr-IN" => ["044e:0000044e"], # Marathi - India
+  "ms-BN" => ["083e:00000409"], # Malay - Brunei
+  "ms-MY" => ["043e:00000409"], # Malay - Malaysia
+  "nb-NO" => ["0414:00000414"], # Norwegian - Norway (Bokmal)
+  "nl-BE" => ["0813:00000813"], # Dutch - Belgium
+  "nl-NL" => ["0413:00020409"], # Dutch - Netherlands
+  "or-IN" => ["0448:00000448"], # Odia - India (Odia Script)
+  "pa-IN" => ["0446:00000446"], # Punjabi - India (Gurmukhi Script)
+  "pl-PL" => ["0415:00000415"], # Polish - Poland
+  "pt-BR" => ["0416:00000416"], # Portuguese - Brazil
+  "pt-PT" => ["0816:00000816"], # Portuguese - Portugal
+  "ro-RO" => ["0418:00010418"], # Romanian - Romania
+  "ru-RU" => ["0419:00000419"], # Russian
+  "sa-IN" => ["044f:00000439"], # Sanskrit - India
+  "sk-SK" => ["041b:0000041b"], # Slovak - Slovakia
+  "sl-SI" => ["0424:00000424"], # Slovenian - Slovenia
+  "sq-AL" => ["041c:0000041c"], # Albanian - Albania
+  "sr-Latn-RS" => ["241a:0000081a"], # Serbian - Serbia (Latin)
+  "sv-FI" => ["081d:0000041d"], # Swedish - Finland
+  "sv-SE" => ["041d:0000041d"], # Swedish - Sweden
+  "sw-KE" => ["0441:00000409"], # Swahili - Kenya
+  "ta-IN" => ["0449:00000449"], # Tamil - India
+  "te-IN" => ["044a:0000044a"], # Telugu - India (Telugu Script)
+  "th-TH" => ["041e:0000041e"], # Thai - Thailand
+  "tr-TR" => ["041f:0000041f"], # Turkish - Turkey
+  "uk-UA" => ["0422:00020422"], # Ukrainian - Ukraine
+  "ur-PK" => ["0420:00000420"], # Urdu (Islamic Republic of Pakistan)
+  "zh-CN" => ["0804:00000804"], # Chinese - PRC
+  "zh-TW" => ["0404:00000404"], # Chinese - Taiwan
+);
+
+
+#
+# Command line processing
+#
+
+my $Usage;
+sub check_opt_val($$)
+{
+  my ($Option, $Value) = @_;
+
+  if (defined $Value)
+  {
+    Error("$Option can only be specified once\n");
+    $Usage = 2; # but continue processing this option
+  }
+  if (!@ARGV)
+  {
+    Error("missing value for $Option\n");
+    $Usage = 2;
+    return undef;
+  }
+  return shift @ARGV;
+}
+
+sub check_opt_locale($$)
+{
+  my ($Option, $Value) = @_;
+  $Value = check_opt_val($Option, $Value);
+  if ($Value !~ /^(?:[a-z]{2})-(?:Latn-)?(?:[A-Z]{2})$/)
+  {
+    Error("'$Value' is not a valid $Option locale\n");
+    $Usage = 2;
+    return undef;
+  }
+  return $Value;
+}
+
+my ($OptHostName, $OptReboot);
+my ($OptVM, $OptRefresh, $OptRefreshAll, $OptAddMissing, $OptAddLocales);
+my ($OptDefault, $OptLocale, $OptSystem, $OptMUI, $OptCountry, $OptKeyboard);
+while (@ARGV)
+{
+  my $Arg = shift @ARGV;
+  if ($Arg eq "--help")
+  {
+    $Usage = 0;
+  }
+  elsif ($Arg eq "--vm")
+  {
+    $OptVM = check_opt_val($Arg, $OptVM);
+  }
+  elsif ($Arg eq "--refresh")
+  {
+    $OptRefresh = 1;
+  }
+  elsif ($Arg eq "--refresh-all")
+  {
+    $OptRefreshAll = 1;
+  }
+  elsif ($Arg eq "--add-missing")
+  {
+    $OptAddMissing = 1;
+  }
+  elsif ($Arg eq "--add-locales")
+  {
+    $OptAddLocales = check_opt_val($Arg, $OptAddLocales);
+  }
+  elsif ($Arg eq "--reboot")
+  {
+    if (defined $OptReboot and !$OptReboot)
+    {
+      Error("--reboot and --no-reboot are incompatible\n");
+      $Usage = 2;
+    }
+    $OptReboot = 1;
+  }
+  elsif ($Arg eq "--no-reboot")
+  {
+    if ($OptReboot)
+    {
+      Error("--reboot and --no-reboot are incompatible\n");
+      $Usage = 2;
+    }
+    $OptReboot = 0;
+  }
+  elsif ($Arg eq "--default")
+  {
+    $OptDefault = check_opt_locale($Arg, $OptDefault);
+  }
+  elsif ($Arg eq "--locale")
+  {
+    $OptLocale = check_opt_locale($Arg, $OptLocale);
+  }
+  elsif ($Arg eq "--system")
+  {
+    $OptSystem = check_opt_locale($Arg, $OptSystem);
+  }
+  elsif ($Arg eq "--mui")
+  {
+    $OptMUI = check_opt_locale($Arg, $OptMUI);
+  }
+  elsif ($Arg eq "--keyboard")
+  {
+    $OptKeyboard = check_opt_locale($Arg, $OptKeyboard);
+  }
+  elsif ($Arg eq "--country")
+  {
+    $OptCountry = check_opt_val($Arg, $OptCountry);
+  }
+  elsif ($Arg eq "--debug")
+  {
+    $Debug = 1;
+  }
+  elsif ($Arg eq "--dry-run")
+  {
+    $DryRun = 1;
+  }
+  elsif ($Arg =~ /^-/)
+  {
+    Error("unknown option '$Arg'\n");
+    $Usage = 2;
+  }
+  elsif (!defined $OptHostName)
+  {
+    $OptHostName = $Arg;
+  }
+  else
+  {
+    Error("unexpected argument '$Arg'\n");
+    $Usage = 2;
+  }
+}
+
+my ($BaseVMName, $VMLocale, %AddLocales, $KeyboardIds, $CountryId);
+if (!defined $Usage)
+{
+  if (defined $OptVM)
+  {
+    if ($OptRefresh or $OptRefreshAll or $OptAddMissing or
+        defined $OptAddLocales)
+    {
+      if (defined $OptReboot and !$OptReboot)
+      {
+        Error("--no-reboot is incompatible with --refresh, --refresh-all, --add-missing and --add-locales\n");
+        $Usage = 2;
+      }
+      if (defined $OptDefault or defined $OptLocale or defined $OptMUI or
+          defined $OptCountry or defined $OptKeyboard)
+      {
+        Error("--default, --locale, --mui, --country and --keyboard are incompatible with the VM snapshot options\n");
+        $Usage = 2;
+      }
+
+      # Always reboot Windows before updating a TestBot snapshot
+      $OptReboot = 1;
+    }
+    if ($OptRefresh and
+        ($OptRefreshAll or $OptAddMissing or defined $OptAddLocales))
+    {
+      Error("--refresh is incompatible with --refresh--all, --add-missing and --add-locales\n");
+      $Usage = 2;
+    }
+    if ($OptRefreshAll and $OptAddMissing)
+    {
+      Error("--refresh-all and --add-missing are mutually incompatible\n");
+      $Usage = 2;
+    }
+    if (defined $OptAddLocales)
+    {
+      foreach my $Locale (split /:/, $OptAddLocales)
+      {
+        if ($Locale =~ /^[a-z]{2}_[A-Z]{2}$/)
+        {
+          $AddLocales{$Locale} = 1;
+        }
+        else
+        {
+          Error("'$Locale' is not a valid locale for --add-locales\n");
+          $Usage = 2;
+          last;
+        }
+      }
+      if (!%AddLocales)
+      {
+        Error("'$OptAddLocales' does not contain any valid locale\n");
+        $Usage = 2;
+      }
+    }
+
+    $BaseVMName = $OptVM;
+    if ($BaseVMName =~ s/_([a-z]{2})_([A-Z]{2})$//)
+    {
+      if ($OptRefreshAll)
+      {
+        Error("'$OptVM' should not be a locale VM\n");
+        $Usage = 2;
+      }
+      $VMLocale = "$1_$2";
+      $OptDefault = $VMLocale eq "sr_RS" ? "sr-Latn-CS" : "$1-$2";
+    }
+    elsif ($OptRefresh)
+    {
+      Error("'$OptVM' is not a locale VM\n");
+      $Usage = 2;
+    }
+  }
+  else
+  {
+    if ($OptRefresh or $OptRefreshAll or $OptAddMissing or
+        defined $OptAddLocales)
+    {
+      Error("--refresh, --refresh-all, --add-missing and --add-locales can only be used with --vm\n");
+      $Usage = 2;
+    }
+    if (!defined $OptHostName)
+    {
+      Error("you must specify the Windows machine to work on\n");
+      $Usage = 2;
+    }
+  }
+
+  $OptLocale ||= $OptDefault;
+  $OptSystem ||= $OptDefault;
+  $OptMUI ||= $OptDefault;
+  $OptKeyboard ||= $OptDefault;
+  if (defined $OptKeyboard)
+  {
+    if (!exists $Keyboards{$OptKeyboard})
+    {
+      # intl.cpl automatically pick the appropriate keyboard but, unlike
+      # for Windows' initial installation, it does not make it the
+      # default since the system has a keyboard already.
+      Warning("unknown keyboard '$OptKeyboard'. Letting intl.cpl use its default.\n");
+    }
+    $KeyboardIds = $Keyboards{$OptKeyboard};
+  }
+  if (!defined $OptCountry and defined $OptDefault and
+      $OptDefault =~ /-([A-Z]{2})$/)
+  {
+    $OptCountry = $1;
+  }
+  if (defined $OptCountry)
+  {
+    if (!exists $Countries{$OptCountry})
+    {
+      Error("unknown country '$OptCountry'\n");
+      $Usage = 2;
+    }
+    $CountryId = $Countries{$OptCountry};
+  }
+
+  if (!defined $OptLocale and !defined $OptSystem and !defined $OptMUI and
+      !defined $OptKeyboard and !defined $OptCountry and
+      !$OptRefresh and !$OptRefreshAll and !$OptAddMissing and
+      !defined $OptAddLocales)
+  {
+    Error("you must specify at least one locale to change\n");
+    $Usage = 2;
+  }
+
+  # Two settings only take effect after a reboot:
+  # - System locale changes.
+  # - Display language changes only require a log out + log in but that cannot
+  #   be automated so just reboot instead.
+  $OptReboot = 1 if (!defined $OptReboot and ($OptSystem or $OptMUI));
+}
+if (defined $Usage)
+{
+  if ($Usage)
+  {
+    Error("try '$name0 --help' for more information\n");
+    exit $Usage;
+  }
+  print "Usage: $name0 [options] --vm NAME --refresh\n";
+  print "or     $name0 [options] --vm NAME [--refresh-all] [--add-locales LOC1:LOC2:...]\n";
+  print "or     $name0 [options] [--default LOC] [--locale USR] [--system SYS] [--mui MUI] [--keyboard KBD] [--country CTY] HOSTNAME|--vm NAME\n";
+  print "\n";
+  print "Sets the locale of the specified Windows machine and, optionally, updates or creates a new snapshot ot the TestBot VM for it.\n";
+  print "\n";
+  print "Where:\n";
+  print "  --vm NAME      Work on the specified TestBot VM.\n";
+  print "  --refresh      Create or update the TestBot VM's snapshot (and VM if needed).\n";
+  print "  --refresh-all  Refresh the locale VMs derived from the specified base VM.\n";
+  print "  --add-missing  Check the locale VMs derived from the specified base VM and\n";
+  print "                 add any missing corresponding snapshots.\n";
+  print "  --add-locales LOC1:LOC2:... Create new TestBot VMs derived from the specified\n";
+  print "                 base VM for each of the Unix locale in the colon-sperated\n";
+  print "                 list.\n";
+  print "  HOSTNAME       Work on the specified Windows host (must be running TestAgentd).\n";
+  print "  --default LOC  Use this Windows locale as the default for the other options.\n";
+  print "                 The locale must be in a form suitable for Windows' intl.cpl\n";
+  print "                 control panel module, that is roughly ll-CC where ll is an\n";
+  print "                 ISO 639-1 language code and CC an ISO 3166-1 alpha-2 country\n";
+  print "                 code.\n";
+  print "  --locale USR   Specifies the user formats (see --defaults).\n";
+  print "  --system SYS   Specifies the system locale (see --defaults).\n";
+  print "  --mui MUI      Specifies the display language (see --defaults).\n";
+  print "  --keyboard KBD Specifies the keyboard layout (see --defaults).\n";
+  print "  --country CTY  Specifies the location using only the country part of the\n";
+  print "                 Windows locale (see --defaults).\n";
+  print "  --debug        Show more detailed information about progress.\n";
+  print "  --dry-run      Show what would happen but do nothing.\n";
+  print "  --help         Shows this usage message.\n";
+  exit 0;
+}
+
+
+#
+# Handle the meta options
+#
+
+my $VMs = CreateVMs();
+my $VM = $VMs->GetItem($OptVM);
+if ($VM and $VM->Role eq "deleted")
+{
+  FatalError("'$OptVM' is marked for deletion\n");
+}
+
+if ($OptRefreshAll or $OptAddMissing)
+{
+  FatalError("could not find the '$OptVM' virtual machine\n") if (!$VM);
+
+  my $HasLocaleVMs;
+  foreach my $VM (@{$VMs->GetItems()})
+  {
+    next if ($VM->Role eq "deleted");
+    if ($VM->Name =~ /^\Q$OptVM\E_([a-z]{2})_([A-Z]{2})$/)
+    {
+      $HasLocaleVMs = 1;
+      if ($OptRefreshAll or !$VM->GetDomain()->HasSnapshot($VM->IdleSnapshot))
+      {
+        $AddLocales{"$1_$2"} = 1;
+      }
+    }
+  }
+  FatalError("could not find any locale VM for '$OptVM'\n") if (!$HasLocaleVMs);
+  if (!%AddLocales)
+  {
+    Debug(Elapsed($Start), " Nothing to do!\n");
+    exit(0);
+  }
+}
+
+if (%AddLocales)
+{
+  my @Failed;
+  my @Cmd = ("$0", ($Debug ? "--debug" : ()), "--refresh", "--vm");
+  foreach my $Locale (sort keys %AddLocales)
+  {
+    if (Run(@Cmd, "${OptVM}_$Locale"))
+    {
+      push @Failed, $Locale;
+    }
+  }
+  if (@Failed)
+  {
+    Error("failed to add/refresh the snapshots for the following locales: @Failed\n");
+    exit(1);
+  }
+  exit(0);
+}
+
+
+#
+# Prepare the virtual machine
+#
+
+if ($OptRefresh)
+{
+  my $BaseVM = $VMs->GetItem($BaseVMName);
+  if (!$BaseVM)
+  {
+    FatalError("could not find the '$BaseVMName' base virtual machine\n");
+  }
+
+  if (!$VM)
+  {
+    if ($BaseVM->Status ne "maintenance")
+    {
+      FatalError("the base VM is not marked for maintenance\n");
+    }
+    if ($DryRun)
+    {
+      Warning("'$OptVM' does not exist. Skipping for dry run.\n");
+      exit(0);
+    }
+
+    # Create the localized VM
+    $VM = $VMs->Add();
+    $VM->Name($OptVM);
+    $VM->SortOrder($BaseVM->SortOrder + 1);
+    $VM->Type($BaseVM->Type);
+    $VM->Role("extra");
+    $VM->Missions($BaseVM->Missions);
+    $VM->MissionCaps($BaseVM->MissionCaps);
+    # All we need is for one VM to be in maintenance mode to prevent the
+    # TestBot from using this hypervisor domain. The base VM is in maintenance
+    # mode so that is enough.
+    $VM->Status("off");
+    $VM->VirtURI($BaseVM->VirtURI);
+    $VM->VirtDomain($BaseVM->VirtDomain);
+    $VM->IdleSnapshot($BaseVM->IdleSnapshot ."_$VMLocale");
+    $VM->Hostname($BaseVM->Hostname);
+
+    my $Description = $BaseVM->Description ." ". LocaleName($Suffix);
+    my $PropertyDescriptor = $VMs->GetPropertyDescriptorByName("Description");
+    if ($PropertyDescriptor->GetMaxLength() < length($Description))
+    {
+      Warning("the $OptVM description is too long. Truncating it.\n");
+      $Description = substr($Description, 0, $PropertyDescriptor->GetMaxLength());
+    }
+    $VM->Description($Description);
+    $VM->Details($BaseVM->Details);
+
+    my ($_ErrKey, $_ErrProperty, $ErrMessage) = $VMs->Save();
+    if (defined $ErrMessage)
+    {
+      FatalError("could not create the localized VM: $ErrMessage\n");
+    }
+  }
+  else
+  {
+    if ($VM->Status ne "maintenance" and $BaseVM->Status ne "maintenance")
+    {
+      FatalError("neither $OptVM nor its base VM are marked for maintenance\n");
+    }
+    if ($VM->Status !~ /^(?:maintenance|off)$/)
+    {
+      FatalError("'$OptVM' is neither off nor marked for maintenance\n");
+    }
+    if ($BaseVM->Status !~ /^(?:maintenance|off)$/)
+    {
+      FatalError("'$BaseVMName' is neither off nor marked for maintenance\n");
+    }
+
+  }
+
+  my $IdleSnapshot = $VM->IdleSnapshot;
+  if ($VM->GetDomain()->HasSnapshot($IdleSnapshot))
+  {
+    Debug(Elapsed($Start), " Deleting the old $IdleSnapshot snapshot\n");
+    my $ErrMessage = $DryRun ? undef : $VM->GetDomain()->RemoveSnapshot();
+    if (defined $ErrMessage)
+    {
+      FatalError("could not remove the $IdleSnapshot snapshot: $ErrMessage\n");
+    }
+  }
+
+  Debug(Elapsed($Start), " Reverting the base VM\n");
+  if (Run("$::RootDir/bin/LibvirtTool.pl", "--debug", "revert", $BaseVMName))
+  {
+    # LibvirtTool.pl will have already printed an error message
+    exit(1);
+  }
+}
+elsif (defined $OptVM and !$VM)
+{
+  FatalError("could not find the '$OptVM' virtual machine\n");
+}
+
+
+#
+# Generate the intl.cpl configuration
+#
+
+my @Config = (
+  # intl.cpl does not want single quotes on that one line!
+  "<gs:GlobalizationServices xmlns:gs=\"urn:longhornGlobalizationUnattend\">",
+  "  <gs:UserList>",
+  "    <gs:User UserID='Current' CopySettingsToDefaultUserAcct='true' CopySettingsToSystemAcct='true'/>",
+  "  </gs:UserList>",
+);
+if ($OptLocale)
+{
+  push @Config, "  <!-- user locale: sorting and formatting -->",
+                "  <gs:UserLocale>",
+                "    <gs:Locale Name='$OptLocale' SetAsCurrent='true'/>",
+                "  </gs:UserLocale>";
+}
+if ($OptSystem)
+{
+  push @Config, "  <!-- system locale -->",
+                "  <gs:SystemLocale Name='$OptSystem'/>";
+}
+if (defined $CountryId)
+{
+  push @Config, "  <!-- current location -->",
+                "  <gs:LocationPreferences>",
+                "    <gs:GeoID Value='$CountryId'/>",
+                "  </gs:LocationPreferences>";
+}
+if ($OptMUI)
+{
+  push @Config, "  <gs:MUILanguagePreferences>",
+                "    <gs:MUILanguage Value='$OptMUI'/>",
+                "  </gs:MUILanguagePreferences>";
+}
+if ($KeyboardIds)
+{
+  push @Config, "  <!-- keyboard -->",
+                "  <gs:InputPreferences>";
+  my $Default = " Default='true'";
+  foreach my $Id (@$KeyboardIds)
+  {
+    push @Config, "    <gs:InputLanguageID Action='add' ID='$Id'$Default/>";
+    $Default = "";
+  }
+  push @Config, "  </gs:InputPreferences>";
+}
+push @Config, "</gs:GlobalizationServices>";
+
+
+#
+# Change the Windows locale using intl.cpl
+#
+
+$OptHostName = $VM->Hostname if ($VM); # For error messages
+my $TA = $VM ? $VM->GetAgent() : TestAgent->new($OptHostName, $AgentPort);
+
+Debug(Elapsed($Start), " Sending the configuration file\n");
+if ($DryRun)
+{
+  print STDERR join("\n", "locales.xml:", @Config, "");
+}
+elsif (!$TA->SendFileFromString(join("\r\n", @Config, ""), "locales.xml", 0))
+{
+  FatalError("could not send the configuration file:", $TA->GetLastError(), "\n");
+}
+
+# For some reason this only works when run from a batch script!
+Debug(Elapsed($Start), " Sending the batch file\n");
+my $Cmd = 'control.exe intl.cpl,,/f:"locales.xml"';
+if ($DryRun)
+{
+  print STDERR "script.bat: $Cmd\n";
+}
+elsif (!$TA->SendFileFromString($Cmd, "script.bat", $TestAgent::SENDFILE_EXE))
+{
+  FatalError("could not send the batch file:", $TA->GetLastError(), "\n");
+}
+
+Debug(Elapsed($Start), " Running intl.cpl\n");
+if (!$DryRun)
+{
+  my $Pid = $TA->Run(["./script.bat"], 0);
+  if (!$Pid)
+  {
+    FatalError("failed to run intl.cpl\n");
+  }
+
+  # Unfortunately the control.exe and/or intl.cpl exit code is unusable so
+  # there is no way to check for errors
+  Debug(Elapsed($Start), " Waiting for intl.cpl\n");
+  if (!defined $TA->Wait($Pid, 120))
+  {
+    FatalError("could not run intl.cpl: ", $TA->GetLastError(), "\n");
+  }
+
+  $TA->Rm("script.bat");
+  $TA->Rm("locales.xml");
+}
+
+if ($OptReboot)
+{
+  Debug(Elapsed($Start), " Rebooting Windows\n");
+  $Cmd = ["shutdown.exe", "/r", "/t", "0"];
+  if ($DryRun)
+  {
+    print STDERR "Running ", join(" ", @$Cmd), "\n";
+  }
+  else
+  {
+    $TA->Run($Cmd, 0);
+    # Note that we cannot wait for this command since it reboots Windows
+  }
+}
+
+
+#
+# Update the virtual machine snapshot
+#
+
+if ($OptRefresh)
+{
+  # Wait a bit to make sure we don't reconnect before Windows has rebooted.
+  sleep(30) if (!$DryRun);
+
+  # Allow up to 10 minutes for the shutdown plus reboot.
+  Debug(Elapsed($Start), " Waiting for Windows to boot\n");
+  $TA->SetConnectTimeout(20, 30);
+  if (!$DryRun and !$TA->Ping())
+  {
+    FatalError("could not reconnect to $OptHostName after the reboot: ", $TA->GetLastError(), "\n");
+  }
+
+  # Then wait a good minute after the reboot to make sure all the widgets are
+  # up and running.
+  Debug(Elapsed($Start), " Letting Windows warm up\n");
+  sleep(60) if (!$DryRun);
+
+  Debug(Elapsed($Start), " Creating the ", $VM->IdleSnapshot, " snapshot\n");
+  my $ErrMessage = $DryRun ? undef : $VM->GetDomain()->CreateSnapshot();
+  if (defined $ErrMessage)
+  {
+    FatalError("could not create the ". $VM->IdleSnapshot ." snapshot: $ErrMessage\n");
+  }
+}
+
+Debug(Elapsed($Start), " All done!\n");
+exit(0);
