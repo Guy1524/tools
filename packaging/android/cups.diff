@@ -1,0 +1,142 @@
+diff -ur cups-2.2.4.orig/config-scripts/cups-sharedlibs.m4 cups-2.2.4/config-scripts/cups-sharedlibs.m4
+--- cups-2.2.4.orig/config-scripts/cups-sharedlibs.m4	2017-06-30 17:44:38.000000000 +0200
++++ cups-2.2.4/config-scripts/cups-sharedlibs.m4	2017-11-02 10:32:29.411070604 +0100
+@@ -32,6 +32,16 @@
+ 			DSOXX="\$(CXX)"
+ 			DSOFLAGS="$DSOFLAGS -Wl,-h\`basename \$@\` -G \$(OPTIM)"
+ 			;;
++		linux-android*)
++			LIBCUPS="lib$cupsbase.so"
++			LIBCUPSCGI="libcupscgi.so"
++			LIBCUPSIMAGE="libcupsimage.so"
++			LIBCUPSMIME="libcupsmime.so"
++			LIBCUPSPPDC="libcupsppdc.so"
++			DSO="\$(CC)"
++			DSOXX="\$(CXX)"
++			DSOFLAGS="$DSOFLAGS -shared \$(OPTIM)"
++			;;
+ 		linux* | gnu* | *bsd*)
+ 			LIBCUPS="lib$cupsbase.so.2"
+ 			LIBCUPSCGI="libcupscgi.so.1"
+diff -ur cups-2.2.4.orig/config-scripts/cups-ssl.m4 cups-2.2.4/config-scripts/cups-ssl.m4
+--- cups-2.2.4.orig/config-scripts/cups-ssl.m4	2017-06-30 17:44:38.000000000 +0200
++++ cups-2.2.4/config-scripts/cups-ssl.m4	2017-11-02 10:32:29.411070604 +0100
+@@ -68,6 +68,12 @@
+ 	    SSLFLAGS=`$PKGCONFIG --cflags gnutls`
+ 	    AC_DEFINE(HAVE_SSL)
+ 	    AC_DEFINE(HAVE_GNUTLS)
++	elif test -n "$GNUTLS_CFLAGS" -a -n "$GNUTLS_LIBS"; then
++	    have_ssl=1
++	    SSLLIBS=$GNUTLS_LIBS
++	    SSLFLAGS=$GNUTLS_CFLAGS
++	    AC_DEFINE(HAVE_SSL)
++	    AC_DEFINE(HAVE_GNUTLS)
+ 	elif test "x$LIBGNUTLSCONFIG" != x; then
+ 	    have_ssl=1
+ 	    SSLLIBS=`$LIBGNUTLSCONFIG --libs`
+diff -ur cups-2.2.4.orig/configure cups-2.2.4/configure
+--- cups-2.2.4.orig/configure	2017-06-30 17:44:38.000000000 +0200
++++ cups-2.2.4/configure	2017-11-02 10:32:29.415070543 +0100
+@@ -6530,6 +6530,16 @@
+ 			DSOXX="\$(CXX)"
+ 			DSOFLAGS="$DSOFLAGS -Wl,-h\`basename \$@\` -G \$(OPTIM)"
+ 			;;
++		linux-android*)
++			LIBCUPS="lib$cupsbase.so"
++			LIBCUPSCGI="libcupscgi.so"
++			LIBCUPSIMAGE="libcupsimage.so"
++			LIBCUPSMIME="libcupsmime.so"
++			LIBCUPSPPDC="libcupsppdc.so"
++			DSO="\$(CC)"
++			DSOXX="\$(CXX)"
++			DSOFLAGS="$DSOFLAGS -shared \$(OPTIM)"
++			;;
+ 		linux* | gnu* | *bsd*)
+ 			LIBCUPS="lib$cupsbase.so.2"
+ 			LIBCUPSCGI="libcupscgi.so.1"
+@@ -8516,6 +8526,14 @@
+ 	    $as_echo "#define HAVE_SSL 1" >>confdefs.h
+ 
+ 	    $as_echo "#define HAVE_GNUTLS 1" >>confdefs.h
++
++	elif test -n "$GNUTLS_CFLAGS" -a -n "$GNUTLS_LIBS"; then
++	    have_ssl=1
++	    SSLLIBS=$GNUTLS_LIBS
++	    SSLFLAGS=$GNUTLS_CFLAGS
++	    $as_echo "#define HAVE_SSL 1" >>confdefs.h
++
++	    $as_echo "#define HAVE_GNUTLS 1" >>confdefs.h
+ 
+ 	elif test "x$LIBGNUTLSCONFIG" != x; then
+ 	    have_ssl=1
+diff -ur cups-2.2.4.orig/cups/Makefile cups-2.2.4/cups/Makefile
+--- cups-2.2.4.orig/cups/Makefile	2017-06-30 17:44:38.000000000 +0200
++++ cups-2.2.4/cups/Makefile	2017-11-02 11:14:10.450961961 +0100
+@@ -317,6 +317,16 @@
+ 
+ 
+ #
++# libcups.so
++#
++
++libcups.so:	$(LIBOBJS)
++	echo Linking $@...
++	$(DSO) $(ARCHFLAGS) $(DSOFLAGS) -o $@ $(LIBOBJS) $(LIBGSSAPI) \
++		$(SSLLIBS) $(DNSSDLIBS) $(COMMONLIBS) $(LIBZ)
++
++
++#
+ # libcups.2.dylib
+ #
+ 
+diff -ur cups-2.2.4.orig/cups/language.c cups-2.2.4/cups/language.c
+--- cups-2.2.4.orig/cups/language.c	2017-06-30 17:44:38.000000000 +0200
++++ cups-2.2.4/cups/language.c	2017-11-02 10:32:29.415070543 +0100
+@@ -31,6 +31,13 @@
+ #endif /* HAVE_COREFOUNDATION_H */
+ 
+ 
++#ifdef __ANDROID__
++/* nl_langinfo not available on API < 26 */
++#if __ANDROID_API__ < 26
++#undef CODESET
++#endif
++#endif
++
+ /*
+  * Local globals...
+  */
+diff -ur cups-2.2.4.orig/cups/thread.c cups-2.2.4/cups/thread.c
+--- cups-2.2.4.orig/cups/thread.c	2017-06-30 17:44:38.000000000 +0200
++++ cups-2.2.4/cups/thread.c	2017-11-02 10:32:29.415070543 +0100
+@@ -150,7 +150,9 @@
+ void
+ _cupsThreadCancel(_cups_thread_t thread)/* I - Thread ID */
+ {
+-  pthread_cancel(thread);
++#ifndef __ANDROID__
++    pthread_cancel(thread);
++#endif
+ }
+ 
+ 
+diff -ur cups-2.2.4.orig/filter/Makefile cups-2.2.4/filter/Makefile
+--- cups-2.2.4.orig/filter/Makefile	2017-06-30 17:44:38.000000000 +0200
++++ cups-2.2.4/filter/Makefile	2017-11-02 11:16:22.624712571 +0100
+@@ -241,6 +241,16 @@
+ 
+ 
+ #
++# libcupsimage.so
++#
++
++libcupsimage.so:	$(IMAGEOBJS)
++	echo Linking $@...
++	$(DSO) $(ARCHFLAGS) $(DSOFLAGS) -o $@ $(IMAGEOBJS) $(DSOLIBS) \
++		-L../cups $(LINKCUPS)
++
++
++#
+ # libcupsimage.2.dylib
+ #
+ 
