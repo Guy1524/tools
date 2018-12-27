@@ -751,6 +751,8 @@ close_test_unit(1);
 close SUM or mydie "error writing to '$tmpdir/summary.txt': $!";
 close IN;
 
+mydie "report reached file size limit (runaway test?)" if -s $report >= $maxfilesize;
+
 
 #
 # Generate the 'DLL version' section of the info box
