@@ -111,6 +111,7 @@ sub GetTaskMissionDescription($$)
       ($Builds->{exe32} and $Builds->{exe64}) ? "32 & 64 bit" :
       $Builds->{exe32} ? "32 bit" :
       $Builds->{exe64} ? "64 bit" :
+      ($Builds->{wow64} and $Builds->{wow32} and !$Builds->{win32}) ? "32 & 64 bit WoW" :
       ($Builds->{wow64} and ($Builds->{win32} or $Builds->{wow32})) ? "32 & 64 bit" :
       $Builds->{win32} ? "32 bit" :
       $Builds->{wow32} ? "32 bit WoW" :
