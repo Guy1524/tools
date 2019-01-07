@@ -607,7 +607,7 @@ sub GenerateDataCell($$$$$)
       }
       else
       {
-        $Args .= "<span class='Mission'>". $self->escapeHTML(GetTaskMissionDescription($Missions->[0], $StepTask->VM->Type)) ."</span>";
+        $Args .= "<span class='Mission'>". $self->escapeHTML(GetTaskMissionDescription($Missions->[0], $StepTask->Type)) ."</span>";
       }
     }
     print "<td>$Args</td>\n";

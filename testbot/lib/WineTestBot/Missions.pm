@@ -104,7 +104,7 @@ sub GetMissionBaseName($)
 
 sub GetTaskMissionDescription($$)
 {
-  my ($TaskMission, $VMType) = @_;
+  my ($TaskMission, $StepType) = @_;
 
   my $Builds = $TaskMission->{Builds};
   my $Description =
@@ -117,29 +117,27 @@ sub GetTaskMissionDescription($$)
       $Builds->{wow32} ? "32 bit WoW" :
       "64 bit WoW";
 
-  if ($Builds->{exe32} or $Builds->{exe64})
+  my $Lang;
+  foreach my $Mission (@{$TaskMission->{Missions}})
   {
-    $Description .= ($VMType eq "build") ? " build" : " executable";
-  }
-  else
-  {
-    my $Lang;
-    foreach my $Mission (@{$TaskMission->{Missions}})
+    if (!defined $Lang)
     {
-      if (!defined $Lang)
-      {
-        $Lang = $Mission->{lang} || "";
-      }
-      elsif ($Lang ne ($Mission->{lang} || ""))
-      {
-        $Description .= " + Locales";
-        $Lang = undef;
-        last;
-      }
+      $Lang = $Mission->{lang} || "";
     }
-    $Description .= " ". LocaleName($Lang) if ($Lang);
-    $Description .= " tests";
+    elsif ($Lang ne ($Mission->{lang} || ""))
+    {
+      $Description .= " + Locales";
+      $Lang = undef;
+      last;
+    }
   }
+  $Description .= " ". LocaleName($Lang) if ($Lang);
+
+  $Description .=
+      ($StepType eq "reconfig") ? " update" :
+      ($StepType eq "build") ? " build" :
+      ($StepType eq "suite") ? " WineTest" :
+      " tests";
 
   return $Description;
 }
