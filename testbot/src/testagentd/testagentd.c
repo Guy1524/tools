@@ -1149,6 +1149,8 @@ static void do_unknown(SOCKET client, uint32_t id)
     }
 }
 
+static int opt_set_time_only = 0;
+
 static void process_rpc(SOCKET client)
 {
     int r;
@@ -1175,7 +1177,12 @@ static void process_rpc(SOCKET client)
     }
 
     debug("-> %s\n", rpc_name(rpcid));
-    switch (rpcid)
+    if (opt_set_time_only && rpcid != RPCID_PING && rpcid != RPCID_SETTIME)
+    {
+        set_status(ST_ERROR, "the %s RPC is not allowed", rpc_name(rpcid));
+        send_error(client);
+    }
+    else switch (rpcid)
     {
     case RPCID_PING:
         do_ping(client);
@@ -1359,6 +1366,10 @@ int main(int argc, char** argv)
         {
             opt_show_restarts = 1;
         }
+        else if (strcmp(*arg, "--set-time-only") == 0)
+        {
+            opt_set_time_only = 1;
+        }
         else if (strcmp(*arg, "--help") == 0)
         {
             opt_usage = 1;
@@ -1430,7 +1441,7 @@ int main(int argc, char** argv)
     }
     if (opt_usage)
     {
-        printf("Usage: %s [--debug] [--detach] [--help] [--show-restarts] PORT [SRCHOST]\n", name0);
+        printf("Usage: %s [--debug] [--detach] [--help] [--show-restarts] [--set-time-only] PORT [SRCHOST]\n", name0);
         printf("\n");
         printf("Provides a simple way to send/receive files and to run scripts on this host.\n");
         printf("\n");
@@ -1442,6 +1453,7 @@ int main(int argc, char** argv)
         printf("           combine this with start: start %s --detach ...\n", name0);
         printf("  --show-restarts Shows a message if %s has been restarted (for instance\n", name0);
         printf("           because of a Windows reboot).\n");
+        printf("  --set-time-only Only allow the settime RPC.\n");
         printf("  --help   Shows this usage message.\n");
         exit(0);
     }
