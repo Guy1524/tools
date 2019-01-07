@@ -433,14 +433,17 @@ if ($NewStatus eq "completed")
     }
   }
 
-  Debug(Elapsed($Start), " Retrieving the list of Wine files '$TaskDir/winefiles.txt'\n");
-  if ($TA->GetFile("latest/winefiles.txt", "$TaskDir/winefiles.txt"))
+  foreach my $FileName ("winefiles.txt", "wine-parentsrc.txt")
   {
-    copy "$TaskDir/winefiles.txt", "$DataDir/latest/winefiles.txt";
-  }
-  elsif (!defined $TAError)
-  {
-    $TAError = "An error occurred while retrieving the list of Wine files: ". $TA->GetLastError();
+    Debug(Elapsed($Start), " Retrieving '$TaskDir/$FileName'\n");
+    if ($TA->GetFile("latest/$FileName", "$TaskDir/$FileName"))
+    {
+      copy "$TaskDir/$FileName", "$DataDir/latest/$FileName";
+    }
+    elsif (!defined $TAError)
+    {
+      $TAError = "An error occurred while retrieving '$TaskDir/$FileName': ". $TA->GetLastError();
+    }
   }
 }
 
