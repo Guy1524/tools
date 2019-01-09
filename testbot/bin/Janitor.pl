@@ -77,7 +77,6 @@ sub Error(@)
 #
 
 $ENV{PATH} = "/usr/bin:/bin";
-delete $ENV{ENV};
 
 # Grab the command line options
 my ($Usage, $DryRun);

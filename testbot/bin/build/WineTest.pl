@@ -210,7 +210,6 @@ sub TestExe($$$)
 #
 
 $ENV{PATH} = "/usr/lib/ccache:/usr/bin:/bin";
-delete $ENV{ENV};
 
 my $Action = "";
 my ($Usage, $OptNoSubmit, $MissionStatement, $FileName, $BaseTag);

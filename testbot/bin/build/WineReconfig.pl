@@ -143,7 +143,6 @@ sub UpdateWinePrefixes($)
 #
 
 $ENV{PATH} = "/usr/lib/ccache:/usr/bin:/bin";
-delete $ENV{ENV};
 
 my ($Usage, $OptUpdate, $OptBuild, $OptNoRm, $OptAddOns, $OptWinePrefix, $MissionStatement);
 while (@ARGV)

@@ -742,7 +742,6 @@ sub main()
   }
 
   $ENV{PATH} = "/usr/bin:/bin";
-  delete $ENV{ENV};
   $SIG{CHLD} = \&REAPER;
 
   $WineTestBot::Engine::Notify::RunningInEngine = 1;

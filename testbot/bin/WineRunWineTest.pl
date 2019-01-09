@@ -103,7 +103,6 @@ sub TakeScreenshot($$)
 #
 
 $ENV{PATH} = "/usr/bin:/bin";
-delete $ENV{ENV};
 
 my $Usage;
 sub ValidateNumber($$)

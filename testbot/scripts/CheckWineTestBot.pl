@@ -39,7 +39,6 @@ use WineTestBot::Config;
 use WineTestBot::Engine::Notify;
 
 $ENV{PATH} = "/sbin:/usr/sbin:/usr/bin:/bin";
-delete $ENV{ENV};
 
 my $rc = 0;
 if (! PingEngine())

@@ -88,8 +88,6 @@ EOF
 #
 
 $ENV{PATH} = "/usr/bin:/bin";
-delete $ENV{ENV};
-
 
 # Grab the command line options
 my ($Usage, $Action, $VMKey);

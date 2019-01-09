@@ -115,7 +115,6 @@ sub BuildTestExecutables($$$)
 #
 
 $ENV{PATH} = "/usr/lib/ccache:/usr/bin:/bin";
-delete $ENV{ENV};
 
 my ($Usage, $PatchFile, $MissionStatement);
 while (@ARGV)
