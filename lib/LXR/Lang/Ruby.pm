@@ -1,8 +1,6 @@
 # -*- tab-width: 4 -*-
 ###############################################
 #
-# $Id: Ruby.pm,v 1.6 2014/03/09 16:04:12 ajlittoz Exp $
-#
 # Enhances the support for the Ruby language over that provided by
 # Generic.pm
 #
@@ -21,8 +19,6 @@
 # Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 
 package LXR::Lang::Ruby;
-
-$CVSID = '$Id: Ruby.pm,v 1.6 2014/03/09 16:04:12 ajlittoz Exp $ ';
 
 use strict;
 use LXR::Common;

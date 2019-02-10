@@ -1,8 +1,7 @@
 /*- -*- tab-width: 4 -*- -*/
 /*-
  *	SQL template for creating Oracle tables
- *	(C) 2012-2013 A. Littoz
- *	$Id: initdb-o-template.sql,v 1.4 2013/11/17 11:12:07 ajlittoz Exp $
+ *	(C) 2012-2016 A. Littoz
  *
  *	This template is intended to be customised by Perl script
  *	initdb-config.pl which creates a ready to use shell script
@@ -10,7 +9,6 @@
  *		./custom.d/"customised result file name"
  *
  */
-
 /* **************************************************************
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,8 +24,13 @@
  * along with this program. If not, see <http://www.gnu.org/licences/>.
  * **************************************************************
 -*/
-
+###
+#
+#		*** Oracle: %DB_name% ***
+#
+###
 /*@XQT echo "*** Oracle - Database creation (!!! untested !!!) ***" */
+/*@XQT if [ ${NO_DB:-0} -eq 0 ] ; then */
 /*@XQT sqlplus <<END_OF_TABLES*/
 -- ***
 -- *** CAUTION -CAUTION - CAUTION ***
@@ -58,6 +61,7 @@ drop table    if exists %DB_tbl_prefix%symbols;
 drop table    if exists %DB_tbl_prefix%releases;
 drop table    if exists %DB_tbl_prefix%status;
 drop table    if exists %DB_tbl_prefix%files;
+drop table    if exists %DB_tbl_prefix%times;
 
 commit;
 
@@ -86,13 +90,16 @@ CACHE 5
 NOORDER;         
 
 commit;
+quit
+/*@XQT END_OF_TABLES*/
+/*@XQT fi */
 
-
+/*@XQT sqlplus <<END_OF_TABLES*/
 /* Base version of files */
 /*	revision:	a VCS generated unique id for this version
 				of the file
  */
-create table %DB_tbl_prefix%files
+create table if not exists %DB_tbl_prefix%files
 	( fileid	number -- given by filenum
 	, filename	varchar2(255)
 	, revision	varchar2(255)
@@ -102,7 +109,7 @@ create table %DB_tbl_prefix%files
 		unique (filename, revision)
 	);
 
-create index %DB_tbl_prefix%filelookup
+create index if not exists %DB_tbl_prefix%filelookup
 	on %DB_tbl_prefix%files(filename);
 
 commit;
@@ -120,7 +127,7 @@ commit;
 /* Deletion of a record automatically removes the associated
  * base version files record.
  */
-create table %DB_tbl_prefix%status
+create table if not exists %DB_tbl_prefix%status
 	( fileid	number not null
 	, relcount  number
 	, indextime number
@@ -153,7 +160,7 @@ commit;
 	fileid:		refers to base version
 	releaseid:	"public" release tag
  */
-create table %DB_tbl_prefix%releases
+create table if not exists %DB_tbl_prefix%releases
 	( fileid	number
 	, releaseid	varchar2(255)
 	, constraint %DB_tbl_prefix%pk_releases
@@ -197,7 +204,7 @@ commit;
 /* Types */
 /*	declaration:	provided by generic.conf
  */
-create table %DB_tbl_prefix%langtypes
+create table if not exists %DB_tbl_prefix%langtypes
 	( typeid		number NULL
 	, langid		number NOT NULL
 	, declaration	varchar2(255)
@@ -212,7 +219,7 @@ commit;
  * 	symcount:	number of definitions and usages for this name
  *	symname:	symbol name
  */
-create table %DB_tbl_prefix%symbols
+create table if not exists %DB_tbl_prefix%symbols
 	( symid		number
 	, symcount	number
 	, symname	varchar2(255)
@@ -222,7 +229,7 @@ create table %DB_tbl_prefix%symbols
 		unique (symnane)
 	);
 
-create index %DB_tbl_prefix%symlookup
+create index if not exists %DB_tbl_prefix%symlookup
 	on %DB_tbl_prefix%files(symname);
 
 /* The following function decrements the symbol reference count
@@ -267,7 +274,7 @@ commit;
  *	relid:	optional id of the englobing declaration
  *			(refers to another symbol, not a definition)
  */
-create table %DB_tbl_prefix%definitions
+create table if not exists %DB_tbl_prefix%definitions
 	( symid		number
 	, fileid	number
 	, line		number
@@ -288,8 +295,8 @@ create table %DB_tbl_prefix%definitions
 		references %DB_tbl_prefix%symbols(symid)
 	);
 
-create index %DB_tbl_prefix%i_definitions
-	on %DB_tbl_prefix%definitions(symid);
+create index if not exists %DB_tbl_prefix%i_definitions
+	on %DB_tbl_prefix%definitions(symid, fileid);
 
 /* The following trigger maintains correct symbol reference count
  * after definition deletion.
@@ -302,7 +309,7 @@ create or replace trigger %DB_tbl_prefix%remove_definition
 commit;
 
 /* Usages */
-create table %DB_tbl_prefix%usages
+create table if not exists %DB_tbl_prefix%usages
 	( fileid	number
 	, line		number
 	, symid		number
@@ -314,8 +321,8 @@ create table %DB_tbl_prefix%usages
 		references %DB_tbl_prefix%files(fileid)
 	);
 
-create index %DB_tbl_prefix%i_usages
-	on %DB_tbl_prefix%usage(symid);
+create index if not exists %DB_tbl_prefix%i_usages
+	on %DB_tbl_prefix%usage(symid, fileid);
 
 /* The following trigger maintains correct symbol reference count
  * after usage deletion.
@@ -324,6 +331,24 @@ create or replace trigger %DB_tbl_prefix%remove_usage
 	after delete on %DB_tbl_prefix%usages
 	for each row
 	execute procedure %DB_tbl_prefix%decusage();
+
+commit;
+
+/* Statistics */
+/*	releaseid:	"public" release tag
+ *	reindex  :	reindex-all flag
+ *	stepname :	step name
+ *	starttime:	step start time
+ *	endtime  :	step end time
+ */
+drop table if exists %DB_tbl_prefix%times;
+create table %DB_tbl_prefix%times
+	( releaseid varchar(255)
+	, reindex   int
+	, stepname  char(1)
+	, starttime int
+	, endtime   int
+	);
 
 commit;
 
@@ -339,6 +364,7 @@ begin
 	truncate table %DB_tbl_prefix%releases;
 	truncate table %DB_tbl_prefix%status;
 	truncate table %DB_tbl_prefix%files;
+	truncate table %DB_tbl_prefix%times;
 	commit;
 end;
 /
@@ -356,6 +382,7 @@ grant select, insert, update, delete on %DB_tbl_prefix%releases    to %DB_user%;
 grant select, insert, update, delete on %DB_tbl_prefix%status      to %DB_user%;
 grant select, insert, update, delete on %DB_tbl_prefix%files       to %DB_user%;
 grant select, insert, update, delete on %DB_tbl_prefix%langtypes   to %DB_user%;
+grant select, insert, update, delete on %DB_tbl_prefix%times       to %DB_user%;
 
 commit;
 

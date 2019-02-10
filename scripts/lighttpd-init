@@ -1,6 +1,4 @@
 #!/bin/sh
-# $Id: lighttpd-init,v 1.1 2012/01/29 14:11:32 ajlittoz Exp $
-#
 # lighttpd     Startup script for the lighttpd server
 #
 # chkconfig: - 85 15

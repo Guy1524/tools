@@ -1,8 +1,6 @@
 # -*- tab-width: 4 -*-
 ###############################################
 #
-# $Id: ContextMgr.pm,v 1.6 2014/03/10 10:09:28 ajlittoz Exp $
-#
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 2 of the License, or
@@ -46,6 +44,7 @@ our @EXPORT = qw(
 	$dbpolicy    $dbname   $dbuser
 	$dbpass      $dbprefix $nodbuser
 	$nodbprefix
+	$sqlitedir
 	&contextReload
 	&contextSave
 	&contextTrees
@@ -81,10 +80,11 @@ our $dbpass;
 our $dbprefix;
 our $nodbuser;
 our $nodbprefix;
+our $sqlitedir;
 
 # WARNING:	remember to increment this number when changing the
 #			set of state variables and/or their meaning.
-my $context_version = 3;
+my $context_version = 4;
 
 
 ##############################################################
@@ -135,58 +135,111 @@ sub contextReload {
 			}
 		}
 		if ($context_created < $context_version) {
-			print "${VTred}ERROR:${VTnorm} saved context file too old!\n";
-			print "Recorded state version = $context_created while expecting version = $context_version\n";
-			if ($context_version == $context_created + 1) {
-				print "It is possible to upgrade the context (without saving it),\n";
-				print "but without any guarantee.\n";
-				print "Note also that templates may have changed and\n";
-				print "no longer be compatible with your configuration files.\n";
-				print "\n";
-				print "${VTyellow}WARNING:${VTnorm} inconsistent answers can lead to LXR malfunction.\n";
-				print "\n";
-				if ('q' eq get_user_choice
-					( 'Do you want to quit or try to upgrade context?'
-					, 1
-					, [ 'quit', 'upgrade' ]
-					, [ 'q', 'u' ]
-					) ) {
-					exit 1;
+			if	(	3 == $context_created
+				&&	4 == $context_version
+				) {
+				if	(	'm' eq $cardinality
+					&&	(	's' eq $dbengine
+						||	'y' eq get_user_choice
+								( 'Will you ever use SQLite databases'
+								, 2
+								, [ 'yes', 'no' ]
+								, [ 'y', 'n' ]
+								)
+						)
+					) {
+					print <<CTX_V3_SQLITE;
+${VTyellow}WARNING:${VTnorm} context v3 does not record common SQlite database directory.
+         You must then type the full absolute path to the database.
+         If you want to use relative paths, answer the following questions.
+CTX_V3_SQLITE
+					if	(	'y' eq get_user_choice
+								( 'Do you store all your SQLite databases in a common directory'
+								, 1
+								, [ 'yes', 'no' ]
+								, [ 'y', 'n' ]
+								)
+						&&	'y' eq get_user_choice
+								( 'would you like it to be implicitly prefixed to your (relative) DB names'
+								, 1
+								, [ 'yes', 'no' ]
+								, [ 'y', 'n' ]
+								)
+						) {
+						$sqlitedir = get_user_choice
+							( '--- Location? (e.g. /var/local/lxrdb)'
+							, -2
+							, [ '^/', 'absolute path required'
+							, '^[^;]+$', 'path cannot contain semicolon'
+							  ]
+							, []
+							);
+						$sqlitedir =~ s!^/*!/!;	# single / at start
+						$sqlitedir =~ s!/*$!/!;	# single / at end
+						$sqlitedir =~ s!'!\'!g;	# ensure single quotes are escaped
 					}
-				print "\n";
-				print "Previous configuration was made for:\n";
-				print "- ";
-				if ('m' eq $cardinality) {
-					print 'multiple trees';
-				} else {
-					print 'single tree';
+					open(SOURCE, '<', $ctxtfile);
+					while (<SOURCE>) {
+						last if m/associated with (.*)/
+					}
+					close (SOURCE);
+					contextSave ($ctxtfile, $1);
+					print "${VTyellow}***${VTnorm} context upgraded\n";
 				}
-				print "\n";
-				print "- ";
-				if ('t' eq $dbpolicy) {
-					print 'per tree';
-				} else {
-					print 'global';
-				}
-				print " database\n";
-				print "\n";
-				contextServer (2);
-				print "\n";
 			} else {
-				print "It is wise to 'quit' now and add manually the new tree or reconfigure from scratch.\n";
-				print "You can however try to restore the initial context at your own risk.\n";
-				print "\n";
-				print "${VTyellow}WARNING:${VTnorm} inconsistent answers can lead to LXR malfunction.\n";
-				print "\n";
-				if ('q' eq get_user_choice
-					( 'Do you want to quit or manually restore context?'
-					, 1
-					, [ 'quit', 'restore' ]
-					, [ 'q', 'r' ]
-					) ) {
-					exit 1;
+				print "${VTred}ERROR:${VTnorm} saved context file too old!\n";
+				print "Recorded state version = $context_created while expecting version = $context_version\n";
+				if ($context_version == $context_created + 1) {
+					print "It is possible to upgrade the context (without saving it),\n";
+					print "but without any guarantee.\n";
+					print "Note also that templates may have changed and\n";
+					print "no longer be compatible with your configuration files.\n";
+					print "\n";
+					print "${VTyellow}WARNING:${VTnorm} inconsistent answers can lead to LXR malfunction.\n";
+					print "\n";
+					if ('q' eq get_user_choice
+						( 'Do you want to quit or try to upgrade context?'
+						, 1
+						, [ 'quit', 'upgrade' ]
+						, [ 'q', 'u' ]
+						) ) {
+						exit 1;
+						}
+					print "\n";
+					print "Previous configuration was made for:\n";
+					print "- ";
+					if ('m' eq $cardinality) {
+						print 'multiple trees';
+					} else {
+						print 'single tree';
+					}
+					print "\n";
+					print "- ";
+					if ('t' eq $dbpolicy) {
+						print 'per tree';
+					} else {
+						print 'global';
+					}
+					print " database\n";
+					print "\n";
+					contextServer (2);
+					print "\n";
+				} else {
+					print "It is wise to 'quit' now and add manually the new tree or reconfigure from scratch.\n";
+					print "You can however try to restore the initial context at your own risk.\n";
+					print "\n";
+					print "${VTyellow}WARNING:${VTnorm} inconsistent answers can lead to LXR malfunction.\n";
+					print "\n";
+					if ('q' eq get_user_choice
+						( 'Do you want to quit or manually restore context?'
+						, 1
+						, [ 'quit', 'restore' ]
+						, [ 'q', 'r' ]
+						) ) {
+						exit 1;
+					}
+					$reloadstatus = 1;
 				}
-				$reloadstatus = 1;
 			}
 		}
 
@@ -332,6 +385,7 @@ sub contextSave {
 	# Set v2 continued
 		print DEST "\$virtrootbase = '$virtrootbase';\n";
 		print DEST "\$virtrootpolicy = '$virtrootpolicy';\n";
+		print DEST "\$sqlitedir = '$sqlitedir';\n" if defined($sqlitedir);
 		close(DEST)
 		or print "${VTyellow}WARNING:${VTnorm} error $! when closing context file ${VTbold}$confout${VTnorm}!\n";
 	} else {
@@ -347,9 +401,11 @@ sub contextSave {
 ##############################################################
 #	Are we configuring for single tree or multiple trees?
 sub contextTrees {
+	my ($verbose, $multidft) = @_;
+
 	$cardinality = get_user_choice
 			( 'Configure for single/multiple trees?'
-			, 1
+			, $multidft ? 2 : 1
 			, [ 's', 'm' ]
 			, [ 's', 'm' ]
 			);
@@ -493,6 +549,38 @@ sub contextDB {
 			$nodbprefix = 1;
 		}
 	}
+
+	if ('s' eq $dbengine) {
+		if ($verbose > 1) {
+			print <<CTX_DB_SQLITE;
+You can store all your LXR SQLite databases in the same directory as is usual.
+The wizard may remember this directory so that you only give a file path relative
+to the directory instead of a (longer) absolute path.
+CTX_DB_SQLITE
+		}
+		if ('y' eq get_user_choice
+					( 'Use a common SQLite DB directory'
+					, 1
+					, [ 'yes', 'no' ]
+					, [ 'y', 'n' ]
+					)
+			) {
+			$sqlitedir = get_user_choice
+					( '--- Location? (e.g. /var/local/lxrdb)'
+					, -2
+					, [ '^/', 'absolute path required'
+					  , '^[^;]+$', 'path cannot contain semicolon'
+					  ]
+					, []
+					);
+			$sqlitedir =~ s!^/*!/!;	# single / at start
+			$sqlitedir =~ s!/*$!/!;	# single / at end
+			$sqlitedir =~ s!'!\'!g;	# ensure single quotes are escaped
+			if ($verbose > 1) {
+				print "${VTyellow}Reminder:${VTnorm} do not forget to create this directory, if not already done.\n";
+			}
+		}
+	}
 }
 
 
@@ -548,13 +636,13 @@ sub contextServer {
 			print "\n";
 		}
 		$treematch = get_user_choice
-			( 'Tree designation?'
+			( "Tree designation?\n"
 			, 1
-			,	[ "argument\n"
-				, "section name\n"
-				, "prefix in host\n"
-				, "hostname\n"
-				, "embedded in section"
+			,	[ 'argument'
+				, 'section name'
+				, 'prefix in hos'
+				, 'hostname'
+				, 'embedded in section'
 				]
 			, [ 'A', 'S', 'P', 'H', 'E' ]	# A arg, S section, P prefix, H host, E = embedded
 			);
@@ -587,6 +675,8 @@ sub contextServer {
 		print "${VTyellow}Reminder:${VTnorm} Since you chose to give a different hostname\n";
 		print "          to every tree, you'll be asked for the hostname when describing\n";
 		print "          yours trees.\n";
+		print "${VTred}IMPORTANT!${VTnorm} You'll have to manually edit the server configuration files\n";
+		print "           to erase // prefix and port suffix from host descriptors.\n";
 		print "\n";
 		goto END_HOST;
 	}

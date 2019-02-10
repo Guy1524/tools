@@ -2,8 +2,6 @@
 # -*- tab-width: 4 -*-
 ###############################################
 #
-# $Id: configure-lxr.pl,v 1.15 2013/11/07 17:38:36 ajlittoz Exp $
-#
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 2 of the License, or
@@ -19,8 +17,6 @@
 # Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 #
 ###############################################
-
-# $Id: configure-lxr.pl,v 1.15 2013/11/07 17:38:36 ajlittoz Exp $
 
 use strict;
 use Getopt::Long qw(:config gnu_getopt);
@@ -39,9 +35,7 @@ use VTescape;
 #
 ##############################################################
 
-my $version = '$Revision: 1.15 $';
-$version =~ s/Revision: (.*) /$1/;
-$version =~ s/\$//g;
+my $version = '2.3';
 
 #	Who am I? Strip directory path.
 my $cmdname = $0;
@@ -134,7 +128,7 @@ END_HELP
 if ($option{'version'}) {
 	print <<END_VERSION;
 ${cmdname} version $version
-(C) 2012-2013 A. J. Littoz
+(C) 2012-2018 A. J. Littoz
 This is free software under GPL v3 (or higher) licence.
 There is NO warranty, not even for MERCHANTABILITY nor
 FITNESS FOR A PARICULAR PURPOSE to the extent permitted by law.
@@ -234,23 +228,109 @@ if (! -d $confdir) {
 	}
 }
 
+if (! -d $confdir.'/db-scripts.d') {
+	make_path($confdir.'/db-scripts.d');	# equivalent to mkdir -p
+	if ($verbose) {
+		print "directory ${VTbold}$confdir/db-scripts.d${VTnorm} created\n";
+	}
+}
+
 ##############################################################
 #
 #				Define global parameters
 #
 ##############################################################
+my @config;				# configuration file tree sections
+my $treesinconfig = 0;	# count of trees in configuration file
+my $tdbengine;			# tree-local database properties
+my $tdbname;
+my $tdbuser;
+my $tdbpass;
+my $tdbprefix;
+my %deferred_markers;	# in case we precompute markers
 
 if ($verbose) {
 	print "\n";
 }
-my %users;			# Cumulative list of all user/password
+#	The hashes below guarantee unicity of databases and users across
+#	all trees and configuration sessions.
+#	Key is engine:dbname:prefix with indifferent value (only existence is
+#	relevant or engine:user with password value.
+my %dbdict;			# dictionary of all databases (as a set of tables)
+my %dbusersdict;	# dictionary of all user/password
+
+if ($addtree) {
+	$addtree += contextReload ($verbose, "$confdir/$contextfile");
+	sub readfile {}		# dummy sub to disable 'range' file reads
+	sub dummyfiles {	# dummy "files" object constructor to disable 'range' functions
+		my $self = {};
+		bless $self;
+		return $self;
+	};
+	sub AUTOLOAD {		# silence all 'files' methods
+		return undef;
+	}
+	my $files = dummyfiles();
+	unless (open(CONFIG, "$confdir/$confout")) {
+		print "${VTred}ERROR:${VTnorm} could not load configuration file ${VTbold}$confdir/$confout${VTnorm}\n";
+		if (1 < $addtree) {
+			print <<END_NOCONF;
+   You have neither a configuration file nor its associated context file.
+   Option ${VTred}--addtree${VTnorm} may be specified by mistake. If so, retry without it.
+   Otherwise, use options ${VTbold}--conf-dir${VTnorm} and ${VTbold}--conf-out${VTnorm} to point the wizard
+   onto the adequate directory
+END_NOCONF
+		}
+		exit(1);
+	}
+	$/ = undef;
+	my $config_contents = <CONFIG>;
+	$/ = $oldsep;
+	close(CONFIG);
+	$config_contents =~ /(.*)/s;
+	$config_contents = $1;    #untaint it
+	@config = eval("\n#line 1 \"configuration file\"\n" . $config_contents);
+	die($@) if $@;
+	$treesinconfig = $#config - 1;	# count of trees previously described
+	if ('single' eq $config[0]->{'routing'}) {
+		print "${VTred}ERROR:${VTnorm} your initial context was ${VTbold}single-tree${VTnorm}.\n";
+		print "       It does not make sense to add a tree in this mode.\n";
+		exit 1;
+	}
+	$deferred_markers{'%_no_freesearch%'} = 
+		(	defined $config[0]->{'glimpsebin'}
+			&& $config[0]->{'glimpsebin'} eq '/usr/bin/true'
+		||	defined $config[0]->{'swishbin'}
+			&& $config[0]->{'swishbin'} eq '/usr/bin/true'
+		||	defined $config[0]->{'glimpsebin'} && defined $config[0]->{'swishbin'}
+		);
+}
 
 if ($addtree != 1) {
 
 		#	Single or multiple trees mode of operation
 		#	------------------------------------------
 
-	contextTrees ($verbose);
+	if (1 < $treesinconfig) {
+		$cardinality = 'm';
+	} else {
+		contextTrees ($verbose, $addtree);
+	}
+	if	(	1 < $addtree
+		&&	's' eq $cardinality
+		) {
+		print "${VTred}ERROR:${VTnorm} ${VTbold}single${VTnorm} mode conflicts with option ${VTbold}--addtree${VTnorm}\n";
+		if ($verbose) {
+			print <<END_S_CFLCT;
+   Context file is not really necessary in ${VTbold}single${VTnorm} mode.
+   * DB recreation script can proceed without it. It is not necessary to
+     run the present script to rebuild context.
+   * You arrived here because option ${VTbold}--addtree${VTnorm} was specified
+     on the command line. If this is an error, retry without it.
+END_S_CFLCT
+		}
+		exit 1;
+	}
 
 		#	Web server definition
 		#	---------------------
@@ -261,7 +341,78 @@ if ($addtree != 1) {
 		print "\n";
 	}
 	contextServer ($verbose);
-	if ('c' eq $virtrootpolicy) {
+	if (1 < $addtree) {
+		my $oldrouting = uc($config[0]->{'routing'});
+		$oldrouting = 'N' if 'single' eq $oldrouting;
+		$oldrouting = substr($oldrouting, 0, 1);
+		if ($oldrouting ne $treematch) {
+			print "${VTred}ERROR:${VTnorm} tree designation method was ${VTbold}";
+			if ('N' eq $oldrouting) {
+				print 'implicit (single tree)';
+			} elsif ('H' eq $oldrouting) {
+				print 'hostname';
+			} elsif ('P' eq $oldrouting) {
+				print 'prefix in hostname';
+			} elsif ('S' eq $oldrouting) {
+				print 'section name';
+			} elsif ('E' eq $oldrouting) {
+				print 'embedded in section';
+			} elsif ('A' eq $oldrouting) {
+				print 'argument';
+			}
+			print "${VTnorm}.\n";
+			print "       You requested ${VTbold}";
+			if ('N' eq $treematch) {
+				print 'implicit (single tree)';
+			} elsif ('H' eq $treematch) {
+				print 'hostname';
+			} elsif ('P' eq $treematch) {
+				print 'prefix in hostname';
+			} elsif ('S' eq $treematch) {
+				print 'section name';
+			} elsif ('E' eq $treematch) {
+				print 'embedded in section';
+			} elsif ('A' eq $treematch) {
+				print 'argument';
+			}
+			print "${VTnorm}.\n";
+			exit 1;
+		}
+		if	(	@hostaliases <= 0
+			&&	1 < scalar($config[0]->{'host_names'})
+			) {
+# 			if (1 < $verbose) {
+				print "${VTyellow}***${VTnorm} Host aliases recovered from configuration file\n";
+# 			}
+			my @hn = @{$config[0]->{'host_names'}};
+			shift @hn;	# remove primary host name
+			foreach my $alias (@hn) {
+				# copied from contextServer
+				$alias =~ m!^([^/]+)?//([^:]+)(?::(\d+))?/?!;
+				my $aliasscheme = $1;
+				my $aliasname   = $2;
+				my $aliasport   = $3;
+				$aliasscheme = 'http:' if !defined($1);
+				$aliasport   = 80  if 'http:' eq $aliasscheme && !defined($3);
+				$aliasport   = 443 if 'https:' eq $1 && !defined($3);
+				push (@schemealiases, $aliasscheme);
+				push (@hostaliases,   $aliasname);
+				push (@portaliases,   $aliasport);
+			}
+		}
+		if	(	$commonvirtroot
+			&&	$virtrootbase ne $config[0]->{'virtroot'}
+			) {
+			print <<END_CVR;
+${VTyellow}WARNING:${VTnorm} the virtual root '${VTbold}$virtrootbase${VTnorm}' you provided is not the same
+         the one retrieved from the configuration file ('${VTbold}$config[0]->{'virtroot'}${VTnorm}').
+         Configuration is allowed to continue but you may get weird results.
+END_CVR
+		}
+	}
+	if	(	'c' eq $virtrootpolicy
+		&&	!$addtree
+		) {
 		print <<END_C_VIRT;
 ${VTyellow}Reminder:${VTnorm} do not forget to implement your management in the following files:
 - ${confdir}/${VTbold}apache-lxrserver.conf${VTnorm} if using Apache,
@@ -285,17 +436,18 @@ END_C_VIRT
 		#	-----------------------------------------------
 
 if ($addtree) {
+
 	if ($verbose) {
 		print "== ${VTyellow}ADD MODE${VTnorm} ==\n";
 		print "\n";
 	}
-	$addtree += contextReload ($verbose, "$confdir/$contextfile");
 	if ($cardinality eq 's') {
 		print "${VTred}ERROR:${VTnorm} initial configuration was done for a single tree!\n";
 		print "This is not compatible with the present web server configuration.\n";
 		print "To add more trees, you must reconfigure for multiple trees.\n";
 		exit 1;
 	}
+	$cardinality = 'm';	# make sure context is correct even if context not reloaded
 	if ($dbpolicy eq 't') {
 		print "${VTnorm}\n";
 		print "Advanced users can configure different DB engines for different trees.\n";
@@ -345,9 +497,70 @@ but resource consumption is also an important factor.
 END_DB
 	}
 	contextDB ($verbose);
-	if ($dbuser) {
-		$users{$dbuser} = $dbpass;	# Record global user/password
+
+	if (1 < $addtree) {
+		if	(	!$nodbuser
+			&&	(	$dbuser ne $config[0]->{'dbuser'}
+				||	$dbpass ne $config[0]->{'dbpass'}
+				)
+			) {
+				print <<END_CDU;
+${VTred}ERROR:${VTnorm} the common database user $VTbold$dbuser$VTnorm/$VTbold$dbpass$VTnorm you provided is not the same
+       as the one retrieved from the configuration file ($VTbold$config[0]->{'dbuser'}$VTnorm/$VTbold$config[0]->{'dbpass'}$VTnorm).
+       This may cause problems if you continue.
+END_CDU
+		}
+		if	(	!$nodbprefix
+			&&	$dbprefix ne $config[0]->{'dbprefix'}
+			) {
+			print <<END_CDP;
+${VTred}ERROR:${VTnorm} the common database table prefix '$VTbold$dbprefix$VTnorm$VTnorm' you provided is not the same
+       as the one retrieved from the configuration file ('$VTbold$config[0]->{'dbprefix'}$VTnorm$VTnorm').
+       This may cause problems if you continue.
+END_CDP
+		}
 	}
+}
+
+		#	Scan lxr.conf to gather tree properties 
+		#	---------------------------------------
+		#	in order to detect inconsistencies and duplicates
+		#	in databases descriptions
+
+if ($addtree) {
+	shift @config;	# remove global section
+	foreach my $confblock (@config) {
+		my ($tdbengine, $tdbname, $tdbuser, $tdbpass, $tdbprefix);
+		$confblock->{'dbname'} =~ m/dbi:(\w+):dbname=(.+)(?:;|$)/;
+		$tdbname = $2;
+		$tdbengine = lc(substr($1, 0, 1));
+		if (exists($confblock->{'dbuser'})) {
+			$tdbuser = $confblock->{'dbuser'};
+		} else {
+			$tdbuser = $dbuser;
+		}
+		if (exists($confblock->{'dbpass'})) {
+			$tdbpass = $confblock->{'dbpass'};
+		} else {
+			$tdbpass = $dbpass;
+		}
+		if (exists($confblock->{'dbprefix'})) {
+			$tdbprefix = $confblock->{'dbprefix'};
+		} else {
+			$tdbprefix = $dbprefix;
+		}
+		$dbdict{"$tdbengine:$tdbname:$tdbprefix"} = 1;	# note definition
+		$dbusersdict{$tdbengine.$tdbuser} = $tdbpass;	# remember password
+	}
+	print "Initial configuration file $confout scanned\n" if $verbose;
+}
+
+		#	Remember eventual global user/password
+		#	--------------------------------------
+
+
+if ($dbuser) {
+	$dbusersdict{$dbengine.$dbuser} = $dbpass;
 }
 
 ##############################################################
@@ -356,6 +569,46 @@ END_DB
 #
 ##############################################################
 
+if (1 < $addtree) {
+	if (1 < $verbose) {
+		print <<END_CTX;
+
+${VTyellow}***${VTnorm} A reconstructed context is now available.
+  * If errors were notified, the safest option is to ${VTbold}quit without saving${VTnorm}
+    to take time to think about the errors and their fixes.
+  * You can also ${VTbold}save and quit${VTnorm} so that you can manually check and compare
+    the context file and the configuration file.
+  = = = If you are confident in context reconstruction, you can try to continue.
+  * You can ${VTbold}continue without saving${VTnorm} to see what happens and you'll have
+    to restore again a context next time you add a tree.
+  * You can also ${VTbold}save and continue{VTnorm} on the ground you can delete the context
+    file if you are not satisfied with the results.
+
+END_CTX
+	}
+	my $ctxaction = get_user_choice
+			( "${VTyellow}***${VTnorm} What do you want to do with the restored context?\n"
+			, 2
+			,	[ '1. quit no save'
+				, '2. save and quit'
+				, '3. continue no save'
+				, '4. save and continue'
+				]
+			, [ '1', '2', '3', '4' ]
+			);
+	if	(	'2' eq $ctxaction
+		||	'4' eq $ctxaction
+		) {
+		contextSave ("$confdir/$contextfile", $confout);
+	}
+	if	(	'1' eq $ctxaction
+		||	'2' eq $ctxaction
+		) {
+		exit 0;
+	}
+	print "${VTyellow}***${VTnorm} End of context restoration, back to new tree description\n";
+	print "\n";
+}
 if (!$addtree) {
 	contextSave ("$confdir/$contextfile", $confout);
 }
@@ -378,10 +631,6 @@ my %markers =
 		( '%_add%'		=> $addtree
 		, '%_shell%'	=> 0
 		, '%_singlecontext%' => $cardinality eq 's'
-		, '%_createglobals%' => $cardinality eq 'm'
-							&&	(  0 == $addtree
-								|| 1 == $dbenginechanged
-								)
 		, '%_dbengine%'	=> $dbengine
 		, '%_dbpass%'	=> $dbpass
 		, '%_dbprefix%'	=> $dbprefix
@@ -409,6 +658,7 @@ my %markers =
 		, '%portaliases%'	=> \@portaliases
 		, '%port%'			=> $port
 		, '%virtrootbase%'	=> $virtrootbase
+		, '%SQLiteDBdir%'	=> $sqlitedir
 		);
 
 my $sample;
@@ -431,21 +681,13 @@ $markers{'%DB_password%'} = $dbpass if $dbpass;
 $markers{'%DB_global_prefix%'} = $dbprefix if $dbprefix;
 
 $markers{'%search_engine%'} = 'glimpse';	# glimpse will have priority
+$markers{'%_no_freesearch%'} = 0;
 if (!$addtree) {
 	if	(  !defined($markers{'%glimpse%'})
 		&& !defined($markers{'%swish%'})
 		) {
 		print "${VTred}ERROR:${VTnorm} neither glimpse nor swish-e found in \$PATH!\n";
 		if ('y' eq get_user_choice
-				( 'Is your source tree stored in a VCS repository?'
-				, 2
-				, [ 'yes', 'no' ]
-				, [ 'y', 'n']
-				)
-			) {
-			print "Since free-text search is not compatible with VCSes, you can continue\n";
-			$markers{'%glimpse%'} = '/bin/true';	# disable free-text search
-		} elsif ('y' eq get_user_choice
 				( 'Does one of them exist in a non standard directory?'
 				, 1
 				, [ 'yes', 'no' ]
@@ -453,7 +695,7 @@ if (!$addtree) {
 				)
 			) {
 			my $search = get_user_choice
-					( '--- Which is it?'
+					( '--- Which tool?'
 					, 1
 					, [ 'glimpse',   'swish-e' ]
 					, [ '%glimpse%', '%swish%' ]
@@ -483,6 +725,7 @@ if (!$addtree) {
 			print "${VTyellow}Sorry:${VTnorm} free-text search disabled\n";
 			$markers{'%glimpse%'} = '/bin/true';	# disable free-text search
 			$markers{'%glimpsedirbase%'} = '/tmp';	# only to silence config check
+			$markers{'%_no_freesearch%'} = 1;
 		}
 	}
 
@@ -516,6 +759,9 @@ if (!$addtree) {
 		print "${VTred}REMINDER:${VTyellow} after this configuration step, open ${VTnorm}${VTbold}$confout${VTnorm}${VTyellow}\n";
 		print "and comment out one of 'glimpsebin' or 'swishbin'.${VTnorm}\n";
 	}
+} else {
+		# retrieve present freetext search status
+	$markers{'%_no_freesearch%'} = $deferred_markers{'%_no_freesearch%'};
 }
 
 ##############################################################
@@ -639,16 +885,6 @@ END_GLOBAL
 	copy_and_configure_template	( $lxrtmplconf
 								, "${confdir}/${confout}"
 								);
-} elsif ($dbenginechanged && !$nodbuser) {
-	if ('n' eq  get_user_choice
-				( 'Do you want to create the global DB user?'
-				, 1
-				, [ 'yes', 'no' ]
-				, [ 'y', 'n']
-				)
-			) {
-		$markers{'%_createglobals%'} = 0;
-	}
 }
 
 ##############################################################
@@ -668,6 +904,12 @@ ${VTyellow}***${VTnorm} ${VTred}L${VTblue}X${VTgreen}R${VTnorm} master configura
 END_TREE
 }
 
+if (!$addtree) {
+	open(GLOBAL, '>', "${confdir}/${scriptout}");
+	print GLOBAL "#!/bin/sh\n";
+} else {
+	open(GLOBAL, '>>', "${confdir}/${scriptout}")
+}
 while (1) {
 	#	Start each iteration in default configuration
 	$markers{'%_add%'} = $addtree;
@@ -736,34 +978,57 @@ while (1) {
 
 	#	Have new DB user and password been defined?
 	if (exists($markers{'%DB_tree_user%'})) {
-		if (exists($users{$markers{'%DB_tree_user%'}})) {
-			if ($users{$markers{'%DB_tree_user%'}} ne
-					$markers{'%DB_tree_password'}) {
+		if (exists($dbusersdict{$dbengine.$markers{'%DB_tree_user%'}})) {
+			if ($dbusersdict{$dbengine.$markers{'%DB_tree_user%'}} ne
+					$markers{'%DB_tree_password%'}) {
 				print "${VTred}ERROR:${VTnorm} user ${VTbold}$markers{'%DB_tree_user%'}${VTnorm} already exists with a different password!\n";
 				print "Configuration continues but it won't work.\n";
 			}
 		} else {
 			#	Tell other templates something changed
 			$markers{'%_dbuseroverride%'} = 1;
-			$users{$markers{'%DB_tree_user%'}} = $markers{'%DB_tree_password'};
+			$dbusersdict{$dbengine.$markers{'%DB_tree_user%'}} = $markers{'%DB_tree_password%'};
 		}
 	}
 	#	New DB table prefix?
 	if (!exists($markers{'%DB_tbl_prefix%'})) {
-		$markers{'%DB_tbl_prefix%'} = $markers{'%DB_global_prefix%'};
+		$markers{'%DB_tbl_prefix%'} = $dbprefix;
 	}
-
+	#	Check DB unicity
+	$tdbname = $dbengine
+				. ':' . $markers{'%DB_name%'}
+				. ':' . $markers{'%DB_tbl_prefix%'}
+				;
+	if (exists($dbdict{$tdbname})) {
+			print "${VTred}ERROR:${VTnorm} database ${VTbold}$markers{'%DB_name%'}${VTnorm}"
+				. " with table prefix ${VTbold}$markers{'%DB_tbl_prefix%'}${VTnorm} already exists!\n";
+			print "Configuration continues but the previous DB will be erased if you try running the\n";
+			print "initialisation script.\n";
+	} else {
+		$dbdict{$tdbname} = 1;
+	}
 	$input = $ovrdir . "/initdb/initdb-${dbengine}-template.sql";
 	if (! -e $input) {
 		$input = ${tmpldir} . "/initdb/initdb-${dbengine}-template.sql";
 	}
 	open(SOURCE, '<', ${input})
-	or die("${VTred}ERROR:${VTnorm} couldn't open  script template file \"${input}\"\n");
-	if (!$addtree) {
-		unlink "${confdir}/${scriptout}";
-	};
-	open(DEST, '>>', "${confdir}/${scriptout}")
-	or die("${VTred}ERROR:${VTnorm} couldn't open output file \"${confdir}/$scriptout\"\n");
+	or die("${VTred}ERROR:${VTnorm} couldn't open script template file \"${input}\"\n");
+	my $dbscript = $markers{'%DB_name%'};
+	if ('s' eq $dbengine) {	# SQLite DB name is a file path
+		$dbscript = substr($dbscript, 1);
+		$dbscript =~ s!/!@!g;
+	}
+	$dbscript = ${confdir}.'/db-scripts.d/'
+					. $dbengine . ':'
+					. $dbscript . ':'
+					. $markers{'%DB_tbl_prefix%'}
+					. '.sh';
+	open( DEST
+		, '>'
+		, $dbscript
+		)
+	or die("${VTred}ERROR:${VTnorm} couldn't open output file \"${dbscript}\"\n");
+	print DEST "#!/bin/sh\n";
 
 	# NOTE:
 	#	The design of the configuration process left the possibility
@@ -789,6 +1054,9 @@ while (1) {
 
 	close(SOURCE);
 	close(DEST);
+	chmod 0775, $dbscript;	# Make sure script has x permission
+	#	Stuff the individual DB script into the global script
+	print GLOBAL ". ${dbscript}\n";
 
 	print "\n";
 	if	(  $cardinality eq 's'
@@ -803,7 +1071,61 @@ while (1) {
 	}
 	#	Prevent doing one-time actions more than once
 	$addtree = 1;	# Same as adding a new tree
-	$markers{'%_createglobals%'} = 0;
+}
+
+close(GLOBAL);
+chmod 0775, "${confdir}/${scriptout}";	# Make sure script has x permission
+
+##############################################################
+#
+#				Manage PostgreSQL passwords
+#
+##############################################################
+
+my $pwdf = "${confdir}/db-scripts.d/pgpass";
+if (!$addtree) {
+	unlink($pwdf);
+}
+my @pguser = map {substr($_, 1)} grep (m/^p/, keys %dbusersdict);
+if (0 < scalar(@pguser)) {
+	my %olduserdict;
+	if (-f $pwdf) {
+		open (PWD, '<', $pwdf)
+		or die("${VTred}ERROR:${VTnorm} couldn't open password file \"${pwdf}\"\n");
+		while (<PWD>) {
+			m/(\w+)=(.+)\n/;
+			$olduserdict{$1} = $2;
+		}
+		close(PWD);
+	}
+	my @pgnew = map {
+		if (exists $olduserdict{$_}) {
+			if ($olduserdict{$_} ne $dbusersdict{'p'.$_}) {
+				print "${VTred}ERROR:${VTnorm} PostgreSQL role ${VTbold}$_${VTnorm} redefined"
+					, ' with password ', ${VTbold}, $dbusersdict{'p'.$_}, ${VTnorm}
+					, 'different from stored ', ${VTbold}, $olduserdict{$_}, ${VTnorm}
+					, "\n"
+			}
+			()
+		} else {
+			$_;
+		}
+	} @pguser;
+	if (0 < scalar(@pgnew)) {
+		open (PWD, '>>', $pwdf)
+		or die("${VTred}ERROR:${VTnorm} couldn't create password file \"${pwdf}\"\n");
+		print PWD <<END_PWD_PROLOG;
+#
+#	Automatically generated file
+#	Manual changes will be lost on next update
+#
+END_PWD_PROLOG
+		foreach (@pgnew) {
+			print PWD '*:*:*:', $_, ':', $dbusersdict{'p'.$_}, "\n"
+		}
+		close(PWD)
+	}
+	chmod 0600, $pwdf;	# permissions as per PostgreSQL manual
 }
 
 ##############################################################
@@ -812,13 +1134,11 @@ while (1) {
 #
 ##############################################################
 
-chmod 0775, "${confdir}/${scriptout}";	# Make sure script has x permission
-
 #	Since storing files in a VCS does not guarantee adequate permissions
 #	are kept, set them explicitly on scripts.
 #	We suppose configure-lxr.pl has correct permissions, otherwise we
 #	can't bootstrap.
-chmod 0775, 'diff', 'genxref', 'ident', 'search', 'showconfig', 'source';
+chmod 0775, 'diff', 'genxref', 'ident', 'perf', 'search', 'showconfig', 'source';
 chmod 0775, "${scriptdir}/kernel-vars-grab.sh";
 chmod 0775, "${scriptdir}/set-lxr-version.sh";
 chmod 0775, "${scriptdir}/recreatedb.pl";
@@ -826,5 +1146,5 @@ chmod 0775, "${scriptdir}/lighttpd-init";
 
 if ($verbose) {
 		print "configuration saved in ${VTbold}$confdir/$confout${VTnorm}\n";
-		print "DB initialisation sript is ${VTbold}$confdir/$scriptout${VTnorm}\n";
+		print "DB initialisation script is ${VTbold}$confdir/$scriptout${VTnorm}\n";
 }

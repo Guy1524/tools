@@ -1,8 +1,6 @@
 #!/usr/bin/perl -T
 ######################################################################
 #
-# $Id: diff,v 1.34 2013/11/12 19:45:13 ajlittoz Exp $
-#
 # diff --	Display diff output with markup.
 #
 #	Arne Georg Gleditsch <argggh@ifi.uio.no>
@@ -24,8 +22,6 @@
 # Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 #
 ######################################################################
-
-$CVSID = '$Id: diff,v 1.34 2013/11/12 19:45:13 ajlittoz Exp $ ';
 
 use strict;
 use lib do { $0 =~ m{(.*)/} ? "$1/lib" : "lib" }; # if LXR modules are in ./lib
@@ -54,11 +50,11 @@ B<Note:>
 
 =item
 
-The reason for using this function is not clear.
-It has been commented out without adverse effect.
+I<The reason for using this function is not clear.
+It has been commented out without adverse effect.>
 
-Being very short, it could be inlined (only one usage!)
-if it needs to be reenabled.
+I<Being very short, it could be inlined (only one usage!)
+if it needs to be reenabled.>
 
 =back
 
@@ -70,18 +66,22 @@ if it needs to be reenabled.
 # }
 
 
-=head2 C<htmljust ($s, $l)>
+=head2 C<htmljust ($s, $w)>
 
 Function C<htmljust> returns an HTML string justified to exactly
 a fixed number of screen positions.
 
 =over
 
-=item 1 C<$s>
+=item 1
+
+C<$s>
 
 a I<string> containing an HTML sequence
 
-=item 1 C<$w>
+=item 2
+
+C<$w>
 
 an I<integer> defining the justification width
 
@@ -143,7 +143,9 @@ Procedure C<printdiff> is the main driver for difference display
 
 =over
 
-=item 1 C<@dargs>
+=item 1
+
+C<@dargs>
 
 an I<array> containing the C<'variables'> values for the reference version
 
@@ -156,7 +158,7 @@ Current values are then transfered into these so-called I<remembered>
 values and user is requested to choose another version.
 
 On second entry, both current values (I<var_name>C<=>...) and
-remembered values (C<~>I~<var_name>C<=>...) are present in the
+remembered values (C<~>I<var_name>C<=>...) are present in the
 query arguments.
 The latter values designate the reference version (in the right pane);
 the former values the "new" version (in the left pane).
@@ -187,7 +189,7 @@ under control of the patch directives.
 sub printdiff {
 	my (@dargs) = @_;
 
-	unless (defined @dargs) {
+	if ($#dargs < 0) {
 	# First pass through the script
 	# Request second version
 		my @vars;
@@ -362,9 +364,9 @@ sub printdiff {
 
 	#	Output both versions side by side
 	my $i;
-	$i = 1;
+	$i = 0;
 	$leftfile  =~ s/^/"\n" x ($leftblanks{$i++})/mge;
-	$i = 1;
+	$i = 0;
 	$rightfile =~ s/^/"\n" x ($rightblanks{$i++})/mge;
 
 	my @leftlines  = split(/\n/, $leftfile);
@@ -374,20 +376,20 @@ sub printdiff {
 					|| $config->{'diffleftwidth'}
 					|| 50;
 	print("<pre class=\"filecontent\">\n");
-	foreach $i (0 .. $len) {
+	foreach $i (1 .. $len) {
 		my $l = htmljust($leftlines[$i], $leftwidth);
 		my $r = $rightlines[$i];
 
 		my $diffmark = '  ';
-		if ($chg{ $i + 1 }) {
-			$diffmark = '<span class="diff-mark">' . $chg{ $i + 1 } . "</span>";
-			if ('&lt;&lt;' eq $chg{ $i + 1 }) {
+		if ($chg{$i}) {
+			$diffmark = '<span class="diff-mark">' . $chg{$i} . "</span>";
+			if ('&lt;&lt;' eq $chg{$i}) {
 				$l =~ s|</a> |</a> <span class="diff-left">|;
 			}
-			if ('&gt;&gt;' eq $chg{ $i + 1 }) {
+			if ('&gt;&gt;' eq $chg{$i}) {
 				$r =~ s|</a> |</a> <span class="diff-right">|;
 			}
-			if ('!!' eq $chg{ $i + 1 }) {
+			if ('!!' eq $chg{$i}) {
 				$l =~ s|</a> |</a> <span class="diff-both">|;
 				$r =~ s|</a> |</a> <span class="diff-both">|;
 			}
@@ -409,7 +411,8 @@ for the real job.
 
 =cut
 
-httpinit;
+httpinit();
+std_http_headers('diff');
 
 makeheader('diff');
 my @dargs;

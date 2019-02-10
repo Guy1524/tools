@@ -1,8 +1,6 @@
 # -*- tab-width: 4 -*- mode: perl -*-
 ###############################################
 #
-# $Id: Local.pm,v 1.3 2013/09/24 08:54:19 ajlittoz Exp $
-#
 # Local.pm -- Subroutines that need to be customized for each installation
 #
 #	Dawn Endico <dawn@cannibal.mi.org>
@@ -28,8 +26,6 @@
 # different for each project.
 
 package Local;
-
-$CVSID = '$Id: Local.pm,v 1.3 2013/09/24 08:54:19 ajlittoz Exp $ ';
 
 use strict;
 
@@ -82,23 +78,57 @@ sub filedesc {
 	my ($filename, $dir, $releaseid) = @_;
 	my $fh;
 	my $linecount = 0;
-	my $copy = '';
-	my $desc = '';
+	my $copy;
+	my $desc;	# see comment
+# NOTE:	in dme's implementation, $desc served as a flag for parseable
+#		source code, in which case extracting a description is attempted.
+#		$desc is then initialised to default content &nbsp;.
+#		This part has been commented out. If it is activated again,
+#		$desc MUST be initialised to something not undef, like '',
+#		otherwise, the test will fail.
 	my $maxlines = 40;    #only look at the beginning of the file
 
 	#ignore files that aren't source code
+# NOTE: commented out lines below are an attempt to extract a relevant
+#		description for any file which can be parsed by LXR.
+#		The file extension is checked against those mentioned in
+#		filetype.conf. If check is positive, go ahead.
+#	Unfortunately, extracting code is too C-related.
+#		Submitting a Perl or shel script results in comments being
+#		wiped out because pruning a not "well-behaved" file begins
+#		at the first preprocessor directive (or rather at the first
+#		# sign, which is a comment delimiter).
+#	Consequently, description extractors must be tailored for
+#		target languages. This could be an extension in the same
+#		way the parser is designated in filetype.conf.
+#
+# 	my $extn;	#file extension for which a scanner exists
+# 	foreach my $lk (keys %{ $config->{'filetype'} }) {
+# 		$extn = $config->{'filetype'}{$lk}[1];
+# 		if ($filename =~ m/$extn/) {
+# 			$desc = undef;
+# 			last;
+# 		}
+# 	}
+# 	if (defined($desc)) {
+# 		return ('&nbsp;')
+# 	}
+# ### end of experimental block ###
 	if	(	(substr($filename, -2) ne '.c')
 		&&	(substr($filename, -2) ne '.h')
 		&&	(substr($filename, -3) ne '.cc')
 		&&	(substr($filename, -3) ne '.cp')
 		&&	(substr($filename, -4) ne '.cpp')
 		&&	(substr($filename, -5) ne '.java')
+		&&	(substr($filename, -3) ne '.cs')
 		) {
 	return ('&nbsp;');
 	}
 
 	if ($fh = $files->getfilehandle($dir . $filename, $releaseid)) {
 		while (<$fh>) {
+			next if 1 == $. && substr($_ , 0, 2) eq '#!';
+			next if 2 >= $. && $_ =~  m/^.*-\*-.*-\*-/;
 			$desc = $desc . $_;
 			if ($linecount++ > 60) {
 				last;
@@ -188,13 +218,13 @@ sub filedesc {
 
 			#htmlify the comments making links to symbols and files
 			$desc = markupstring($desc, $dir);
-			return ($desc);
+			return $desc ? $desc : '&nbsp;';
 		}
 	}
 
 	# if java and the <filename><seperator> check above didn't work, just dump the whole javadoc
 	if (substr($filename, -5) eq '.java') {
-		return $desc;
+		return  $desc ? "<p>$desc</p>" : '&nbsp;';
 	}
 
 	# we didn't find any well behaved descriptions above so start over
@@ -223,7 +253,9 @@ sub filedesc {
 	$desc =~ s#\n\s*/\*+[\s\*]+\*/\n#\n#sg;
 
 	# Don't bother to continue if there aren't any comments here
-	if (-1 == index($desc, '/*')) {
+	if	(	-1 == index($desc, '/*')	# C-family
+		&&	-1 == index($desc, '#')		# shell, Perl, ...
+		) {
 		return ('&nbsp;');
 	}
 

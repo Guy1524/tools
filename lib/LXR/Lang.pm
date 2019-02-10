@@ -1,7 +1,5 @@
-# -*- tab-width: 4; cperl-indent-level: 4 -*-
+# -*- tab-width: 4 -*-
 ###############################################
-#
-# $Id: Lang.pm,v 1.54 2014/03/09 16:00:52 ajlittoz Exp $
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -35,24 +33,35 @@ to capture missing specific implementations.
 
 package LXR::Lang;
 
-$CVSID = '$Id: Lang.pm,v 1.54 2014/03/09 16:00:52 ajlittoz Exp $ ';
-
 use strict;
 use LXR::Common;
 use IO::Handle;
 
 
-=head2 C<new ($pathname, $releaseid, @itag)>
+=head2 C<new ($writeDB, $pathname, $releaseid, @itag)>
 
 Method C<new> creates a new language object.
 
 =over
 
-=item 1 C<$pathname>
+=item 1
+
+C<$writeDB>
+
+a I<boolean> I<integer> requesting to write language properties
+into the tree database,
+passed unaltered to the specific parser initialisation method
+(set to 1 only by I<genxref>)
+
+=item 2
+
+C<$pathname>
 
 a I<string> containing the name of the file to parse
 
-=item 1 C<$releaseid>
+=item 3
+
+C<$releaseid>
 
 a I<string> containing the release (version) of the file to parse
 
@@ -68,9 +77,11 @@ use the global variable.>
 
 =back
 
-=item 1 C<@itag>
+=item 4
 
-an I<array> of 3 elements used to generate an C<E<lt>AE<gt>> link
+C<@itag>
+
+an I<array> of 3 elements used to generate an C<E<lt> A E<gt>> link
 for the identifiers found in the file (just insert the identifier name
 between the array elements)
 
@@ -92,7 +103,7 @@ the created parser which is then returned.
 =cut
 
 sub new {
-	my ($self, $pathname, $releaseid, @itag) = @_;
+	my ($self, $writeDB, $pathname, $releaseid, @itag) = @_;
 	my ($lang, $langkey, $type);
 
 	# Try first to find a handler based on the file name
@@ -102,7 +113,7 @@ sub new {
 		if ($pathname =~ m/$$type[1]/) {
 			eval "require $$type[2]";
 			die "Unable to load $$type[2] Lang class, $@" if $@;
-			my $create = $$type[2] . '->new($pathname, $releaseid, $$type[0])';
+			my $create = $$type[2] . '->new($writeDB, $pathname, $releaseid, $$type[0])';
 			$lang = eval($create);
 			die "Unable to create $$type[2] Lang object, $@" unless defined $lang;
 			$langkey = $lk;
@@ -112,13 +123,15 @@ sub new {
 
 	# If it did not succeed, read the first line and try for an interpreter
 	if (!defined $lang) {
+		my $extract;
+		my $fh = $files->getrawfilehandle($pathname, $releaseid);
+		return undef if !defined $fh;
+		read ($fh, $extract, 1024);
+		return undef if &{$config->{'&discard'}}($extract);
 
 		# Try to see if it's a #! script or an emacs mode-tagged file
-		my $fh = $files->getfilehandle($pathname, $releaseid);
-		return undef if !defined $fh;
-		my $line = $fh->getline;
-		($line =~ m/^\#!\s*(\S+)/s)
-		|| ($line =~ m/^.*-[*]-.*?[ \t;]mode:[ \t]*(\w+).*-[*]-/);
+		($extract =~ m/^\#!\s*(\S+)/s)
+		|| ($extract =~ m/^.*-[*]-.*?[ \t;]mode:[ \t]*(\w+).*-[*]-/);
 
 		my $shebang  = $1;
 		my %filetype = %{ $config->{'filetype'} };
@@ -130,7 +143,7 @@ sub new {
 				eval "require $filetype{$langkey}[2]";
 				die "Unable to load $filetype{$langkey}[2] Lang class, $@" if $@;
 				my $create = $filetype{$langkey}[2]
-				  . '->new($pathname, $releaseid, $filetype{$langkey}[0])';
+				  . '->new($writeDB, $pathname, $releaseid, $filetype{$langkey}[0])';
 				$lang = eval($create);
 				last if defined $lang;
 				die "Unable to create $filetype{$langkey}[2] Lang object, $@";
@@ -148,16 +161,25 @@ sub new {
 }
 
 
-=head2 C<parseable ($pathname)>
+=head2 C<parseable ($pathname, $releaseid)>
 
-Function C<parseable> return 1 if the designated file can be parsed
+Function C<parseable> returns 1 if the designated file can be parsed
 some way or other.
 
 =over
 
-=item 1 C<$pathname>
+=item 1
+
+C<$pathname>
 
 a I<string> containing the name of the file to parse
+
+=item 2
+
+C<$releaseid>
+
+the release (or version) in which C<$pathname> is expected to
+be found
 
 =back
 
@@ -168,7 +190,7 @@ or the first line of the file against the I<interpreters> list.
 =cut
 
 sub parseable {
-	my ($pathname) = @_;
+	my ($pathname, $releaseid) = @_;
 	my ($lang, $langkey, $type);
 
 	# Try first to find a handler based on the file name
@@ -182,11 +204,13 @@ sub parseable {
 
 	# If it did not succeed, read the first line and try for an interpreter
 	# Try to see if it's a #! script or an emacs mode-tagged file
-	my $fh = $files->getfilehandle($pathname, $releaseid);
+	my $extract;
+	my $fh = $files->getrawfilehandle($pathname, $releaseid);
 	return undef if !defined $fh;
-	my $line = $fh->getline;
-	($line =~ m/^\#!\s*(\S+)/s)
-	|| ($line =~ m/^.*-[*]-.*?[ \t;]mode:[ \t]*(\w+).*-[*]-/);
+	read ($fh, $extract, 1024);
+	return undef if &{$config->{'&discard'}}($extract);
+	($extract =~ m/^\#!\s*(\S+)/s)
+	|| ($extract =~ m/^.*-[*]-.*?[ \t;]mode:[ \t]*(\w+).*-[*]-/);
 
 	my $shebang  = $1;
 	my %inter    = %{ $config->{'interpreters'} };
@@ -207,18 +231,22 @@ Internal function C<multilinetwist> marks the fragment with a CSS class.
 
 =over
 
-=item 1 C<$frag>
+=item 1
+
+C<$frag>
 
 a I<string> to mark
 
-=item 1 C<$css>
+=item 2
+
+C<$css>
 
 a I<string> containing the CSS class
 
 =back
 
-The fragment is surrounded with C<E<lt>spanE<gt>> and C<E<lt>/spanE<gt>>
-tags. Special care is taken to repeat these tags at ends of line, so
+The fragment is surrounded with C<E<lt> SPAN E<gt>> and C<E<lt> /SPAN E<gt>>
+tags. Special care is taken to repeat these tags at end of lines, so
 that the fragment can be correctly displayed on several lines without
 disturbing other highlighting (such as line numbers or difference marks).
 
@@ -238,7 +266,9 @@ Method C<processcomment> marks the fragment as a comment.
 
 =over
 
-=item 1 C<$frag>
+=item 1
+
+C<$frag>
 
 a I<string> to mark
 
@@ -260,7 +290,9 @@ Method C<processstring> marks the fragment as a string.
 
 =over
 
-=item 1 C<$frag>
+=item 1
+
+C<$frag>
 
 a I<string> to mark
 
@@ -282,11 +314,15 @@ Method C<processextra> marks the fragment as language specific.
 
 =over
 
-=item 1 C<$frag>
+=item 1
+
+C<$frag>
 
 a I<string> to mark
 
-=item 1 C<$kind>
+=item 2
+
+C<$kind>
 
 a I<string> containing the CSS class
 
@@ -312,17 +348,21 @@ Method C<processinclude> is invoked to process an I<include> directive.
 
 =over
 
-=item 1 C<$frag>
+=item 1
+
+C<$frag>
 
 a I<string> containing the directive
 
-=item 1 C<$dir>
+=item 2
+
+C<$dir>
 
 an optional I<string> containing a preferred directory for the include'd file
 
 =back
 
-Usually, the link to the include'd file is build with C<'incref'>.
+Usually, the link to the include'd file is built with C<'incref'>.
 Consequently, the directories in C<'incprefix'> are also searched.
 
 =cut
@@ -340,26 +380,36 @@ Internal function C<_linkincludedirs> builds links for partial paths in C<$link>
 
 =over
 
-=item 1 C<$link>
+=item 1
+
+C<$link>
 
 a I<string> containing an already processed link,
 i.e. the result of an invocation of C<incref> or C<incdirref>.
 
-=item 1 C<$file>
+=item 2
+
+C<$file>
 
 a I<string> containing the target file name in the language-specific
 dialect (without language-specific separator replacement),
 
-=item 1 C<$sep>
+=item 3
+
+C<$sep>
 
 a I<string> containing the language-specific path separator,
 
-=item 1 C<$path>
+=item 4
+
+C<$path>
 
 a I<string> containing the target file name as an OS file name
 (path separator is /),
 
-=item 1 C<$dir>
+=item 5
+
+C<$dir>
 
 a I<string> containing the last directory argument for C<incdirref>.
 
@@ -374,17 +424,22 @@ sub _linkincludedirs {
 	my ($sp, $l, $r);	# various separator positions
 	my $tail;
 
-	if (!defined($link)) {
-		if (index($path, '/') < 0) {
+	if	(	!defined($link)
+		&& index($path, '/') < 0
+		) {
 			$tail = $file;
-		} elsif (substr($path, -1) eq '/') {
+	} elsif (substr($path, -1) eq '/') {
 		# Path ends with /: it may be a directory or an HTTP request.
 		# Remove trailing / and do an initial processing.
+		chop($path);
+		$tail = '';
+		# Protect against erroneous multiple separators
+		while (substr($path, -1) eq '/') {
 			chop($path);
-			$tail = $sep;
+			$tail .= $sep;
 			$file = substr($file, 0, rindex($file, $sep));
-			$link = incdirref($file, 'include', $path, $dir);
-		}
+		};
+		$link = incdirref($file, 'include', $path, $dir);
 	}
 	# If incref or incdirref did not return a link to the file,
 	# explore however the path to see if directories are
@@ -399,6 +454,12 @@ sub _linkincludedirs {
 		$tail = substr($file, $sp) . $tail;
 		$file = substr($file, 0, $sp);
 		$path =~ s!/[^/]+$!!;
+		# Protect against erroneous multiple separators
+		while (substr($path, -1) eq '/') {
+			chop($path);
+			$tail = $sep . $tail;
+			$file = substr($file, 0, rindex($file, $sep));
+		};
 		$link = incdirref($file, 'include', $path, $dir);
 	}
 	# A known directory (at least) has been found.
@@ -415,6 +476,12 @@ sub _linkincludedirs {
 			$sp = rindex ($file, $sep);
 			$file = substr($file, 0, $sp);
 			$path =~ s!/[^/]+$!!;
+		# Protect against erroneous multiple separators
+			while (substr($path, -1) eq '/') {
+				chop($path);
+				$tail = $sep . $tail;
+				$file = substr($file, 0, rindex($file, $sep));
+			};
 			$link = incdirref($file, 'include', $path, $dir);
 		}
 	}
@@ -429,15 +496,21 @@ C<$file>.
 
 =over
 
-=item 1 C<$filewanted>
+=item 1
+
+C<$filewanted>
 
 a I<flag> indicating if a directory (0) or file (1) is desired
 
-=item 1 C<$file>
+=item 2
+
+C<$file>
 
 a I<string> containing a file name to resolve
 
-=item 1 C<@paths>
+=item 3
+
+C<@paths>
 
 an I<array> containing a list of directories to search
 
@@ -482,25 +555,33 @@ sub _incfindfile {
 
 =head2 C<incdirref ($name, $css, $file, @paths)>
 
-Function C<incdirref> returns an C<E<lt>AE<gt>> link to a directory
+Function C<incdirref> returns an C<E<lt> A E<gt>> link to a directory
 of an C<include>d file or the directory name if it is unknown.
 
 =over
 
-=item 1 C<$name>
+=item 1
+
+C<$name>
 
 a I<string> for the user-visible part of the link,
 usually the directory name
 
-=item 1 C<$css>
+=item 2
+
+C<$css>
 
 a I<string> containing the CSS class for the link
 
-=item 1 C<$file>
+=item 3
+
+C<$file>
 
 a I<string> containing the HTML path to the directory
 
-=item 1 C<@paths>
+=item 4
+
+C<@paths>
 
 an I<array> containing a list of base directories to search
 
@@ -515,7 +596,7 @@ If the include'd directory does not exist (as determined by sub C<incfindfile>),
 the function returns the directory name. This acts as a "no-op" in the
 HTML sequence representing the full path of the include'd file.
 
-If the directory exists, the function returns the C<E<lt>AE<gt>> link
+If the directory exists, the function returns the C<E<lt> A E<gt>> link
 as computed by sub C<fileref> for the directory.
 
 =cut
@@ -539,7 +620,9 @@ Method C<processcode> processes the fragment as code.
 
 =over
 
-=item 1 C<$code>
+=item 1
+
+C<$code>
 
 a I<string> to mark
 
@@ -560,7 +643,9 @@ Method C<processreserved> marks the fragment as a reserved word.
 
 =over
 
-=item 1 C<$code>
+=item 1
+
+C<$code>
 
 a I<string> to mark
 
@@ -595,25 +680,35 @@ the definitions in a file.
 
 =over
 
-=item 1 C<$name>
+=item 1
+
+C<$name>
 
 a I<string> containing the LXR file name
 
-=item 1 C<$path>
+=item 2
+
+C<$path>
 
 a I<string> containing the OS file name
 
 When files are stored in VCSes, C<$path> is the name of a temporary file.
 
-=item 1 C<$fileid>
+=item 3
+
+C<$fileid>
 
 an I<integer> containing the internal DB id for the file/revision
 
-=item 1 C<$index>
+=item 4
+
+C<$index>
 
 a I<reference> to the index (DB) object
 
-=item 1 C<$config>
+=item 5
+
+C<$config>
 
 a I<reference> to the configuration objet
 
@@ -635,25 +730,35 @@ the references in a file.
 
 =over
 
-=item 1 C<$name>
+=item 1
+
+C<$name>
 
 a I<string> containing the LXR file name
 
-=item 1 C<$path>
+=item 2
+
+C<$path>
 
 a I<string> containing the OS file name
 
 When files are stored in VCSes, C<$path> is the name of a temporary file.
 
-=item 1 C<$fileid>
+=item 3
+
+C<$fileid>
 
 an I<integer> containing the internal DB id for the file/revision
 
-=item 1 C<$index>
+=item 4
+
+C<$index>
 
 a I<reference> to the index (DB) object
 
-=item 1 C<$config>
+=item 5
+
+C<$config>
 
 a I<reference> to the configuration objet
 

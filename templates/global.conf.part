@@ -2,9 +2,6 @@
 #- LXR master configuration file
 #-	Global configuration section
 #-
-#-	$Id: global.conf.part,v 1.7 2013/12/03 13:38:23 ajlittoz Exp $
-#-
-#-
 #-	This file fragment is meant to be "included" to form the
 #-	complete configuration file.
 #-
@@ -58,6 +55,12 @@
 #@U	, 'glimpsebin'     => '%glimpse%'
 #@U	, 'glimpseindex'   => '%glimpseindex%'
 #@U	, 'glimpsedirbase' => '%glimpsedirbase%'
+	, 'glimpseindexopts'	=>	'-o -n -B'	# "standard" options
+			# You may use -b for a bigger (x4) index instead of -o
+			# but there is no net advantage in query speed
+			# Option -f causes incremental indexing, but it is
+			# recommended to periodically run full indexing to
+			# clean the index.
 		#- Location of SWISH-E binary
 		#- e.g.: , 'swishbin' => '/usr/local/bin/swish-e'
 #@U	, 'swishbin'     => '%swish%'
@@ -75,6 +78,20 @@
 	, 'gitpath' => '/bin:/usr/local/bin:/usr/bin:/usr/sbin'
 	, 'hgpath'  => '/bin:/usr/local/bin:/usr/bin:/usr/sbin'
 	, 'svnpath' => '/bin:/usr/local/bin:/usr/bin:/usr/sbin'
+
+		# Path to "magic" file to guess file content
+		# CAUTION!
+		#	This is a Fedora path; may be different under
+		#	other distributions.
+	# # # BUG # # #
+	# A bug in File::MMagic version 1.27 prevents from using this
+	# system magic file because it starts with a newline.
+	# Parameter is commented out. Your alternate choice is:
+	# 1) remove the initial offending empty lines,
+	# 2) use another file without initial blank lines,
+	# 3) default to the old magic file shipping with the release,
+	# 4) work without any magic file to revert to internal tables.
+#	, 'magicmime' => '/usr/share/misc/magic'
 
 		# Computer DNS names subsection #
 		#================================
@@ -120,12 +137,15 @@
 	, 'htmlident'		=> '%LXRroot%/templates/html/html-ident.html'
 	, 'htmlsearch'		=> '%LXRroot%/templates/html/html-search-%search_engine%.html'
 	, 'htmlconfig'		=> '%LXRroot%/templates/html/html-config.html'
+	, 'htmlperf'		=> '%LXRroot%/templates/html/html-perf.html'
+	, 'perfrefreshhead'	=> '%LXRroot%/templates/html/refresh-head-btn-smaller.html'
 
-		# htmlhead and htmltail can be customised for the various
-		# LXR operations. Just replace html by source (listing file),
-		# sourcedir (displaying directory), diff (difference markup),
+		# Examples of head area customisation for source (listing file),
+		# and sourcedir (displaying directory). Can be done for others
+		# by creating a parameter '<script>head' or '<script>tail'
+		# where <script> is source, sourcedir, diff (difference markup),
 		# ident (identifier search), search (free-text search)
-		# as below (which changes nothing):
+		# or perf (performance monitoring):
 #	, 'sourcehead'		=> '%LXRroot%/templates/html/html-head.html'
 #	, 'sourcedirhead'	=> '%LXRroot%/templates/html/html-head.html'
 
@@ -162,7 +182,7 @@
 		# Which file extensions are associated with which icon
 		# Below is an example using 'Oxygen' theme available with KDE
 		# small-icons/ is a symbolic link to
-		#		 /usr/share/icons/oxygen/22x22/mimetypes/
+		#		 /usr/share/icons/oxygen/22x22/
 		# (This location is valid for Fedora distributions,
 		# check for others)
 # 	, 'iconfolder' => 'small-icons/'
@@ -209,8 +229,7 @@
 		# In case your LXR installation controls several trees,
 		# put here what you consider common parameters between
 		# your source trees.
-		# A parameter is "common" if its value must be simultaneously
-		# adjusted in every tree.
+		# A parameter is "common" if its value is the same in every tree.
 #@IF	%_shared%
 #@	IF	'H' eq "%_routing%" || 'P' eq "%_routing%" || 'A' eq "%_routing%"
 #@		IF	%_commonvirtroot%
@@ -220,8 +239,9 @@
 #@		ENDIF
 #@	ENDIF
 #@ENDIF
+#@IF	'E' eq "%_routing%"
 
-		# Pattern for extracting tree name from URL, since all
+		# DEPRECATED tree name extraction from URL, since all
 		# trees are usually served from the same physical server.
 #@IF	'E' ne "%_routing%"
 		# Meaningful only in multiple trees context. Example for
@@ -233,6 +253,7 @@
 #@	IF	'b' ne "%_virtrootpolicy%"
 		##### REPLACE WITH YOUR OWN METHOD #####
 #@	ENDIF
+#@ENDIF
 #@ENDIF
 
 #@IF	!%_dbuser%

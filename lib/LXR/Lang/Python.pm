@@ -1,8 +1,6 @@
 # -*- tab-width: 4 -*-
 ###############################################
 #
-# $Id: Python.pm,v 1.11 2013/09/24 07:59:19 ajlittoz Exp $
-#
 # Enhances the support for the Python language over that provided by
 # Generic.pm
 #
@@ -33,8 +31,6 @@ It only overrides C<processinclude> for efficiency.
 
 package LXR::Lang::Python;
 
-$CVSID = '$Id: Python.pm,v 1.11 2013/09/24 07:59:19 ajlittoz Exp $ ';
-
 use strict;
 use LXR::Common;
 use LXR::Lang;
@@ -49,11 +45,15 @@ Method C<processinclude> is invoked to process a Python I<include> directive.
 
 =over
 
-=item 1 C<$frag>
+=item 1
+
+C<$frag>
 
 a I<string> containing the directive
 
-=item 1 C<$dir>
+=item 2
+
+C<$dir>
 
 an optional I<string> containing a preferred directory for the include'd file
 
@@ -94,9 +94,17 @@ sub processinclude {
 	$file    = $2;
 	$path    = $file;
 
-	# Faster surrogates 'last'
-	$path =~ s@\.@/@g;		# Replace Python delimiters
-	$path =~ s@$@.py@;		# Add file extension
+	# Transform Python path into OS path
+	if ($file ne '.') {
+		$path =~ s@\.@\0@g;		# Replace Python delimiters (temporarily NULs)
+		while($path =~ s@^(\0*)\0\0@$1\0../@) {};	# Handle special path start
+		if ($path ne "\0") {;	# Erase excess Python delimiter
+			$path =~ s@^\0@@;
+		}
+		$path =~ s@\0@/@g;		# OS delimiters
+		$path =~ s@$@.py@ if substr($file,-1) ne '.';
+								# Add file extension except for obvious directories
+	}
 
 	# Create the hyperlinks
 	$link = &LXR::Common::incref($file, 'include', $path, $dir);

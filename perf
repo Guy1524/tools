@@ -1,0 +1,402 @@
+#!/usr/bin/perl -T
+######################################################################
+#
+# perf --	Dump performance data for this tree
+#
+#	André J. Littoz <ajlittoz@users.sourceforge.net>
+#
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+#
+######################################################################
+
+use strict;
+use lib do { $0 =~ m{(.*)/} ? "$1/lib" : 'lib' };  # if LXR modules are in ./lib
+
+=head1 perf script
+
+This script displays genxref's performance statistics for the various
+versions of the tree.
+
+=cut
+
+use LXR::Common;
+use LXR::Template;
+
+my $totalserialtime;
+my $totalelapsed;
+my $inprogress;
+
+=head2 C<duration ($start, $end)>
+
+Function C<duration> returns a human-readable string for the
+time difference between its arguments.
+
+=over
+
+=item 1
+
+C<$start>
+
+an I<integer> containing the number of seconds since the epoch for
+the beginning of the interval
+
+=item 2
+
+C<$end>
+
+an I<integer> containing the number of seconds since the epoch for
+the end of the interval
+
+=back
+
+If the end date is negative, an error occurred during the interval.
+
+If the start date is negative, the step was skipped.
+
+=cut
+
+sub duration {
+	my ($start, $end) = @_;
+	my ($flag, $seconds, $minutes);
+
+	if (! defined($start)) {
+		return '<em>skipped</em>'
+	}
+	if (0 == $end) {
+		if (-2 == $inprogress) {
+			return '<em>in progress</em>';
+		}
+		if (0 != $start) {
+			return '<span class=error>crashed</span>&nbsp;';
+		}
+	}
+	if (0 > $end) {
+		$end = -$end;
+		$flag = '<strong class=error>*</strong>&nbsp;';
+	}
+	$end -= $start;
+	$seconds = $end % 60;
+	$end = ($end - $seconds) / 60;
+	$minutes = $end % 60;
+	$end = ($end - $minutes) / 60;
+	return $flag . sprintf('%d:%2.2d:%2.2d', $end, $minutes, $seconds);
+}
+
+
+=head2 C<rowclass ($templ, $line)>
+
+Function C<rowclass> is the "$variable" substitution function
+for C<lineclass>.
+It returns a CSS class name depending on line parity.
+
+=over
+
+=item 1
+
+C<$templ>
+
+a I<string> containing the template (empty for a "variable")
+
+=item 2
+
+C<$line>
+
+an I<integer> containing the line number of the display
+
+=back
+
+=cut
+
+sub rowclass {
+	my ($templ, $line) = @_;
+	return ((($line - 1) / 3) % 2) ? 'perfrow2' : 'perfrow1';
+}
+
+
+=head2 C<onelineexpand ($temp, $reindex, @versions)>
+
+Function C<onelineexpand> is a "$function" substitution function.
+It returns its template expanded for every line matching its
+second argument.
+
+=over
+
+=item 1
+
+C<$templ>
+
+a I<string> containing the template
+
+=item 2
+
+C<$reindex>
+
+the full reindex flag as 0 or 1 to select the proper values
+
+=item 3
+
+C<@versions>
+
+an I<array> containing the versions (release-ids) for which
+performance data must be edited.
+
+=back
+
+It fetches performance data for the elements of its second argument.
+
+=cut
+
+sub onelineexpand {
+	my ($templ, $reindex, @versions) = @_;
+	my $direx = '';
+	my $line  = 1;
+	my $releaseid;
+	my ($purgestart, $purgeend);
+	my ($textstart, $textend);
+	my ($dclstart, $dclend);
+	my ($refstart, $refend);
+	my $onestep;
+	my $steptotal;
+	my $crashed;
+	my $stepterm;
+
+	foreach $releaseid (@versions) {
+		($purgestart, $purgeend) = $index->getperformance($releaseid, $reindex, 'P');
+		($textstart, $textend) = $index->getperformance($releaseid, $reindex, 'T');
+		($dclstart, $dclend) = $index->getperformance($releaseid, $reindex, 'D');
+		($refstart, $refend) = $index->getperformance($releaseid, $reindex, 'U');
+		$steptotal = 0;
+		$crashed = 0;
+# 		if (defined($purgestart)) {
+			$onestep = $purgeend - $purgestart;
+			$steptotal += $onestep if 0 < $onestep;
+			$crashed = 1 if 0 > $purgeend;
+# 		}
+		if (defined $textstart) {
+			$onestep = $textend - $textstart;
+			$steptotal += $onestep if 0 < $onestep;
+			$crashed = 1 if 0 > $textend;
+		}
+		if (defined $dclstart) {
+			$onestep = $dclend - $dclstart;
+			$steptotal += $onestep if 0 < $onestep;
+			$crashed = 1 if 0 > $dclend;
+		}
+		if (defined $refstart) {
+			$onestep = $refend - $refstart;
+			$steptotal += $onestep if 0 < $onestep;
+			$crashed = 1 if 0 > $refend;
+		}
+		if ($crashed) {
+			$steptotal = -1;
+			$stepterm = -1;
+		} else {
+			$totalserialtime += $steptotal;
+			$stepterm = $textend>$refend ? $textend : $refend;
+			$stepterm = 0 if ! defined $stepterm;
+		}
+			if (0 < $stepterm) {
+			$totalelapsed += $stepterm - $purgestart;
+		}
+		$direx .= expandtemplate
+			(	$templ
+			,	( 'lineclass' => sub { rowclass(@_, $line++) }
+				, 'perfversion' => sub { $releaseid }
+				, 'perfdate' => sub { _edittime($purgestart) }
+				, 'perfpurge' => sub { duration($purgestart, $purgeend) }
+				, 'preffreetext' => sub { duration($textstart, $textend) }
+				, 'perfdefn'=> sub { duration($dclstart, $dclend) }
+				, 'perfrefs' => sub { duration($refstart, $refend) }
+				, 'perftotal' => sub { duration(0, $steptotal) }
+				, 'perfelapsed' => sub { duration($purgestart, $stepterm) }
+				)
+			);
+	}
+	return $direx;
+}
+
+
+=head2 C<perfdataexpand ($templ, $reindex)>
+
+Function C<perfdataexpand> is a "$function" substitution function
+for C<perffull>.
+It returns its template argument expanded for every line in the DB selection.
+
+=over
+
+=item 1
+
+C<$templ>
+
+a I<string> containing the template
+
+=item 2
+
+C<$reindex>
+
+the full reindex flag as 0 or 1 to select the proper values
+
+=back
+
+It fetches versions involved in purgeing indexations.
+
+The "line" is expanded by a common procedure.
+
+=cut
+
+sub perfdataexpand {
+	my ($templ, $reindex) = @_;
+	my $direx = '';
+	my @versions;
+	my $releaseid;
+	my @perfdata;
+
+	$index->{'times_versions'} =
+		$index->{dbh}->prepare
+			( 'select releaseid from '.$config->{'dbprefix'}.'times'
+			  . ' where reindex = '.$reindex
+			  . ' and stepname = \'D\''
+			  . ' order by releaseid desc'
+			);
+	$index->{'times_versions'}->execute();
+	while (($releaseid) = $index->{'times_versions'}->fetchrow_array()) {
+		push(@versions, $releaseid) unless $releaseid eq ''
+	}
+	$index->{'times_versions'} = undef;
+	$totalserialtime = 0;
+	return onelineexpand($templ, $reindex, @versions);
+}
+
+
+=head2 C<perffpurgeexpand ($templ)>
+
+Function C<perffpurgeexpand> is a "$function" substitution function
+for C<perffullpurge>.
+It returns its template argument expanded for the line
+corresponding to a full purge (column C<releaseid> is a I<null> string).
+
+=over
+
+=item 1
+
+C<$templ>
+
+a I<string> containing the template
+
+=back
+
+It fetches the I<null> version used to store full purge timing.
+
+The "line" is expanded by a common procedure.
+
+=cut
+
+sub perffpurgeexpand {
+	my ($templ) = @_;
+	my $direx = '';
+	my @versions;
+	my $releaseid;
+	my @perfdata;
+
+	$index->{'times_versions'} =
+		$index->{dbh}->prepare
+			( 'select releaseid from '.$config->{'dbprefix'}.'times'
+			  . ' where releaseid = \'\' and reindex = 1'
+			);
+	$index->{'times_versions'}->execute();
+	if (($releaseid) = $index->{'times_versions'}->fetchrow_array()) {
+		push(@versions, $releaseid)
+	}
+	$index->{'times_versions'} = undef;
+	$totalserialtime = 0;
+	return onelineexpand($templ, 1, @versions);
+}
+
+
+=head2 C<getserial ()> and C<getelapsed ()>
+
+These helper functions work around random adverse effect caused by a possible
+optimisation in I<mod_perl>.
+Transferring correct computed value of C<$totalserialtime> or C<$totalelapsed>
+to anonymous C<sub>s requires I<late binding>.
+It looks like sometimes I<early binding> is used, leading to the variables
+initial value instead of fetching the current value.
+
+Replacing reference to the variables by a function seems to cure the problem.
+
+=cut
+
+sub getserial {
+	$totalserialtime
+}
+
+sub getelapsed {
+	$totalelapsed
+}
+
+
+=head2 Script entry point
+
+Selects the correct header and footer, retrieves the C<'htmlperf'> template
+and launches template expansion.
+
+The script does not use any query argument, however they are managed as usual
+which allows to switch to other scripts with variables set as desired.
+
+=cut
+
+my $templ;
+my $errorsig = "<!-- ! -->";
+
+httpinit();
+($inprogress) = indexstate('perf');
+if (-2 == $inprogress) {
+	print 'Cache-Control: no-cache', "\n";	# special header for "monitoring" perf
+}
+std_http_headers();
+makeheader('perf', (-2 == $inprogress ? 'perfrefresh' : 'perf'));
+$templ = gettemplate	( 'htmlperf'
+						, $errorsig
+						);
+if ($templ =~ m/^$errorsig/) {
+	die "Performance dump not available without 'htmlperf' template\n";
+}
+$totalserialtime = 0;
+$totalelapsed = 0;
+print(expandtemplate
+		( $templ
+		,	( 'perffull' => sub { perfdataexpand(@_, 1) }
+			, 'perfinc' => sub { perfdataexpand(@_, 0) }
+			, 'perffullpurge' => sub { perffpurgeexpand(@_) }
+			, 'perftotal' => sub {
+					if (0 < $totalserialtime) {
+						duration(0, getserial())
+					} else {
+						'<em>not available</em>'
+					}
+									}
+			, 'perfelapsed' => sub {
+					if (0 < $totalelapsed) {
+						duration(0, getelapsed())
+					} else {
+						'<em>not available</em>'
+					}
+									}
+			)
+		)
+);
+makefooter('perf');
+httpclean;

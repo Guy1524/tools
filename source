@@ -1,8 +1,6 @@
 #!/usr/bin/perl -T
 ######################################################################
 #
-# $Id: source,v 1.68 2013/11/29 15:44:55 ajlittoz Exp $
-#
 # source --	Present sourcecode as html, complete with references
 #  the '/icons' images are available in any standard Apache installation
 #
@@ -25,8 +23,6 @@
 # Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 #
 ######################################################################
-
-$CVSID = '$Id: source,v 1.68 2013/11/29 15:44:55 ajlittoz Exp $ ';
 
 use strict;
 use lib do { $0 =~ m{(.*)/} ? "$1/lib" : 'lib' };  # if LXR modules are in ./lib
@@ -53,11 +49,15 @@ which prevents from inserting HTML elements in the "description".
 
 =over
 
-=item 1 C<$templ>
+=item 1
+
+C<$templ>
 
 a I<string> containing the HTML element without delimiters
 
-=item 1 C<$path>
+=item 2
+
+C<$path>
 
 a I<string> containing the path of the icon file
 
@@ -87,21 +87,27 @@ sub iconlink {
 =head2 C<diricon ($templ, $node, $dir)>
 
 Function C<diricon> is a "$variable" substitution function.
-It returns an HTML-string containing an C<E<lt>AE<gt>> block
-surrounding an C<E<lt>IMGE<gt>> tag for a folder icon.
+It returns an HTML-string containing an C<E<lt> A E<gt>> block
+surrounding an C<E<lt> IMG E<gt>> tag for a folder icon.
 The link allows to jump to the directory.
 
 =over
 
-=item 1 C<$templ>
+=item 1
+
+C<$templ>
 
 a I<string> containing the template (empty for a "variable")
 
-=item 1 C<$node>
+=item 2
+
+C<$node>
 
 a I<string> containing the name of the directory
 
-=item 1 C<$dir>
+=item 3
+
+C<$dir>
 
 a I<string> containing the name of the parent directory
 
@@ -144,20 +150,26 @@ sub diricon {
 =head2 C<dirname ($templ, $node, $dir)>
 
 Function C<dirname> is a "$variable" substitution function.
-It returns an HTML-string containing an C<E<lt>AE<gt>> tag
+It returns an HTML-string containing an C<E<lt> A E<gt>> tag
 linking to the directory.
 
 =over
 
-=item 1 C<$templ>
+=item 1
+
+C<$templ>
 
 a I<string> containing the template (empty for a "variable")
 
-=item 1 C<$node>
+=item 2
+
+C<$node>
 
 a I<string> containing the name of the directory
 
-=item 1 C<$dir>
+=item 3
+
+C<$dir>
 
 a I<string> containing the name of the parent directory
 
@@ -179,21 +191,27 @@ sub dirname {
 =head2 C<fileicon ($templ, $node, $dir)>
 
 Function C<fileicon> is a "$variable" substitution function.
-It returns an HTML-string containing an C<E<lt>AE<gt>> block
-surrounding an C<E<lt>IMGE<gt>> tag for a file icon.
+It returns an HTML-string containing an C<E<lt> A E<gt>> block
+surrounding an C<E<lt> IMG E<gt>> tag for a file icon.
 The link allows to jump to the file.
 
 =over
 
-=item 1 C<$templ>
+=item 1
+
+C<$templ>
 
 a I<string> containing the template (empty for a "variable")
 
-=item 1 C<$node>
+=item 2
+
+C<$node>
 
 a I<string> containing the name of the file
 
-=item 1 C<$dir>
+=item 3
+
+C<$dir>
 
 a I<string> containing the name of the parent directory
 
@@ -270,20 +288,26 @@ sub fileicon {
 =head2 C<filename ($templ, $node, $dir)>
 
 Function C<filename> is a "$variable" substitution function.
-It returns a HTML-string containing an C<E<lt>AE<gt>> tag
+It returns a HTML-string containing an C<E<lt> A E<gt>> tag
 linking to the file.
 
 =over
 
-=item 1 C<$templ>
+=item 1
+
+C<$templ>
 
 a I<string> containing the template (empty for a "variable")
 
-=item 1 C<$node>
+=item 2
+
+C<$node>
 
 a I<string> containing the name of the file
 
-=item 1 C<$dir>
+=item 3
+
+C<$dir>
 
 a I<string> containing the name of the parent directory
 
@@ -305,15 +329,21 @@ where appropriate.
 
 =over
 
-=item 1 C<$templ>
+=item 1
+
+C<$templ>
 
 a I<string> containing the template (i.e. the function argument)
 
-=item 1 C<$node>
+=item 2
+
+C<$node>
 
 a I<string> containing the name of the file
 
-=item 1 C<$dir>
+=item 3
+
+C<$dir>
 
 a I<string> containing the name of the parent directory
 
@@ -362,38 +392,6 @@ sub filesize {
 }
 
 
-=head2 C<_edittime ($thetime)>
-
-Function C<_edittime> is an internal auxiliary function.
-It returns a human-readable date/time in a string.
-
-=over
-
-=item 1 C<$thetime>
-
-an I<integer> containing an UTC time in seconds since the epoch
-
-=back
-
-=cut
-
-sub _edittime {
-	my ($thetime) = @_;
-
-	if (0 <= index($thetime, ':')) { # Was a formatted string provided?
-		return $thetime;
-	} else {
-		my @t = gmtime($thetime);
-		my ($sec, $min, $hour, $mday, $mon, $year) = @t;
-		return sprintf(
-			'%04d-%02d-%02d %02d:%02d:%02d',
-			$year + 1900,
-			$mon + 1, $mday, $hour, $min, $sec
-		);
-	}
-}
-
-
 =head2 C<modtime ($templ, $node, $dir)>
 
 Function C<modtime> is a "$variable" substitution function.
@@ -402,15 +400,21 @@ last-modification date.
 
 =over
 
-=item 1 C<$templ>
+=item 1
+
+C<$templ>
 
 a I<string> containing the template (empty for a "variable")
 
-=item 1 C<$node>
+=item 2
+
+C<$node>
 
 a I<string> containing the name of the file
 
-=item 1 C<$dir>
+=item 3
+
+C<$dir>
 
 a I<string> containing the name of the parent directory
 
@@ -437,15 +441,21 @@ indexation date by I<genxref>.
 
 =over
 
-=item 1 C<$templ>
+=item 1
+
+C<$templ>
 
 a I<string> containing the template (empty for a "variable")
 
-=item 1 C<$node>
+=item 2
+
+C<$node>
 
 a I<string> containing the name of the file
 
-=item 1 C<$dir>
+=item 3
+
+C<$dir>
 
 a I<string> containing the name of the parent directory
 
@@ -480,19 +490,27 @@ MUST return the string "&nbsp;" to keep the table looking pretty.
 
 =over
 
-=item 1 C<$templ>
+=item 1
+
+C<$templ>
 
 a I<string> containing the template (empty for a "variable")
 
-=item 1 C<$node>
+=item 2
+
+C<$node>
 
 a I<string> containing the name of the file
 
-=item 1 C<$dir>
+=item 3
+
+C<$dir>
 
 a I<string> containing the name of the parent directory
 
-=item 1 C<$releaseid>
+=item 4
+
+C<$releaseid>
 
 a I<string> containing the version name
 
@@ -512,12 +530,14 @@ sub descexpand {
 			, ('desctext' => sub { return dirdesc($dir . $node, $releaseid); }
 			  )
 			);
-	} else {
+	} elsif (LXR::Lang::parseable($dir.$node, $releaseid)) {
 		return expandtemplate
 			( $templ
 			, ('desctext' => sub { return filedesc($node, $dir, $releaseid); }
 			  )
 			);
+	} else {
+		return '&nbsp;';
 	}
 }
 
@@ -529,11 +549,15 @@ It returns a CSS class name depending on line parity.
 
 =over
 
-=item 1 C<$templ>
+=item 1
+
+C<$templ>
 
 a I<string> containing the template (empty for a "variable")
 
-=item 1 C<$line>
+=item 2
+
+C<$line>
 
 an I<integer> containing the line number of the display
 
@@ -555,11 +579,15 @@ the directory.
 
 =over
 
-=item 1 C<$templ>
+=item 1
+
+C<$templ>
 
 a I<string> containing the template
 
-=item 1 C<$dir>
+=item 2
+
+C<$dir>
 
 a I<string> containing the directory name
 
@@ -632,7 +660,7 @@ sub direxpand {
 					, 'indextime'   => sub {
 						my $t = indextime(@_,  $node, $dir);
 						if ('-' eq $t) {
-							if (LXR::Lang::parseable($dir.$node)) {
+							if (LXR::Lang::parseable($dir.$node, $releaseid)) {
 								return 'Not valid'
 							};
 							return '-';
@@ -647,7 +675,7 @@ sub direxpand {
 												, $releaseid
 												)
 											)
-									&&	LXR::Lang::parseable($dir.$node)
+									&&	LXR::Lang::parseable($dir.$node, $releaseid)
 									) {
 									'dirindexinvalid'
 								} else {
@@ -678,7 +706,9 @@ and launches template expansion.
 
 =over
 
-=item 1 C<$dir>
+=item 1
+
+C<$dir>
 
 a I<string> containing the directory name
 
@@ -696,7 +726,6 @@ sub printdir {
 
 	$templ = gettemplate
 				( 'htmldir'
-				, ''
 				, "<ul>\n\$files{\n<li>\$iconlink \$namelink\n}</ul>\n"
 				);
 
@@ -705,6 +734,7 @@ sub printdir {
 			( $templ
 			,	( 'files' => sub { direxpand(@_, $dir) }
 				, 'description' => sub { dirdesc($dir, $releaseid) }
+				, 'indexstate'	=> sub { displayindexstate('source') }
 				)
 			)
 	);
@@ -713,20 +743,26 @@ sub printdir {
 
 =head2 C<next_annot ($currev, $r, $bg)>
 
-Function C<next_annot> returns an HTML C<E<lt>SPANE<gt>> block
+Function C<next_annot> returns an HTML C<E<lt> SPAN E<gt>> block
 containing revision and author information for the next file line.
 
 =over
 
-=item 1 C<$currev>
+=item 1
+
+C<$currev>
 
 a I<string> containing the requested version for the file
 
-=item 1 C<$r>
+=item 2
+
+C<$r>
 
 a I<reference> to a I<string> containing the revision of the previous line
 
-=item 1 C<$bg>
+=item 3
+
+C<$bg>
 
 a I<reference> to a flag toggling between 0 and 1
 
@@ -770,7 +806,25 @@ sub next_annot {
 	}
 
 	$$r = $rev;
-	my $la = length($auth);
+	# NOTE: modern VCSes return their annotations in Unicode, but user
+	# may have requested another display encoding (e.g. ISO-8859-x).
+	# We don't try to transcode since this may be time-consuming for
+	# little benefit. We just hope that, on average, truncation will
+	# not occur too frequently in the middle of an UTF-8 sequence.
+	# UTF-8-aware length computation and truncation is attempted only
+	# on author's name. Nothing is done on the revision id because
+	# it usually does not contain fancy characters (read it is numeric
+	# with eventual ASCII punctuation). svn allows more freedom in
+	# revision naming and may conflict with this choice. You'll also
+	# be in trouble when displaying UTF-8 with CVS returning ISO-8859.
+	my $la;
+	my $pat;
+	if ('utf-8' ne $config->{'encoding'}) {
+		$la = length($auth);
+	} else {
+		use utf8;
+		$la = length($auth);
+	};
 	my $lr = length($rev);
 	# After this call to length, $rev may be edited to contain
 	# HTML element and $lr will be different from length($rev).
@@ -783,8 +837,9 @@ sub next_annot {
 				) {	# truncate first author
 				$la = 14 - $lr;
 				$la = 4 if $la < 4;
-				$auth = substr($auth, 0, $la++)
-						. '<span class="error">*</span>';
+				$auth = pack('(U)'.$la, unpack('U*', $auth));
+				$auth .= '<span class="error">*</span>';
+				$la++;
 			}
 			if ($lr+$la >15) { # now truncate revision
 				$lr = 14 - $la;
@@ -825,7 +880,9 @@ Procedure C<printfile> is the main driver for node display.
 
 =over
 
-=item 1 C<$dir>
+=item 1
+
+C<$raw>
 
 a I<"boolean"> requesting I<raw mode> if non zero
 
@@ -854,6 +911,14 @@ sub printfile {
 		printdir($pathname);
 	} else {
 
+		# Avoid UTF-8 sanity errors with non-text files
+		# when tree is stored in a Git repository
+		if	(	$files->isa('LXR::Files::GIT')
+			&&	! LXR::Lang::parseable($pathname, $releaseid)
+			) {
+			$files->{'git-annotations'} = 0;
+			$files->{'git_blame'} = 0;
+		}
 		# Request annotated content (through defined third argument)
 		my $fileh = $files->getfilehandle($pathname, $releaseid, !$raw);
 
@@ -868,16 +933,26 @@ sub printfile {
 			#	}
 			} else {
 				# Check for a discrepancy between file and database states
-				if	(!$index->filetimestamp
-								( $pathname
-								, $files->filerev($pathname, $releaseid)
-								)
-					&& LXR::Lang::parseable($pathname)
-					) {
+				if (! LXR::Lang::parseable($pathname, $releaseid)) {
 					print(
-						"<p class=\"error\">\n<i>Warning, cross-references for $pathname need to be fixed.</i>\n</p>\n"
+						"<p class=\"indexstate warning\">\n<i class=error>Warning, </i>$pathname<i class=error> is written in an unsupported language."
+						, " File is not indexed.</i>\n</p>\n"
 					);
+				} else {
+					my $t = indextime(@_,  '', $pathname);
+					if ('-' eq $t) {
+						print(
+							"<p class=\"indexstate warning\">\n<i class=error>Warning, file </i>$pathname<i class=error> was not indexed"
+							, "\nor was modified since last indexation"
+							, " (in which case cross-reference links may be missing, inaccurate or erroneous).</i></p>\n"
+						);
+					} else {
+						print(
+							"<p class=indexstate>\nFile indexing completed on $t\n</p>\n"
+						);
+					}
 				}
+
 				if (exists($config->{'cvswebprefix'})) {
 					my $revtarget = '';
 					$revtarget = "#rev$releaseid" if lc($releaseid) ne 'head';
@@ -899,9 +974,9 @@ sub printfile {
 					$l =~ s/(\n)/$1.next_annot($currev, \$oldrev, \$bg)/ge;
 					print $l;
 				};
-				&$outfun("<pre class=\"filecontent\">\n");
+				print '<pre class="filecontent">';
 				markupfile($fileh, $outfun);
-				&$outfun("</pre>\n");
+				print "</pre>\n";
 			}
 		} else {
 			print(
@@ -931,6 +1006,7 @@ for the real job.
 =cut
 
 httpinit;
+std_http_headers('source');
 
 if (exists($config->{'filter'}) && $pathname !~ $config->filter) {
 	makeheader('source');

@@ -1,11 +1,8 @@
 # -*- tab-width: 4 -*-
 ###############################################
 #
-# $Id: Pascal.pm,v 1.5 2013/11/08 09:04:27 ajlittoz Exp $
-#
-# Implements generic support for any language that ectags can parse.
-# This may not be ideal support, but it should at least work until
-# someone writes better support.
+# Enhances the support for the Pascal language over that provided by
+# Generic.pm
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -32,8 +29,6 @@ It is driven by specifications read from file I<generic.conf>.
 
 package LXR::Lang::Pascal;
 
-$CVSID = '$Id: Pascal.pm,v 1.5 2013/11/08 09:04:27 ajlittoz Exp $ ';
-
 use strict;
 use LXR::Lang;
 require LXR::Lang::Generic;
@@ -41,21 +36,34 @@ require LXR::Lang::Generic;
 our @ISA = ('LXR::Lang::Generic');
 
 
-=head2 C<new ($pathname, $releaseid, $lang)>
+=head2 C<new ($writeDB, $pathname, $releaseid, $lang)>
 
 Method C<new> creates a new language object.
 
 =over
 
-=item 1 C<$pathname>
+=item 1
+
+C<$writeDB>
+
+a I<boolean> I<integer> requesting to store language properties
+(huyman-readable type description) into the database
+
+=item 2
+
+C<$pathname>
 
 a I<string> containing the name of the file to parse
 
-=item 1 C<$releaseid>
+=item 3
+
+C<$releaseid>
 
 a I<string> containing the release (version) of the file to parse
 
-=item 1 C<$lang>
+=item 4
+
+C<$lang>
 
 a I<string> which is the I<key> for the specification I<hash>
 C<'langmap'> in file I<generic.conf>
@@ -73,11 +81,11 @@ This extension is needed to synthesize included file names.
 =cut
 
 sub new {
-	my ($proto, $pathname, $releaseid, $lang) = @_;
+	my ($proto, $writeDB,  $pathname, $releaseid, $lang) = @_;
 	my $class = ref($proto) || $proto;
 
 	# Call the effective creator
-	my $self = $class->SUPER::new($pathname, $releaseid, $lang);
+	my $self = $class->SUPER::new($writeDB, $pathname, $releaseid, $lang);
 	$pathname =~ m/\.([^.]+)$/;
 	$$self{'pasextension'}  = $1;
 	return $self;
@@ -90,11 +98,15 @@ Method C<processinclude> is invoked to process a Pascal I<include> directive.
 
 =over
 
-=item 1 C<$frag>
+=item 1
+
+C<$frag>
 
 a I<reference to a string> containing the directive
 
-=item 1 C<$dir>
+=item 2
+
+C<$dir>
 
 an optional I<string> containing a preferred directory for the include'd file
 

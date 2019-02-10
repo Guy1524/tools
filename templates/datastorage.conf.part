@@ -3,9 +3,6 @@
 #-	Tree configuration section
 #-		Data storage subsection
 #-
-#-	$Id: datastorage.conf.part,v 1.4 2013/11/17 09:13:21 ajlittoz Exp $
-#-
-#-
 #-	This file fragment is meant to be "included" to form the
 #-	complete configuration file.
 #-
@@ -42,10 +39,18 @@
 	#- ----- SQLite -----
 #@s:
 #@	IF	!%_globaldb%
-#@		ASK,DB_name --- Database file? (e.g. /home/myself/storage.db); -2\
-		#@				; ^/,absolute file path required\
-		#@				, [^/]$,must be a file
-#@		CANONR,DB_name ',\'
+#@		IF	!%SQLiteDBdir%
+#@			ASK,DB_name --- Database file? (e.g. /home/myself/storage.db); -2\
+			#@				; ^/,absolute file path required\
+			#@				, [^/]$,must be a file\
+			#@				, ^[^;]+$,filename cannot contain semicolon
+#@			CANONR,DB_name ',\'
+#@		ELSE
+#@			ASK,DB_name --- Database file in %SQLiteDBdir%? (e.g. storage.db); -2\
+			#@				; [^/]$,must be a file\
+			#@				, ^[^;]+$,filename cannot contain semicolon
+#@			CANONR,DB_name ',\',^,%SQLiteDBdir%
+#@		ENDIF
 #@	ENDIF
 	, 'dbname' => 'dbi:SQLite:dbname=%DB_name%'
 #@ENDC	%_dbengine%

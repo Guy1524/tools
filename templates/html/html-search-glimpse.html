@@ -1,5 +1,3 @@
-<!--$Id: html-search-glimpse.html,v 1.5 2013/09/04 15:22:42 ajlittoz Exp $ -->
-
 <!--				html-search-glimpse.html
 		A template for free-text search with glimpse
 		and display of the results	-->
@@ -21,6 +19,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 -->
+$indexstate
 <h1>Free-text search with Glimpse</h1>
 <p>
 Type a string to find:
@@ -34,8 +33,8 @@ Type a string to find:
 </p>
 
 <form method="get" action="$varbtnaction">
-$variables{<input type="hidden" name="$variable" value="$value">
-}$urlargs{               <input type="hidden" name="$urlvar" value="$urlval">
+$variables{	<input type="hidden" name="!$varid" value="$varvalue">
+}$urlargs{	<input type="hidden" name="$urlvar" value="$urlval">
 }	<table>
 		<tr>
 			<td>
@@ -100,13 +99,14 @@ and can be used for building simple regex.
 	Powered by <a href="http://webglimpse.net" target="_blank">Glimpse</a>.
 	(<a href="http://webglimpse.net/docs/tips.html">Tips for search syntax.</a>)
 </p>
-<hr>
-<p>
-	$maxhits_message
-	$resultcount occurences found.
-</p>
-   
-<h2>Results for <span class="searchident">$searchtext</span></h2>
+<div $noquery>
+	<hr>
+	<p>
+		$maxhits_message
+		$resultcount occurences found.
+	</p>
+	
+	<h2>Results for <span class="searchident">$searchtext</span></h2>
 
 	<table class="searchref">
 		<thead>
@@ -124,3 +124,4 @@ $results{			<tr>
 			</tr>
 }		</tbody>
 	</table>
+</div>

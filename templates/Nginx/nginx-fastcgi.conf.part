@@ -18,7 +18,7 @@
 			alias %LXRroot%/;
 		# Create FastCGI environment for LXR scripts
 			include fastcgi.conf;
-			fastcgi_split_path_info   (diff|ident|search|showconfig|source)(.*)$;
+			fastcgi_split_path_info   (diff|ident|perf|search|showconfig|source)(.*)$;
 				# nginx bug? fastcgi.conf sets SERVER_NAME to $server_name,
 				# but this variable is equal to first name on server_name
 				# directive.

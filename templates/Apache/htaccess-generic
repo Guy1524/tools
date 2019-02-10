@@ -1,35 +1,27 @@
 #
 #	Web server configuration for LXR root directory
 #
-#	$Id: htaccess-generic,v 1.9 2014/03/10 16:40:27 ajlittoz Exp $
-#
 #	Content of this file is independent of the location of
 #	the LXR root directory.
 #	Need for user-customization should be very limited.
 #	Eventually, access to LXR root directory can be relaxed.
 #	Default is very restrictive.
 #
-# Cannot grant Apache 2.2/2.4 implicit compatibility because Require
-# directive syntax and semantics changed between releases.
-# When updating 2.2 -> 2.4, uncomment 2.4 specific lines
-#@IF	!%Apache24%
-#@	ASK,Apache24 Is your Apache version 2.4 or higher?\
-	#@	; 1; yes, no; y, n
-#@ENDIF
 
 
-# Enable CGI script execution and use of symlinks
-Options ExecCGI FollowSymlinks
+# Enable use of symlinks
+Options FollowSymlinks
 
-		# up to Apache 2.2
-#@IF 'y' eq "%Apache24%"
-#	Order deny,allow
-#@ELSE
-Order deny,allow
-#@ENDIF
-		# from Apache 2.4
-#	No directive needed
-
+<IfModule mod_version.c>
+	<IfVersion < 2.4>
+		Order deny,allow
+	</IfVersion>
+</IfModule>
+<IfModule !mod_version.c>
+	<IfModule !mod_authz_core.c>
+		Order deny,allow
+	</IfModule>
+</IfModule>
 
 # =================================================
 #
@@ -43,49 +35,61 @@ Options -Indexes
 
 # Forbid direct access to any file in LXR root and its subdirectories
 <FilesMatch ".">
-		# up to Apache 2.2
-#@IF 'y' eq "%Apache24%"
-#	Deny from all
-#@ELSE
-	Deny from all
-#@ENDIF
-		# from Apache 2.4
-#@IF 'y' eq "%Apache24%"
-	Require all denied
-#@ELSE
-#	Require all denied
-#@ENDIF
+	<IfModule mod_version.c>
+		<IfVersion < 2.4>
+			Deny from all
+		</IfVersion>
+		<IfVersion >= 2.4>
+			Require all denied
+		</IfVersion>
+	</IfModule>
+	<IfModule !mod_version.c>
+		<IfModule !mod_authz_core.c>
+			Deny from all
+		</IfModule>
+		<IfModule mod_authz_core.c>
+			Require all denied
+		</IfModule>
+	</IfModule>
 </FilesMatch>
 
 # But allow access to style sheets
 <FilesMatch "\.css$">
-		# up to Apache 2.2
-#@IF 'y' eq "%Apache24%"
-#	Allow from all
-#@ELSE
-	Allow from all
-#@ENDIF
-		# from Apache 2.4
-#@IF 'y' eq "%Apache24%"
-	Require all granted
-#@ELSE
-#	Require all granted
-#@ENDIF
+	<IfModule mod_version.c>
+		<IfVersion < 2.4>
+			Allow from all
+		</IfVersion>
+		<IfVersion >= 2.4>
+			Require all granted
+		</IfVersion>
+	</IfModule>
+	<IfModule !mod_version.c>
+		<IfModule !mod_authz_core.c>
+			Allow from all
+		</IfModule>
+		<IfModule mod_authz_core.c>
+			Require all granted
+		</IfModule>
+	</IfModule>
 </FilesMatch>
 # and graphic files (for icons)
 <FilesMatch "\.(bmp|gif|icon?|jpe?g|png|svg|tiff?)$">
-		# up to Apache 2.2
-#@IF 'y' eq "%Apache24%"
-#	Allow from all
-#@ELSE
-	Allow from all
-#@ENDIF
-		# from Apache 2.4
-#@IF 'y' eq "%Apache24%"
-	Require all granted
-#@ELSE
-#	Require all granted
-#@ENDIF
+	<IfModule mod_version.c>
+		<IfVersion < 2.4>
+			Allow from all
+		</IfVersion>
+		<IfVersion >= 2.4>
+			Require all granted
+		</IfVersion>
+	</IfModule>
+	<IfModule !mod_version.c>
+		<IfModule !mod_authz_core.c>
+			Allow from all
+		</IfModule>
+		<IfModule mod_authz_core.c>
+			Require all granted
+		</IfModule>
+	</IfModule>
 </FilesMatch>
 
 
@@ -94,19 +98,25 @@ Options -Indexes
 # ----------- LXR scripts configuration -----------
 #
 #
-<Files ~ (search|source|ident|diff|showconfig)$>
-		# up to Apache 2.2
-#@IF 'y' eq "%Apache24%"
-#	Allow from all
-#@ELSE
-	Allow from all
-#@ENDIF
-		# from Apache 2.4
-#@IF 'y' eq "%Apache24%"
-	Require all granted
-#@ELSE
-#	Require all granted
-#@ENDIF
+<FilesMatch "^(search|source|ident|diff|showconfig|perf)$">
+# Enable CGI script execution
+	Options +ExecCGI
+	<IfModule mod_version.c>
+		<IfVersion < 2.4>
+			Allow from all
+		</IfVersion>
+		<IfVersion >= 2.4>
+			Require all granted
+		</IfVersion>
+	</IfModule>
+	<IfModule !mod_version.c>
+		<IfModule !mod_authz_core.c>
+			Allow from all
+		</IfModule>
+		<IfModule mod_authz_core.c>
+			Require all granted
+		</IfModule>
+	</IfModule>
 	#	Access granted to everybody
 
 	# *** mod_perl use ***
@@ -116,13 +126,16 @@ Options -Indexes
 		# Configuration parameters changed between mod_perl versions:
 		<IfDefine MODPERL2>
 			PerlOptions +ParseHeaders
-		# Apache can dispatch execution according to 2 modes.
+		# Apache can dispatch execution according to 3 modes.
 		# mod_perl initialization differs slightly:
-			<IfModule prefork.c>
+			<IfModule mpm_prefork_module>
 				PerlHandler ModPerl::RegistryPrefork
 			</IfModule>
-			<IfModule worker.c>
+			<IfModule mpm_worker_module>
 				PerlHandler ModPerl::Registry
+			</IfModule>
+			<IfModule mpm_event_module>
+				SetHandler cgi-script
 			</IfModule>
 		</IfDefine>
 
@@ -138,4 +151,4 @@ Options -Indexes
 		SetHandler cgi-script
 	</IfModule>
 
-</Files>
+</FilesMatch>

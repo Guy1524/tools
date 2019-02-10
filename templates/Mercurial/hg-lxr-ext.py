@@ -1,7 +1,5 @@
 ###############################################
 #
-# $Id: hg-lxr-ext.py,v 1.1 2013/01/18 17:48:50 ajlittoz Exp $
-#
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 2 of the License, or

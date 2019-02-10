@@ -1,11 +1,8 @@
 # -*- tab-width: 4 -*-
 ###############################################
 #
-# $Id: HTML.pm,v 1.3 2013/11/08 09:04:27 ajlittoz Exp $
-#
-# Implements generic support for any language that ectags can parse.
-# This may not be ideal support, but it should at least work until
-# someone writes better support.
+# Enhances the support for the HTML language over that provided by
+# Generic.pm
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -32,8 +29,6 @@ It is driven by specifications read from file I<generic.conf>.
 
 package LXR::Lang::HTML;
 
-$CVSID = '$Id: HTML.pm,v 1.3 2013/11/08 09:04:27 ajlittoz Exp $ ';
-
 use strict;
 require LXR::Lang::Generic;
 
@@ -48,11 +43,15 @@ Method C<processinclude> is invoked to process an HTML I<include> directive
 
 =over
 
-=item 1 C<$frag>
+=item 1
+
+C<$frag>
 
 a I<reference to a string> containing the directive
 
-=item 1 C<$dir>
+=item 2
+
+C<$dir>
 
 an optional I<string> containing a preferred directory for the include'd file
 

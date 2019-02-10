@@ -1,6 +1,5 @@
 #!/usr/bin/perl -T
 ######################################################################
-# $Id: showconfig,v 1.5 2014/03/09 15:20:48 ajlittoz Exp $
 #
 # showconfig --	Present LXR configuration as html
 #
@@ -41,8 +40,6 @@ by a specific one.
 
 =cut
 
-$CVSID = '$Id: showconfig,v 1.5 2014/03/09 15:20:48 ajlittoz Exp $ ';
-
 use strict;
 use lib do { $0 =~ m{(.*)/} ? "$1/lib" : 'lib' };  # if LXR modules are in ./lib
 
@@ -61,11 +58,15 @@ references) or a I<hash> (recursively dumped surrounded with curly braces).
 
 =over
 
-=item 1 C<$h>
+=item 1
+
+C<$h>
 
 a reference to the I<hash> to dump
 
-=item 1 C<$left>
+=item 2
+
+C<$left>
 
 the I<number> of spaces at left to indent this hash
 
@@ -119,11 +120,15 @@ Parameter C<dbpass> is not dumped for security reason.
 
 =over
 
-=item 1 C<$parm>
+=item 1
+
+C<$parm>
 
 a parameter name as a I<string>
 
-=item 1 C<$pg>
+=item 2
+
+C<$pg>
 
 a reference to a parameter group
 
@@ -161,20 +166,28 @@ accessible configuration parameter.
 
 =over
 
-=item 1 C<$templ>
+=item 1
+
+C<$templ>
 
 a I<string> containing the template (i.e. argument)
 
-=item 1 C<$who>
+=item 2
+
+C<$who>
 
 a I<string> containing the script name (i.e. showconfig)
 requesting this substitution
 
-=item 1 C<$pgs>
+=item 3
+
+C<$pgs>
 
 a reference to the parameter group array
 
-=item 1 C<$pgnr>
+=item 4
+
+C<$pgnr>
 
 parameter group index
 
@@ -260,16 +273,20 @@ sub parmexpand {
 =head2 C<parmgrouplink ($pgnr, $pgs)>
 
 Function C<parmgrouplink> is a "$variable" substitution function.
-It returns an C<E<lt>AE<gt>> element invoking the
-I<showconfig> script to dump the designated parameter group.
+It returns an C<E<lt> A E<gt>> element invoking
+script I<showconfig> to dump the designated parameter group.
 
 =over
 
-=item 1 C<$pgnr>
+=item 1
+
+C<$pgnr>
 
 parameter group index
 
-=item 1 C<$pgs>
+=item 2
+
+C<$pgs>
 
 a reference to the parameter group array
 
@@ -318,7 +335,8 @@ C<'parmgroupnr'>.
 my $errorsig = "<!-- ! -->";
 my $templ;
 
-httpinit;
+httpinit();
+std_http_headers();
 
 my $who = 'showconfig';
 my @pgs = $config->readconfig();
@@ -328,7 +346,6 @@ my $which = $HTTP->{'param'}{'_parmgroup'}
 makeheader($who);
 $templ = gettemplate	( 'htmlconfig'
 						, $errorsig
-						, ''
 						);
 if ($templ =~ m/^$errorsig/) {
 	die "Can't display configuration without 'htmlconfig' template\n";
@@ -338,7 +355,7 @@ print expandtemplate
 	,	( 'conffile'	=> sub { '<em>' . $config->{'confpath'} . '</em>' }
 		, 'virtroot'	=> sub { $pgs[$which]->{'virtroot'} }
 		, 'parmgroupnr'	=> sub { $which
-								. (1 <$HTTP->{'param'}{'_confall'}
+								. (1 < $HTTP->{'param'}{'_confall'}
 								  ? ' (apocalyptical)'
 								  : ''
 								  )

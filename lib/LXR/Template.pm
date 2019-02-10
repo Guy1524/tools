@@ -1,8 +1,6 @@
 # -*- tab-width: 4 -*-
 #############################################################
 #
-# $Id: Template.pm,v 1.0 2011/12/11 09:15:00 ajlittoz Exp $
-#
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 2 of the License, or
@@ -16,10 +14,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
-
+#
 #############################################################
-
-# =encoding utf8	Not recognised??
 
 =head1 Template module
 
@@ -31,8 +27,6 @@ customisable HTML page.
 
 package LXR::Template;
 
-$CVSID = '$Id: Template.pm,v 1.0 2011/12/11 09:15:00 ajlittoz Exp $';
-
 use strict;
 
 require Exporter;
@@ -43,7 +37,9 @@ our @EXPORT = qw(
 	gettemplate
 	expandtemplate
 	varbtnaction
+	varexpand
 	urlexpand
+	displayindexstate
 	makeheader
 	makefooter
 	makeerrorpage
@@ -55,28 +51,27 @@ use LXR::Config;
 use LXR::Files;
 
 
-=head2 C<gettemplate ($who, $prefix, $suffix)>
+=head2 C<gettemplate ($who, $surrogate)>
 
 Function C<gettemplate> returns the contents of the designated
 template.
-In case the template name has not been defined in lxr.conf or
+In case the template name has not been defined in I<lxr.conf> or
 if the target file does not exist,
-an alternate template is generated based on default values
-supplied by the arguments.
+a replacement template is returned.
 
 =over
 
-=item 1 C<$who>
+=item 1
+
+C<$who>
 
 a I<string> containing the template name
 
-=item 1 C<$prefix>
+=item 2
 
-a I<string> containing the head of the alternate template
+C<$surrogate>
 
-=item 1 C<$suffix>
-
-a I<string> containing the tail of the alternate template
+a I<string> containing the replacement template
 
 =back
 
@@ -86,17 +81,17 @@ B<Caveat:>
 
 =item
 
-A warning message may be issued with a C<warn> statement
-and get caught elsewhere.
+I<A warning message may be issued with a C<warn> statement
+and get caught elsewhere.>
 
 =back
 
 =cut
 
 sub gettemplate {
-my ($who, $prefix, $suffix) = @_;
+my ($who, $surrogate) = @_;
 
-	my $template = $prefix;
+	my $template = $surrogate;
 	if (exists $config->{$who}) {
 		if (open(TEMPL, $config->{$who})) {
 			local ($/) = undef;
@@ -107,11 +102,9 @@ my ($who, $prefix, $suffix) = @_;
 				. $config->{$who}
 				. "' does not exist\n"
 				);
-			$template .= $suffix;
 		}
 	} else {
 		warn( "Template '$who' is not defined\n");
-		$template .= $suffix;
 	}
 	return $template
 }
@@ -124,11 +117,15 @@ are replaced by their expanded values.
 
 =over
 
-=item 1 C<$templ>
+=item 1
+
+C<$templ>
 
 a I<string> containing the template
 
-=item 1 C<%expfunc>
+=item 2
+
+C<%expfunc>
 
 a I<hash> where the key is the variable/function name
 and the value is a C<sub> returning the expanded text
@@ -140,13 +137,17 @@ which are special sequences of characters in the form:
 
 =over
 
-=item * C<$name>
+=item *
+
+C<$name>
 
 This is a simple variable.
 C<$name> will be substituted in the template by the value
 returned by the corresponding C<sub> in C<%expfunc>.
 
-=item * C<$name{ ... }>
+=item *
+
+C<$name{ ... }>
 
 This is a function.
 The fragment between the braces (hereafter called the argument)
@@ -157,13 +158,19 @@ B<Notes:>
 
 =over
 
-=item 1 There is no space between the C<$> sign and the
+=item
+
+There is no space between the C<$> sign and the
 variable/function name.
 
-=item 1 There is no space between the function name and
+=item
+
+There is no space between the function name and
 the opening brace C<{>.
 
-=item 1 The C<name> can contain uppercase and lowercase letters,
+=item
+
+The C<name> can contain uppercase and lowercase letters,
 digits and underscores.
 
 =back
@@ -177,21 +184,27 @@ The only restriction concerns the closing brace C<}>:
 it cannot appear inside an argument because it would match
 the nearest unmatched opening brace C<{>.
 No escape mechanism is presently implemented.
-Note, however, that if you are generating HTML you can use &#125;
-or &#x7D;.
+Note, however, that if you are generating HTML you can use
+entity literals C<E<amp> #125;>
+or C<E<amp> #x7D;> (without spaces between C<E<amp>> and
+the number sign C<#>).
 
 B<Notes:>
 
 =over
 
-=item 1 If the argument contains substitution requests, it is the
+=item
+
+If the argument contains substitution requests, it is the
 C<sub> responsability to interpret them.
 
 The C<sub> may call C<expandtemplate> with the argument as the
 new template providing the replacement rules in the new
 C<%expfunc>.
 
-=item 1 The C<sub> is free to do whatever it deems appropriate
+=item
+
+The C<sub> is free to do whatever it deems appropriate
 with the argument.
 
 It can repeateadly call C<expandtemplate>
@@ -243,14 +256,18 @@ Consequently, comments have two forms:
 
 =over 4
 
-=item 1 Normal verbose comments
+=item
+
+Normal verbose comments
 
 The opening delimiter (C<&lt;!-- >) MUST be followed by a spacer,
 i.e. a space, tab or newline.
 The closing delimiter (C<--E<gt>>) should also be preceded by a spacer.
 These comments will be removed.
 
-=item 1 Sticky comments
+=item
+
+Sticky comments
 
 The start delimiter (C<&lt;!-->) is immediately followed by a
 significant character.
@@ -287,7 +304,7 @@ sub expandtemplate {
 	# and apply replacement rule
 	# optional argument----+------+
 	#                      v      v
-	$templ =~ s/(\$(\w+)(\{([^\}]*)\}|))/{
+	$templ =~ s/(\$(\w+)(\{([^\}]*)\}|)?)/{
 		if (defined($expfun = $expfunc{$2})) {
 			if ($3 eq '') {
 				&$expfun(undef);
@@ -319,7 +336,9 @@ component) according to the routing technique.
 
 =over
 
-=item 1 C<$templ>
+=item 1
+
+C<$templ>
 
 a I<string> containing the template
 
@@ -332,7 +351,9 @@ template value for a variable substitution request. >
 
 =back
 
-=item 1 C<$who>
+=item 2
+
+C<$who>
 
 a I<string> containing the script name (i.e. source, sourcedir,
 diff, ident or search) requesting this substitution
@@ -414,7 +435,9 @@ caption for the page.
 
 =over
 
-=item 1 C<$templ>
+=item 1
+
+C<$templ>
 
 a I<string> containing the template
 
@@ -427,7 +450,9 @@ template value for a variable substitution request. >
 
 =back
 
-=item 1 C<$who>
+=item 2
+
+C<$who>
 
 a I<string> containing the script name (i.e. source, sourcedir,
 diff, ident or search) requesting this substitution
@@ -458,12 +483,14 @@ sub captionexpand {
 
 Function C<bannerexpand> is a "$variable" substitution function.
 It returns an HTML string displaying the path to the current
-file (C<$pathname>) with C<E<lt>AE<gt>> links in every portion of
+file (C<$pathname>) with C<E<lt> A E<gt>> links in every portion of
 the path to allow quick access to the intermediate directories.
 
 =over
 
-=item 1 C<$templ>
+=item 1
+
+C<$templ>
 
 a I<string> containing the template
 
@@ -476,7 +503,9 @@ template value for a variable substitution request. >
 
 =back
 
-=item 1 C<$who>
+=item 2
+
+C<$who>
 
 a I<string> containing the script name (i.e. source, sourcedir,
 diff, ident or search) requesting this substitution
@@ -517,12 +546,14 @@ sub bannerexpand {
 =head2 C<titleexpand ($templ, $who)>
 
 Function C<titleexpand> is a "$variable" substitution function.
-It returns an HTML-safe string suitable for use in a C<E<lt>TITLEE<gt>>
+It returns an HTML-safe string suitable for use in a C<E<lt> TITLE E<gt>>
 element.
 
 =over
 
-=item 1 C<$templ>
+=item 1
+
+C<$templ>
 
 a I<string> containing the template
 
@@ -535,7 +566,9 @@ template value for a variable substitution request. >
 
 =back
 
-=item 1 C<$who>
+=item 2
+
+C<$who>
 
 a I<string> containing the script name (i.e. source, sourcedir,
 diff, ident or search) requesting this substitution
@@ -549,14 +582,16 @@ sub titleexpand {
 	my $ret;
 
 	if ($who eq 'source' || $who eq 'diff' || $who eq 'sourcedir') {
-		$ret = $config->sourcerootname . $pathname;
+		$ret = $config->{'treename'} .'/'. $config->sourcerootname . $pathname;
 	} elsif ($who eq 'ident') {
-		$ret = $config->sourcerootname . ' identifier search'
+		$ret = $config->{'treename'} .'/'. $config->sourcerootname . ' identifier search'
 				. ($identifier ? ": $identifier" : '');
 	} elsif ($who eq 'search') {
 		my $s = $HTTP->{'param'}{'_string'};
-		$ret = $config->sourcerootname . ' general search'
+		$ret = $config->{'treename'} .'/'. $config->sourcerootname . ' general search'
 				. ($s ? ": $s" : '');
+	} elsif ($who eq 'perf') {
+		$ret = $config->{'treename'} . ' indexation timings';
 	}
 	$ret =~ s/&/&amp;/g;
 	$ret =~ s/</&lt;/g;
@@ -569,11 +604,13 @@ sub titleexpand {
 
 Function C<thisurl> is a "$variable" substitution function.
 It returns an HTML-encoded string suitable for use as the
-target href of a C<E<lt>LINK rel="stylesheet"E<gt>> tag.
+target href of a C<E<lt> LINK rel="stylesheet" E<gt>> tag.
 
 =over
 
-=item 1 C<$templ>
+=item 1
+
+C<$templ>
 
 a I<string> containing the template (i.e. argument)
 
@@ -609,11 +646,15 @@ found in the configuration file.
 
 =over
 
-=item 1 C<$templ>
+=item 1
+
+C<$templ>
 
 a I<string> containing the template (i.e. argument)
 
-=item 1 C<$who>
+=item 2
+
+C<$who>
 
 a I<string> containing the script name (i.e. source, sourcedir,
 diff, ident or search) requesting this substitution;
@@ -657,7 +698,7 @@ sub altstyleexpand {
 
 Function C<thisurl> is a "$variable" substitution function.
 It returns an HTML-encoded string suitable for use as the
-target href of an C<E<lt>AE<gt>> tag.
+target href of an C<E<lt> A E<gt>> tag.
 
 The string is the URL used to access the current page (complete
 with the ?query string).
@@ -676,7 +717,7 @@ sub thisurl {
 
 Function C<baseurl> is a "$variable" substitution function.
 It returns an HTML-encoded string suitable for use as the
-target href of a C<E<lt>AE<gt>> or C<E<lt>BASEE<gt>> tag.
+target href of a C<E<lt> A E<gt>> or C<E<lt> BASE E<gt>> tag.
 
 The string is the base URL used to access the LXR server.
 
@@ -694,7 +735,7 @@ sub baseurl {
 
 Function C<dotdoturl> is a "$variable" substitution function.
 It returns an HTML-encoded string suitable for use as the
-target href of an C<E<lt>AE<gt>> or C<E<lt>BASEE<gt>> tag.
+target href of an C<E<lt> A E<gt>> or C<E<lt> BASE E<gt>> tag.
 
 The string is the ancestor of the base URL used to access the
 LXR server.
@@ -734,11 +775,15 @@ of the configuration file.
 
 =over
 
-=item 1 C<$templ>
+=item 1
+
+C<$templ>
 
 a I<string> containing the template (i.e. argument)
 
-=item 1 C<$who>
+=item 2
+
+C<$who>
 
 a I<string> containing the script name (i.e. source, sourcedir,
 diff, ident or search) requesting this substitution
@@ -794,15 +839,21 @@ configuration file.
 
 =over
 
-=item 1 C<$templ>
+=item 1
+
+C<$templ>
 
 a I<string> containing the template (i.e. argument)
 
-=item 1 C<$who>
+=item 2
+
+C<$who>
 
 a I<string> containing the script name
 
-=item 1 C<$confgroups>
+=item 3
+
+C<$confgroups>
 
 a I<array> containing a copy of the configuration file
 
@@ -879,11 +930,15 @@ current page.
 
 =over
 
-=item 1 C<$templ>
+=item 1
+
+C<$templ>
 
 a I<string> containing the template (i.e. argument)
 
-=item 1 C<$who>
+=item 2
+
+C<$who>
 
 a I<string> containing the script name (i.e. source, sourcedir,
 diff, ident or search) requesting this substitution;
@@ -961,11 +1016,15 @@ expanded argument applied to all the LXR modes.
 
 =over
 
-=item 1 C<$templ>
+=item 1
+
+C<$templ>
 
 a I<string> containing the template (i.e. argument)
 
-=item 1 C<$who>
+=item 2
+
+C<$who>
 
 a I<string> containing the script name (i.e. source, sourcedir,
 diff, ident or search) requesting this substitution;
@@ -1084,6 +1143,7 @@ sub modeexpand {
 		$modeoff  = 'disabled';
 	} elsif
 		(	!$files->isa('LXR::Files::Plain')
+			&& !exists $config->{'sourcetext'}
 		||	$config->{'glimpsebin'}
 			&& $config->{'glimpsebin'} =~ m!^(.*/)?true$!
 		||	$config->{'swishbin'}
@@ -1150,15 +1210,21 @@ expanded argument applied to all the values of $var.
 
 =over
 
-=item 1 C<$templ>
+=item 1
+
+C<$templ>
 
 a I<string> containing the template (i.e. argument)
 
-=item 1 C<$who>
+=item 2
+
+C<$who>
 
 a I<string> containing the script name
 
-=item 1 C<$var>
+=item 3
+
+C<$var>
 
 a I<string> containing the name of a configuration variable
 (defined in the C<'variables'> configuration parameter)
@@ -1246,16 +1312,20 @@ sub varlinks {
 
 Function C<varmenuexpand> is a "$function" substitution function.
 It returns an HTML string which is the concatenation of
-C<E<lt>OPTIONE<gt>> tags, each one corresponding to the values
+C<E<lt> OPTION E<gt>> tags, each one corresponding to the values
 defined in variable $var's 'range'.
 
 =over
 
-=item 1 C<$templ>
+=item 1
+
+C<$templ>
 
 a I<string> containing the template (i.e. argument)
 
-=item 1 C<$var>
+=item 2
+
+C<$var>
 
 a I<string> containing the variable name
 
@@ -1314,15 +1384,19 @@ sub varmenuexpand {
 
 Function C<varbtnaction> is a "$variable" substitution function.
 It returns a string suitable for use in the C< action > attribute
-of a C<E<lt>FORME<gt>> tag.
+of a C<E<lt> FORM E<gt>> tag.
 
 =over
 
-=item 1 C<$templ>
+=item 1
+
+C<$templ>
 
 a I<string> containing the template (i.e. argument)
 
-=item 1 C<$who>
+=item 2
+
+C<$who>
 
 a I<string> containing the script name
 
@@ -1358,6 +1432,15 @@ sub varbtnaction {
 				  : ''
 				  )
 				. '">';
+	} elsif ($who eq 'perf') {
+		$action = 'href="'
+				. $config->{'virtroot'}
+				. 'perf'
+				. ( exists($config->{'treename'})
+				  ? '/'.$config->{'treename'}
+				  : ''
+				  )
+				. '">';
 	}
 	$action =~ m!href="(.*?)(\?|">)!;	# extract href target as action
 	return $1;
@@ -1373,11 +1456,15 @@ expanded argument applied to all configuration variables
 
 =over
 
-=item 1 C<$templ>
+=item 1
+
+C<$templ>
 
 a I<string> containing the template (i.e. argument)
 
-=item 1 C<$who>
+=item 2
+
+C<$who>
 
 a I<string> containing the script name
 
@@ -1425,6 +1512,56 @@ sub varexpand {
 }
 
 
+=head2 C<displayindexstate ($who)>
+
+Function C<displayindexstate> is a "$variable" substitution function.
+It returns a HTML <p> element containing the indexing state of
+the current version.
+
+=over
+
+=item 1
+
+C<$who>
+
+a I<string> containing the caller script name
+
+=back
+
+=head3 Algorithm
+
+The I<times> table record pertaining to the current version of
+the tree is read in and the various I<genxref>'s milestone dates
+are scanned to deduce the state.
+
+=cut
+
+sub displayindexstate {
+	my ($who) = @_;
+	my ($indexdate, $start, $crash) = indexstate($who);
+
+	if (0 == $indexdate) {
+		return '<p class="indexstate error">This version has not been indexed</p>' . "\n";
+	}
+	if (-1 == $indexdate) {
+		return '<p class="indexstate error">Indexation started on '
+			. _edittime($start)
+			. ' crashed on '
+			. _edittime($crash)
+			. ' (all times in UTC)</p>' . "\n"
+	}
+	if (-2 == $indexdate) {
+		return '<p class="indexstate warning">Indexing started on '
+			. _edittime($start)
+			. ' (UTC) still in progress</p>' . "\n";
+	}
+	if (defined($crash)) {
+	}
+	return '<p class=indexstate>Last indexation completed on '
+		. _edittime($indexdate)
+		. ' UTC</p>' . "\n";
+}
+
 =head2 C<devinfo ($templ)>
 
 Function C<devinfo> is a "$variable" substitution function.
@@ -1435,7 +1572,9 @@ for the average user.
 
 =over
 
-=item 1 C<$templ>
+=item 1
+
+C<$templ>
 
 a I<string> containing the template
 
@@ -1484,12 +1623,14 @@ sub devinfo {
 =head2 C<atticlink ($templ)>
 
 Function C<atticlink> is a "$variable" substitution function.
-It returns an HTML-string containing an C<E<lt>AE<gt>> link to
+It returns an HTML-string containing an C<E<lt> A E<gt>> link to
 display/hide CVS files in the "attic" directory.
 
 =over
 
-=item 1 C<$templ>
+=item 1
+
+C<$templ>
 
 a I<string> containing the template
 
@@ -1502,7 +1643,9 @@ template value for a variable substitution request. >
 
 =back
 
-=item 1 C<$who>
+=item 2
+
+C<$who>
 
 a I<string> containing the script name
 
@@ -1547,7 +1690,7 @@ sub atticlink {
 }
 
 
-=head2 C<makeheader ($who)>
+=head2 C<makeheader ($who), $tmplpfx>
 
 Function C<makeheader> outputs the HTML sequence for the top part
 of the page (a header) so that all pages have a similar appearance.
@@ -1555,9 +1698,18 @@ It uses a template whose name is derived from the scriptname.
 
 =over
 
-=item 1 C<$who>
+=item 1
+
+C<$who>
 
 a I<string> containing the script name
+
+=item 2
+
+C<$tmplpfx>
+
+an optional I<string> containing the template prefix
+(by default, equal to script name)
 
 =back
 
@@ -1568,11 +1720,12 @@ An error is also logged for the administrator.
 =cut
 
 sub makeheader {
-	my $who = shift;
+	my ($who, $tmplpfx) = @_;
 	my $tmplname;
 	my $template;
 
-	$tmplname = $who . 'head';
+	$tmplpfx = $who unless defined($tmplpfx);
+	$tmplname = $tmplpfx . 'head';
 	unless	($who ne 'sourcedir' || exists $config->{'sourcedirhead'}) {
 		$tmplname = 'sourcehead';
 	}
@@ -1582,8 +1735,7 @@ sub makeheader {
 
 	$template = gettemplate
 					( $tmplname
-					, "<hr>\n"
-					, "<p class='error'>Trying to display \$pathname</p>\n"
+					, "<p class='error'>No header found while trying to display \$pathname</p>\n"
 					);
 	$HTMLheadOK = 1;
 
@@ -1606,7 +1758,7 @@ sub makeheader {
 									; $ret =~ s/>/&gt;/g
 									; return $ret
 									}
-			,	'LXRversion' => sub { "2.0.2" }
+			,	'LXRversion' => sub { "2.3.4" }
 			  # --modes buttons & links--
 			,	'modes'      => sub { modeexpand(@_, $who) }
 			,	'atticlink'  => sub { atticlink(@_, $who) }
@@ -1635,7 +1787,9 @@ It uses a template whose name is derived from the scriptname.
 
 =over
 
-=item 1 C<$who>
+=item 1
+
+C<$who>
 
 a I<string> containing the script name
 
@@ -1662,7 +1816,6 @@ sub makefooter {
 
 	$template = gettemplate
 					( $tmplname
-					, "<hr>\n"
 					, "\n<hr>\n</body></html>\n"
 					);
 
@@ -1679,7 +1832,7 @@ sub makefooter {
 									; $ret =~ s/>/&gt;/g
 									; return $ret
 									}
-			,	'LXRversion' => sub { "2.0.2" }
+			,	'LXRversion' => sub { "2.3.4" }
 			  # --modes buttons & links--
 			,	'modes'      => sub { modeexpand(@_, $who) }
 			  # --variables buttons & links--
@@ -1706,7 +1859,9 @@ It is primarily aimed at giving feedback to the user.
 
 =over
 
-=item 1 C<$who>
+=item 1
+
+C<$who>
 
 a I<string> containing the template name
 
@@ -1718,7 +1873,7 @@ is generated to display something.
 No assumption is made about the existence of other templates,
 e.g. header or footer, since they can be defined merely in the
 tree section without being defined in the global section.
-Consequently, there is no call to makeheader or makefooter.
+Consequently, there is no call to C<makeheader()> or C<makefooter()>.
 
 HTTP headers may or may not have been already emitted.
 Caller is responsible for checking that and eventually
@@ -1734,7 +1889,7 @@ sub makeerrorpage {
 	$template = gettemplate
 					( $who
 					, "<html><body><hr>\n"
- 					,  "<hr>\n"
+						. "<hr>\n"
 						. "<h1 style='text-align:center'>Unrecoverable Error</h1>\n"
 						. "<p>Source-tree &gt;&gt; \$target &lt;&lt; unknown</p>\n"
 						. "</body></html>\n"
@@ -1750,7 +1905,7 @@ sub makeerrorpage {
 		,	( 'target'     =>  sub { targetexpand(@_, $who) }
 			, 'stylesheet' => \&stylesheet
 			, 'baseurl'    => \&baseurl
-			, 'LXRversion' => sub { "2.0.2" }
+			, 'LXRversion' => sub { "2.3.4" }
 			)
 		)
 	);

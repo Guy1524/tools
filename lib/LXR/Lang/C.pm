@@ -1,8 +1,6 @@
 # -*- tab-width: 4 -*-
 ###############################################
 #
-# $Id: C.pm,v 1.14 2013/11/08 08:59:50 ajlittoz Exp $
-#
 # Enhances the support for the C language over that provided by
 # Generic.pm
 #
@@ -19,10 +17,10 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+#
+###############################################
 
 package LXR::Lang::C;
-
-$CVSID = '$Id: C.pm,v 1.14 2013/11/08 08:59:50 ajlittoz Exp $ ';
 
 use strict;
 use LXR::Common;

@@ -1,8 +1,6 @@
 # -*- tab-width: 4 -*- #
 ##############################################
 #
-# $Id: SimpleParse.pm,v 1.23 2013/11/08 08:27:24 ajlittoz Exp $
-#
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 2 of the License, or
@@ -23,13 +21,11 @@
 
 This module is the elementary parser in charge of splitting the
 source file into homogeneous regions (i.e. fragments defined by
-'spec's in generic.conf).
+C<'spec'>s in I<generic.conf>).
 
 =cut
 
 package LXR::SimpleParse;
-
-$CVSID = '$Id: SimpleParse.pm,v 1.23 2013/11/08 08:27:24 ajlittoz Exp $ ';
 
 use strict;
 use integer;
@@ -68,21 +64,27 @@ and builds the detection regexps.
 
 =over
 
-=item 1 C<$fileh>
+=item 1
+
+C<$fileh>
 
 a I<filehandle> for the source file
 
-=item 1 C<$tabhint>
+=item 2
+
+C<$tabhint>
 
 hint for the tab width (defaults to 8 if not defined)
 
 Actual value can be given in an emacs-style comment as the first
 line of the file.
 
-=item 1 C<@blksep>
+=item 3
+
+C<@blksep>
 
 an I<array> of references to I<hashes> defining the different
-categories for this languages (see C<generic.conf>)
+categories for this languages (see I<generic.conf>)
 
 =back
 
@@ -139,11 +141,15 @@ C<untabify> replaces TAB characters by spaces.
 
 =over
 
-=item 1 C<$line>
+=item 1
+
+C<$line>
 
 I<string> to untabify
 
-=item 1 C<$tab>
+=item 2
+
+C<$tab>
 
 number of spaces for a TAB (defaults to 8 if not defined)
 
@@ -175,20 +181,24 @@ Returned value is a list: C<($btype, $frag)>.
 
 =over
 
-=item 1 C<$btype>
+=item 1
+
+C<$btype>
 
 a I<string> giving the category name
 
-=item 1 C<$frag>
+=item 2
+
+C<$frag>
 
 a I<string> containing the region
 
-Note thet the "region" may span several lines.
+Note that the "region" may span several lines.
 
 =back
 
 C<nextfrag> implements the LXR parser. It is critical for global
-performance. Unhappily, two factors put a heavy penalty on it:
+performance. Unfortunately, two factors put a heavy penalty on it:
 
 1- Perl is an interpreted language,
 
@@ -204,7 +214,7 @@ dominated by HTML editing).>
 
 =item
 
-I<Raw speed can be seen during C<genxref> where the full tree is
+I<Raw speed can be seen during I<genxref> where the full tree is
 parsed. It could be worth to replace the parser by a compiled
 deterministic FSA version.>
 
@@ -240,7 +250,7 @@ sub nextfrag {
 			last if !defined($line);
 			# Interpret an Emacs-style tab specification
 			if	(  $. <= 2		# Line # 1 or 2?
-				&& $line =~ m/^.*-\*-.*?[ \t;]tab-width:[ \t]*([0-9]+).*-\*-/o
+				&& $line =~ m/^.*-\*-.*?[ \t;]tab-width:[ \t]*([0-9]+).*-\*-/
 				) {
 				if ($1) {	# make sure there really is a non-zero tabwidth
 					$tabwidth = $1;
@@ -303,7 +313,7 @@ sub nextfrag {
 
 #	Have we already started a region?
 		if	(	defined($frag)				# something in output buffer?
-			&&	$frag !~ m/^[\xFF\n]*$/o	# not just newlines?
+			&&	$frag !~ m/^[\xFF\n]*$/	# not just newlines?
 			) {
 #	We already have something in the buffer.
 #	Is it a named category?
@@ -338,7 +348,7 @@ sub nextfrag {
 					unshift(@frags, $next) if $next ne '';	# Requeue last part
 					$next = $2;			# Delimiter
 					$frag .= $1;		# Stuff part before delim
-					last if $frag !~ m/^[\xFF\n]*$/o;
+					last if $frag !~ m/^[\xFF\n]*$/;
 					$frag .= $next;		# Fragment was "empty"
 					$next = undef;
 				} else {
@@ -387,7 +397,9 @@ scanning by the next call to C<nextfrag>.
 
 =over
 
-=item 1 C<$frag>
+=item 1
+
+C<$frag>
 
 I<string> to scan next
 
@@ -403,9 +415,9 @@ B<Caveat:>
 
 =item
 
-When using this sub, pay special attention to the order of
+I<When using this sub, pay special attention to the order of
 requests so that you do not create permutations of source
-sequences: it is a stack (LIFO)!
+sequences: it is a stack (LIFO)!>
 
 =back
 

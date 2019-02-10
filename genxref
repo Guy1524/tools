@@ -2,8 +2,6 @@
 # -*- tab-width: 4 -*-"
 ###############################################
 #
-# $Id: genxref,v 1.69 2013/11/17 15:57:42 ajlittoz Exp $
-#
 #	Runs source-tree indexation
 #
 # This program is free software; you can redistribute it and/or modify
@@ -22,11 +20,21 @@
 #
 ###############################################
 
+# ajl 2016-10-26
+# NOTE: this file contains lines commented out with a #MT prefix.
+#	These lines are part of an experiment to perform simultaneously
+#	free-text indexing and definition/usage collection.
+#	Results showed that the processes where competing for the I/O bus
+#	(file reads, provate file writes and DB I/O) and finally were
+#	slowed down waiting for data.
+#	Code is left here in case some new idea would remove the culprit.
+
 use strict;
 use lib 'lib', 'scripts';
 use Fcntl;
-use Getopt::Long;
+use Getopt::Long qw(:config gnu_getopt);
 use IO::Handle;
+use File::Path qw(make_path remove_tree);
 use File::MMagic;
 
 use LXR::Files;
@@ -50,6 +58,10 @@ GetOptions	(\%option
 			, 'reindexall'
 			, 'checkonly'
 			, 'accept'
+#MT 			, 'S'
+			, 'T'
+			, 'novacuum'
+			, 'U'
 			);
 
 if ($option{'help'}) {
@@ -76,6 +88,17 @@ Valid options are:
   --reindexall       Purges existing index data
   --checkonly        Verify tools version and stop
   --accept           Accept parameter suggestions to continue with indexing
+  -T                 Do not trace activity
+                     Note: with "monster" trees like Linux kernel, this means
+                           nothing will be printed for hours; check the disk
+                           activity LED before deciding that your computer
+                           is frozen. Don't foolishly kill the task or reboot
+                           the computer!
+  --novacuum         Do not VACUUM database tables after generating the
+                     cross-references (mainly for PostgreSQL because it sollicits
+                     password from the user preventing unattended operation;
+                     VACUUM can always be launched manually)
+  -U                 Same as --vacuum, but only for PostgreSQL databases
   
 Report bugs at http://sourceforge.net/projects/lxr/.
 END_HELP
@@ -89,9 +112,26 @@ if	(	!$option{'checkonly'}
 	&&	!$option{'allurls'}
 	) {
 	die("${VTred}ERROR:${VTnorm} in real mode (not checking mode set by ${VTbold}--checkonly${VTnorm}),\n"
-		. "an URL must be specified through ${VTyellow}--url${VTnorm} or ${VTyellow}--allurls${VTnorm}.${VTnorm}\n"
+		. "an URL must be specified through ${VTyellow}--url${VTnorm} or ${VTyellow}--allurls${VTnorm}.\n"
 		. "Try \"genxref --help\".\n");
 }
+if	(	exists($option{'url'})
+	&&	exists($option{'allurls'})
+	) {
+	die("${VTred}ERROR:${VTnorm} options ${VTyellow}--url${VTnorm} and ${VTyellow}--allurls${VTnorm}"
+		. "cannot be specified simultaneously.\n");
+}
+if	(	!exists($option{'allversions'})
+	&&	!exists($option{'version'})
+	) {
+# Create a courtesy --allversions option to simplify further coding, so that we do not
+# repeatedly code exists($options{'allversions'} || !exists($options('version'). Checking
+# for --allurls will be enough.
+	$option{'allversions'} = ' ';
+}
+
+
+my $trace = !$option{'T'};
 
 
 ##############################################################
@@ -234,6 +274,7 @@ sub check_tool {
 
 my $foundglimpse = 0;
 my $foundswishe = 0;
+my $textsearchdisabled = 1;
 
 my $ct = check_tool	( 'ectagsbin'
 					, 'ctags'
@@ -290,15 +331,18 @@ if ($foundglimpse == 0 && $foundswishe == 0) {
 	# glimpse has been forced, but glimpse is prefered if both
 	print "${VTyellow}Warning:${VTnorm} using existing ${VTbold}glimpse${VTnorm}\n";
 	delete $global->{'swishbin'} if ($global);
+	$textsearchdisabled = 0;
 	$failure |= 2;
 } elsif ($foundswishe == 1 && $foundglimpse <= 0) {
 	# swish-e has been forced, but glimpse is prefered if both
 	print "${VTyellow}Warning:${VTnorm} using existing ${VTbold}swish-e${VTnorm}\n";
 	delete $global->{'glimpsebin'} if ($global);
+	$textsearchdisabled = 0;
 	$failure |= 2;
 } elsif ($foundglimpse == 2) {
 	# Standard glimpse selection, but for the case of both
 	# engines present and swish-e has too low a version
+	$textsearchdisabled = 0;
 	if ($foundswishe == -1) {
 		print "${VTyellow}Warning:${VTnorm} forcing use of ${VTbold}glimpse${VTnorm}\n";
 		delete $global->{'swishbin'} if ($global);
@@ -307,6 +351,7 @@ if ($foundglimpse == 0 && $foundswishe == 0) {
 } elsif ($foundswishe == 2) {
 	# Standard swish-e selection, but for the case of both
 	# engines present and glimpse has too low a version
+	$textsearchdisabled = 0;
 	if ($foundglimpse == -1) {
 		print "${VTyellow}Warning:${VTnorm} forcing use of ${VTbold}swish-e${VTnorm}\n";
 	delete $global->{'glimpsebin'} if ($global);
@@ -345,19 +390,28 @@ if ($failure > 0) {
 
 my %versionset;		# cumulative version set
 my $autoversionflag;
+my $versioninprogress;	# for exception handler
+my $reindexmode;	# --reindexall state equivalent and exception handler use
+my $milestone = 0;	# genxref's milestones during version indexation:
+					#  0 : in progress
+					# 'P': purge
+					# 'T': free-text search indexing
+					# 'D': definition collection
+					# 'U': usage collection
+my $starttime;	# milestone dates as wall time
+my $stepstart;	# (more meaningful to casual user than system user time)
+my ($purgestart, $purgeend);
+my ($textstart, $textend);
+my ($dclstart, $dclend);
+my ($refstart, $refend);
+#MT my $childpid;
+
 my %binaryfiles;
 
 my $printdirbanner;	# Flag to print again directory banner
 # Frequency of directory name repetition
 my $repeatbannerevery = 25;
 my $repeatbannercountdown = $repeatbannerevery;
-
-my $magicfile = $global->{'magicmime'};
-our $filetype = File::MMagic->new
-		( -f $magicfile
-		? ($magicfile)
-		: -f 'lib/magic.mime' ? ('lib/magic.mime') : ()
-		);
 
 my $hostname = $global->{'host_names'}[0];	# Global host name
 if ($option{'url'}) {	# Single 'url'
@@ -387,7 +441,11 @@ foreach my $treedescr (@config) {
 									, $virtroot
 									, $treedescr->{'treename'}
 									);
-		print STDERR "\n${CSI}44m${VTwhite}Processing $url${VTnorm}\n";
+		$url = $host . $virtroot;
+		print STDERR "\n${CSI}44m${VTwhite}Processing $url${VTnorm}";
+		print STDERR " == ${CSI}41m${VTwhite}tree $treedescr->{'treename'}${VTnorm}\n"
+			if $treedescr->{'treename'};
+		print STDERR "\n";
 	}
 
 	die("${VTred}No matching configuration${VTnorm}") unless exists($config->{'sourceroot'});
@@ -411,6 +469,7 @@ foreach my $treedescr (@config) {
 	$index = LXR::Index->new($config);
 	die "${VTred}Can't create Index ${VTnorm}" . $config->{'dbname'}
 		if !defined($index);
+	$index->write_open();	# enable write transactions
 
 	%binaryfiles = ();
 
@@ -418,7 +477,7 @@ foreach my $treedescr (@config) {
 	$autoversionflag = 0;
 	$repeatbannercountdown = $repeatbannerevery;
 
-	if (exists($option{'allversions'}) || !exists($option{'version'})) {
+	if (exists($option{'allversions'})) {
 		if	(  $files->isa('LXR::Files::CVS')
 			&& ref($config->{'variables'}{'v'}{'range'}) eq 'CODE'
 			) {
@@ -432,29 +491,93 @@ foreach my $treedescr (@config) {
 		}
 	} else {
 		@versions = $option{'version'};
+		my $version_OK = 0;
+		for ($config->varrange('v')) {
+			if ($versions[0] eq $_) {
+				$version_OK = 1;
+				last;
+			}
+		}
+		my $version_exists = 1;
+		if	($files->isa('LXR::Files::Plain')) {
+			$version_exists = $files->isdir('/', $versions[0]); 
+		}
+		if (!$version_OK || !$version_exists) {
+			print STDERR "${VTred}ERROR:${VTnorm} ";
+			if ($version_OK) {
+				print STDERR "no corresponding directory ${VTwhite}", $versions[0], "${VTnorm} in source root\n";
+			} elsif ($version_exists) {
+				print STDERR "version ${VTwhite}", $versions[0], "${VTnorm} not listed in ${VTwhite}lxr.conf${VTnorm}, ";
+				print STDERR "but a directory exists in source root\n";
+			} else {
+				print STDERR "unknown version ${VTwhite}", $versions[0], "${VTnorm}\n";
+			}
+			die "${VTred}No version to index.${VTnorm}\n"
+		}
 	}
 
 	%versionset = ();
+	$SIG{__DIE__} = \&abortcleanup;
+	$SIG{'INT'} = \&abortcleanup;
+	$starttime = time();
+	$index->saveperformance('', 0 , '', $starttime, 0);
+	$milestone = 'P';
+
 	if ($files->isa('LXR::Files::CVS') && scalar(@versions)<=0) {
+		$reindexmode = 1;
+		$purgestart = $starttime;
+		$stepstart = $purgestart;
+		$versioninprogress = 'CVS all versions';
+		$index->saveperformance($versioninprogress, 1, $milestone, $purgestart, 0);
 		print STDERR "\nFull database purge ... ${VTyellow}${VTslow}in progress${VTnorm}\n";
-		$index->purgeall;
+		$index->purgeall();
+		$index->saveperformance('', 0 , '', $starttime, 0);	# rewrite erased record
+		$purgeend = time();
 		print STDERR &VTCUU(1), &VTCHA(25), &VTEL(0), "${VTgreen}Done${VTnorm}\n";
+		$index->saveperformance($versioninprogress, 1, $milestone, $purgestart, $purgeend);
 		$$LXR::Common::HTTP{'param'}{'_showattic'} = 1;
 		$printdirbanner = 1;
-		directorytreetraversal	( \&Tagger::processrefs
+		$milestone = 'D';
+		$dclstart = time();
+		$stepstart = $dclstart;
+		$index->saveperformance($versioninprogress, 1, $milestone, $dclstart, 0);
+		directorytreetraversal	( \&Tagger::processfile
 								, 'head'
 								, ''
 								, '/'
 								);
+		$dclend = time();
+		$index->saveperformance($versioninprogress, 1, $milestone, $dclstart, $dclend);
 		$printdirbanner = 1;
+		$milestone = 'U';
+		$refstart = time();
+		$stepstart = $refstart;
+		$index->saveperformance($versioninprogress, 1 ,$milestone, $refstart, 0);
 		$autoversionflag++ if $autoversionflag;	# Don't do it again
 		directorytreetraversal	( \&Tagger::processrefs
 								, 'head'
 								, ''
 								, '/'
 								);
+		$refend = time();
+		$index->saveperformance($versioninprogress, 1 ,$milestone, $refstart, $refend);
+	# Indexing summary for this version
+		STDERR->autoflush(1);
+		print "\n";
+		print "\n${CSI}44m${VTwhite}Summary for $url ${VTnorm}";
+		print " == ${CSI}41m${VTwhite}tree $config->{'treename'}${VTnorm}"
+			if $config->{'treename'};
+		print " == ${CSI}41m${VTwhite}all versions in CVS ${VTnorm}\n" ;
+		print '    No free-text indexing', "\n";
+		print '    Purge              : ', elapsed($purgeend-$purgestart), "\n";
+		print '    Definitions parse  : ', elapsed($dclend-$dclstart), "\n";
+		print '    References parse   : ', elapsed($refend-$refstart), "\n";
+		print '    ...Total duration..: ', elapsed(time()-$starttime), "\n";
+		STDERR->autoflush(0);
+
 		if	(	exists($option{'allversions'})
 			&&	$option{'allversions'} ne 'noauto'
+			&&	$option{'allversions'} ne ' '	# don't consider courtesy value
 			) {
 			dump_versionset('CVS', \%versionset);
 		}
@@ -469,25 +592,61 @@ foreach my $treedescr (@config) {
 #	selective DB cleaning is needed.
 		my $dopurge = 0;
 		my $docareful = 0;
+		$reindexmode = 0;
 		if (exists($option{'reindexall'})) {
-			if	( exists($option{'allversions'})
-		# 		|| exists($option{'version'}) && (1 == $config->varrange('v'))
-				|| !exists($option{'version'})
-				) {
+			$reindexmode = 1;
+			if	(exists($option{'allversions'})) {
+				$purgestart = $starttime;
+				$index->saveperformance('', 1 , $milestone, $purgestart, 0);
 				print STDERR "\nFull database purge ... ${VTyellow}${VTslow}in progress${VTnorm}\n";
-				$index->purgeall;
+				$index->purgeall();
+				$index->saveperformance('', 0 , '', $starttime, 0);	# rewrite erased record
+				$purgeend = time();
+				$index->saveperformance('', 1 , $milestone, $purgestart, $purgeend);
 				print STDERR &VTCUU(1), &VTCHA(25), &VTEL(0), "${VTgreen}Done${VTnorm}\n";
 			} else {
 				$dopurge = 1
 			}
 		} else {
-			$docareful = 1;
+			my $vc;
+			if	(exists($option{'allversions'})) {
+				$index->{'version_count'} =
+					$index->{dbh}->prepare
+						( 'select count(reindex) from '.$config->{'dbprefix'}.'times'
+						. ' where reindex = 1'
+						. ' and stepname = \'D\''
+						);
+				$index->{'version_count'}->execute();
+			} else {
+				$index->{'version_count'} =
+					$index->{dbh}->prepare
+						( 'select count(reindex) from '.$config->{'dbprefix'}.'times'
+						. ' where reindex = 1'
+						. ' and releaseid = ?'
+						. ' and stepname = \'D\''
+						);
+				$index->{'version_count'}->execute($option{'version'});
+			}
+			($vc) = $index->{'version_count'}->fetchrow_array();
+			$index->{'version_count'} = undef;
+			if (0 == $vc) {	# initial indexing
+				$reindexmode = 1;
+			} else {
+				$docareful = 1;
+			}
 		}
 
 		foreach my $version (@versions) {
-			print STDERR "\n${CSI}44m${VTwhite}Processing $url ${VTnorm}"
-					, ' == '
-					, "${CSI}41m${VTwhite}Version $version ${VTnorm}\n" ;
+#MT			$childpid = undef;
+			$versioninprogress = $version;
+			print STDERR "\n${CSI}44m${VTwhite}Processing $url ${VTnorm}";
+			print STDERR " == ${CSI}41m${VTwhite}tree ".$config->{'treename'}.${VTnorm}
+				if $config->{'treename'};
+			print STDERR " == ${CSI}41m${VTwhite}Version $version ${VTnorm}\n" ;
+			$milestone = 'P';
+			$purgestart = time();
+			$stepstart = $purgestart;
+			$index->saveperformance($version, $reindexmode, $milestone, $purgestart, 0);
 			if ($dopurge) {
 				print STDERR "\nSelective database purge ... ${VTyellow}${VTslow}in progress${VTnorm}\n";
 				$index->purge($version);
@@ -496,32 +655,102 @@ foreach my $treedescr (@config) {
 			if ($docareful) {
 				cleanindex($version);
 			}
-			if ($files->isa('LXR::Files::Plain')) {
-				if ($foundglimpse > 0 || $foundswishe > 0) {
-					gensearch($version);
-				} else {
-					print STDERR "${VTyellow}Free-text search disabled${VTnorm}\n";
-				}
-				print STDERR "\n";
+			$purgeend = time();
+			$index->saveperformance($version, $reindexmode, $milestone, $purgestart, $purgeend);
+			$textend = 0;
+			if ($textsearchdisabled) {
+				print STDERR "${VTyellow}Free-text search disabled${VTnorm}\n";
+			} elsif	(	$files->isa('LXR::Files::CVS')
+					||	$files->isa('LXR::Files::BK')
+					) {
+				print STDERR "${VTyellow}Free-text search setup suppressed for this VCS storage${VTnorm}\n";
+			} elsif	(	!$files->isa('LXR::Files::Plain')
+					&&	!exists $config->{'sourcetext'}
+					) {
+					print STDERR "${VTyellow}Free-text search not enabled on this tree${VTnorm}\n";
 			} else {
-				print STDERR "${VTyellow}Free-text search setup suppressed for VCS storage${VTnorm}\n";
+				$milestone = 'T';
+				$textstart = time();
+				$stepstart = $textstart;
+				$index->saveperformance($version, $reindexmode, $milestone, $textstart, 0);
+#MT				$childpid =
+					gensearch	( $version
+#MT								, \&childexit
+								);
+				$textend = time();
+			# ATTENTION: if multi-threading code is reenabled, following line must
+			#		be commented out
+				$index->saveperformance($version, $reindexmode, 'T', $textstart, $textend);
 			}
 			$printdirbanner = 1;
-
+			$milestone = 'D';
+			$dclstart = time();
+			$stepstart = $dclstart;
+			$index->saveperformance($version, $reindexmode, $milestone, $dclstart, 0);
 			directorytreetraversal	( \&Tagger::processfile
 									, $version
 									, ''
 									, '/'
 									);
+			$dclend = time();
+			$index->saveperformance($version, $reindexmode, $milestone, $dclstart, $dclend);
 			$printdirbanner = 1;
+			$milestone = 'U';
+			$refstart = time();
+			$stepstart = $refstart;
+			$index->saveperformance($version, $reindexmode, $milestone, $refstart, 0);
 			directorytreetraversal	( \&Tagger::processrefs
 									, $version
 									, ''
 									, '/'
 									);
+			$refend = time();
+			$index->saveperformance($version, $reindexmode, $milestone, $refstart, $refend);
+
+#MT 			if ($childpid > 0) {
+#MT 				waitpid($childpid, 0);
+#MT 				delete $SIG{'USR1'};
+#MT 			}
+#MT			if (0 != $textend) {
+#MT				$index->saveperformance($version, $reindexmode, 'T', $textstart, $textend);
+#MT			}
+	# Indexing summary for this version
+			print "\n${CSI}44m${VTwhite}Summary for $url ${VTnorm}";
+			print " == ${CSI}41m${VTwhite}tree $config->{'treename'}${VTnorm}"
+				if $config->{'treename'};
+			print " == ${CSI}41m${VTwhite}Version $version ${VTnorm}\n" ;
+			print '    Purge              : ', elapsed($purgeend-$purgestart), "\n";
+			print '    Free-text indexing : ';
+			if (0 == $textend) {
+				print $VTyellow, 'skipped', $VTnorm;
+			} else {
+				print elapsed($textend-$textstart);
+			}
+			print "\n";
+			print '    Definitions parsing: ', elapsed($dclend-$dclstart), "\n";
+			print '    References parsing : ', elapsed($refend-$refstart), "\n";
+			print '    ...Total duration..: ', elapsed(time()-$purgestart), "\n";
 		}
 	}
+	delete $SIG{__DIE__};
+	$SIG{'INT'} = 'DEFAULT';
+	$index->{dbh}->do
+			( 'delete from '.$config->{'dbprefix'}.'times'
+			. ' where releaseid = \'\' and reindex = 0'
+			);
+	$index->write_close();
 	$index->final_cleanup();
+
+	# IMPORTANT REMINDER:
+	#	DB has been disconnected, consequently post_processing must not reference the DB
+	#	through the DBI/DBM interface.
+	if	(	!$option{'novacuum'}
+		&&	!($option{'U'} && $config->{'dbname'} =~ m/^dbi:Pg:/)
+		) {
+		print STDERR "\nDatabase optimisation ... ${VTyellow}${VTslow}in progress${VTnorm}\n";
+		$index->post_processing();
+		print STDERR &VTCUU(1), &VTCHA(27), &VTEL(0), "${VTgreen}Done${VTnorm}\n";
+	}
 }
 
 
@@ -532,6 +761,32 @@ foreach my $treedescr (@config) {
 ###  Support routines
 ###
 ###
+
+sub abortcleanup {
+	my $abrtend;
+	delete $SIG{__DIE__};	# avoid recursive trap
+	$index->saveperformance($versioninprogress, $reindexmode, $milestone, $stepstart, -time());
+	$index->saveperformance('', 0, '', $starttime, -time());
+#MT 	($textstart, $abrtend) = $index->getperformance($versioninprogress, $reindexmode, 'T');
+#MT 	if	(	defined $textstart
+#MT 		&&	0 == $abrtend
+#MT 		) {
+#MT 		$index->saveperformance	( $versioninprogress
+#MT 								, $reindexmode
+#MT 								, 'T'
+#MT 								, $textstart
+#MT 								, $textend ? $textend : -time()
+#MT 								);
+#MT 	}
+	$index->write_close();
+	$index->final_cleanup();
+	die $!;
+}
+
+#MT sub childexit {
+#MT 	$textend = time();
+#MT 	delete $SIG{'USR1'};
+#MT }
 
 sub dirbannerprint {
 	my ($head, $releaseid, $dirname, $filename) = @_;
@@ -557,7 +812,7 @@ sub directorytreetraversal {
 	my $pathname = $dirname . $filename;
 
 	if (substr($filename, -1) eq '/') {
-		dirbannerprint('***', $releaseid, $dirname, $filename);
+		dirbannerprint('***', $releaseid, $dirname, $filename) if $trace;
 		my $needbanner;
 		map {	my $node = $_;
 				my $type = substr($node, -1);
@@ -566,7 +821,7 @@ sub directorytreetraversal {
 					&&	$needbanner
 					) {
 					$needbanner = undef;
-					dirbannerprint('***', $releaseid, $dirname, $filename);
+					dirbannerprint('***', $releaseid, $dirname, $filename) if $trace;
 				}
 				directorytreetraversal	( $process_sub
 										, $releaseid
@@ -575,7 +830,7 @@ sub directorytreetraversal {
 										);
 			} $files->getdir($pathname, $releaseid);
 		$index->forcecommit();
-	} elsif (!exists $binaryfiles{$pathname}) {
+	} elsif (!exists $binaryfiles{$releaseid}{$pathname}) {
 		my $didprocess;
 		if	($autoversionflag) {
 		# Some 'Files' objects need this variable properly set to
@@ -586,21 +841,25 @@ sub directorytreetraversal {
 			foreach my $releaseid (@versions) {
 				if ($repeatbannercountdown <=0) {
 					$printdirbanner = 1;
-					dirbannerprint('**=', $releaseid, $dirname, '');
+					dirbannerprint('**=', $releaseid, $dirname, '') if $trace;
 				}
-				if (1 == $autoversionflag) {		# Only in 1st unthreaded pass
+				if (1 == $autoversionflag) {		# Only in first pass
 					$versionset{$releaseid} = '';	# remember this version
 				}
-				my $didoneprocess = &$process_sub($pathname, $releaseid, $config, $files, $index);
-				$repeatbannercountdown-- if $didoneprocess;
+				my $didoneprocess = &$process_sub($pathname, $releaseid, $config, $files, $index, $trace);
+				if ($didoneprocess) {
+					$repeatbannercountdown--;
+				} else {
+					$binaryfiles{releaseid}{$pathname} = 1;
+				}
 				$didprocess //= $didoneprocess;
 			}
 		} else {
 			if ($repeatbannercountdown <=0) {
 				$printdirbanner = 1;
-				dirbannerprint('**=', $releaseid, $dirname, '');
+				dirbannerprint('**=', $releaseid, $dirname, '') if $trace;
 			}
-			$didprocess = &$process_sub($pathname, $releaseid, $config, $files, $index);
+			$didprocess = &$process_sub($pathname, $releaseid, $config, $files, $index, $trace);
 			$repeatbannercountdown-- if $didprocess;
 		}
 		$printdirbanner //= $didprocess;
@@ -611,15 +870,15 @@ sub feedswish {
 	my ($pathname, $releaseid, $swish, $filelist) = @_;
 
 	if (substr($pathname, -1) eq '/') {
-		print(STDERR "&&& $pathname $releaseid \n");
+		print STDERR "&&& $pathname $releaseid \n" if $trace;
 		map { feedswish($pathname . $_, $releaseid, $swish, $filelist) }
 		  $files->getdir($pathname, $releaseid);
 	} else {
 		if (my $fh = $files->getfilehandle($pathname, $releaseid)) {
-			if ($files->getfilesize($pathname, $releaseid) > 0
-				&& $filetype->checktype_filehandle($fh) =~ m%(text|message)/%)
-			{
-				print(STDERR "&&> $pathname $releaseid \n");
+			if	(	$files->getfilesize($pathname, $releaseid) > 0
+				&&	LXR::Lang::parseable($pathname, $releaseid)
+				) {
+				print STDERR "&&> $pathname $releaseid \n" if $trace;
 				print $filelist "$pathname\n";
 				my $contents = $files->getfile($pathname, $releaseid);
 				$swish->print
@@ -629,7 +888,7 @@ sub feedswish {
 					, "\n", $contents
 					);
 			} else {
-				$binaryfiles{$pathname} = 1;
+				$binaryfiles{$releaseid}{$pathname} = 1;
 			}
 			close($fh);
 		}
@@ -637,49 +896,136 @@ sub feedswish {
 }
 
 sub gensearch {
-	my ($releaseid) = @_;
-	my $string;
+	my $releaseid = shift;
+#MT	my $cldhandler = shift;
+	my $textinput;
+	my $subdir;
+
+	if ($files->isa('LXR::Files::Plain')) {
+		$textinput = $config->{'sourceroot'};
+	} else {
+		$textinput = $config->{'sourcetext'};
+		if	( !	(	-d $textinput
+				&&	-w $textinput
+				&&	-r $textinput
+				)
+			) {
+			print STDERR "${VTyellow}Free-text search skipped because 'sourcetext' directory\n";
+			print STDERR "($textinput) either does not exist or cannot be written to${VTnorm}\n";
+			return;
+		}
+		if (! $files->isa('LXR::Files::Subversion')) {
+			$subdir = $releaseid;
+		}
+		if (! -d $textinput.'/'.$subdir ) {
+			mkdir $textinput.'/'.$subdir;
+		}
+		$files->exporttree($textinput, $releaseid);
+	}
+
+#MT # Since using DBI in multi-threading is very hard to get it right,
+#MT # it is easier to temporarily close the connection to the DB and
+#MT # reopen it later when we really need it.
+#MT	$index->write_close();
+#MT	$index->final_cleanup();
+#MT	my $pid;
+#MT	my $parentpid = $$;
+#MT	$pid = fork() if !$option{'S'};
+#MT	if (defined $pid) {
+#MT		if (0 != $pid) {
+#MT			$SIG{'USR1'} = $cldhandler;
+#MT		# This is the parent: restore DB connection
+#MT			$index = LXR::Index->new($config);
+#MT			$index->write_open();
+#MT			return $pid ;
+#MT		}
+#MT		# Remove the signal handlers because DB connection is down
+#MT		delete $SIG{__DIE__};
+#MT		$SIG{'INT'} = 'DEFAULT';
+#MT	} else {
+#MT		# We did not fork, reopen DB connection
+#MT		$index = LXR::Index->new($config);
+#MT		$index->write_open();
+#MT	}
+
+
+# In case we did not fork, continue with traditional sequential processing
 
 	if ($config->{'glimpsedir'} && $config->{'glimpseindex'}) {
 
-		$string = $config->{'glimpsedir'} . '/' . $releaseid;
-		mkdir $string;
-		system("chmod 755 $string");   # TODO - fix Unix specific call?
+		# Canonize options
+		my $glixopts;
+		if (exists($config->{'glimpseindexopts'})) {
+			$glixopts = $config->{'glimpseindexopts'};
+		} else {
+			$glixopts = '-o -n -B';	# small index, numbers, large hashing
+		};
+		$glixopts =~ s/-+/-/g;		# make sure a single - at beginning
+		$glixopts =~ s/-[RIFfa]//g;	# remove unwanted or offending options
+		$glixopts =~ s/-( |$)//g;	# remove orphan dashes
+		$glixopts =~ s/ +/ /g;		# merge spaces
+		if ($glixopts =~ m/^\s*$/) {
+			$glixopts = '-o -n -B';
+		}
+		$glixopts =~ s/^-*/-/;
+
+		# Determine indexation mode: full or incremental
+
+		my $indexdir = $config->{'glimpsedir'} . '/' . $releaseid;
+		(my $relhier = $releaseid) =~ s:/[^/]+$:/:;
+		my $indextmp = $config->{'glimpsedir'}.'/'.$relhier.'%@%glix%@%/';
+		remove_tree($indextmp);
+		make_path($indextmp, {mode => 0755});
+		if	(! exists($option{'reindexall'})) {
+			$glixopts .= ' -f';
+			if (-e $indexdir) {
+				system('cp', '-r', $indexdir, $indextmp);
+			}
+		} else {
+			if (-e $indexdir.'.glimpse_exclude') {
+				system('cp', $indexdir.'.glimpse_exclude', $indextmp);
+			}
+		}
+
 		# Create the exclusion file only if it does not exist
-		$string .= '/.glimpse_exclude';
+		my $exclude = $indextmp . '.glimpse_exclude';
 		if	(	exists($config->{'ignoredirs'})
-			&&	!-e $string
+			&&	!-e $exclude
 			) {
-			if (open (EXCLUDE, '>', $string)) {
+			if (open (EXCLUDE, '>', $exclude)) {
 				foreach (@{$config->{'ignoredirs'}}) {
 					print EXCLUDE '/', $_, "/\n"
 				}
 				close(EXCLUDE);
 			} else {
 				print STDERR $VTred , "Can't create "
-					, $VTnorm, $VTbold, $string
+					, $VTnorm, $VTbold, $exclude
 					, $VTnorm, "\n"
-					, $VTyellow, 'No automatic directory exclusion from parameter'
+					, $VTyellow, 'No automatic directory exclusion from parameter '
 					, $VTnorm, $VTbold, "'ignoredirs'"
 					, $VTnorm, "\n";
 			}
 		}
-		my $glimpse = IO::Handle->new();
-		my $pid = open($glimpse, '|-');
-		if ($pid == 0) {
-			exec( $config->{'glimpseindex'}
-				, '-n', '-o', '-H'
-				, $config->{'glimpsedir'} . '/' . $releaseid
-				, $config->{'sourceroot'} . '/' . $releaseid
+
+		# Do it now
+		system	( $config->{'glimpseindex'}
+				, split(' ', $glixopts)
+				, '-H', $indextmp
+				, $textinput . '/' . $releaseid
 				);
-			print(STDERR "Couldn't exec " . $config->{'glimpseindex'} . ": $!\n");
-			kill(9, $$);
-		}
-		$glimpse->close();
 
 		# Need to chmod the glimpse files so everybody can read them.
-		$string = $config->{'glimpsedir'} . '/' . $releaseid . '/.glimpse*';
-		system("chmod 644 $string");
+		system('chmod 644 '. $indextmp . '.glimpse*');
+		print 'Permissions changed to rw-r--r--', "\n";
+
+		# Permute indexes
+		my $del_locn = $config->{'glimpsedir'}.'/'.$relhier.'%@%delete%@%me%@%/';
+		if (-e $indexdir) {
+			system('mv', $indexdir, $del_locn);
+		}
+		system('mv', $indextmp.'/'.$releaseid, $indexdir);
+		remove_tree($del_locn);
+		remove_tree($indextmp);
 	}
 
 	if ($config->{'swishdir'} && $config->{'swishbin'}) {
@@ -703,6 +1049,13 @@ sub gensearch {
 		$swish->close();
 		$filelist->close();
 	}
+
+	print STDERR "\n";
+#MT	if (defined $pid) {
+#MT		kill(10, $parentpid);	# 10 = POSIX::SIGUSR1
+#MT		exit(0) ;
+#MT	}
+#MT	return $pid;
 }
 
 sub dump_versionset {
@@ -723,6 +1076,15 @@ sub dump_versionset {
 	}
 	close($vfh);
 	print "=== $count versions written to ${VTyellow}$versionfile${VTnorm}\n";
+}
+
+sub elapsed {
+	my $time = shift;
+
+	my $seconds = $time % 60;
+	$time = ($time - $seconds) / 60;
+	my $minutes = $time %60;
+	return ($time-$minutes)/60 . ':' . sprintf('%2.2d:%2.2d', $minutes, $seconds);
 }
 
 #	Look at each file recorded in the DB for this version

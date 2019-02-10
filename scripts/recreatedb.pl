@@ -2,8 +2,6 @@
 # -*- tab-width: 4 -*-"
 ###############################################
 #
-# $Id: recreatedb.pl,v 1.9 2013/11/17 15:50:21 ajlittoz Exp $
-#
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 2 of the License, or
@@ -19,8 +17,6 @@
 # Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 #
 ###############################################
-
-# $Id: recreatedb.pl,v 1.9 2013/11/17 15:50:21 ajlittoz Exp $
 
 use strict;
 use lib 'lib', do { $0 =~ m{(.*)/}; "$1" };
@@ -48,9 +44,7 @@ use LXR::Common;
 #
 ##############################################################
 
-my $version = '$Revision: 1.9 $';
-$version =~ s/Revision: (.*) /$1/;
-$version =~ s/\$//g;
+my $version = '2.2';
 
 #	Who am I? Strip directory path.
 my $cmdname = $0;
@@ -141,7 +135,7 @@ END_HELP
 if ($option{'version'}) {
 	print <<END_VERSION;
 ${cmdname} version $version
-(C) 2012-2013 A. J. Littoz
+(C) 2012-2016 A. J. Littoz
 This is free software under GPL v3 (or higher) licence.
 There is NO warranty, not even for MERCHANTABILITY nor
 FITNESS FOR A PARICULAR PURPOSE to the extent permitted by law.
@@ -251,7 +245,9 @@ exit $error if $error;
 
 if ($verbose) {
 	$verbose = 2;		# Force max verbosity in support routines
-	print "${VTyellow}***${VTnorm} ${VTred}L${VTblue}X${VTgreen}R${VTnorm} DB initialisation reconstruction  (version: $version) ${VTyellow}***${VTnorm}\n";
+	print "${VTyellow}***${VTnorm} ${VTred}L${VTblue}X${VTgreen}R${VTnorm}";
+	print ' DB initialisation reconstruction ';
+	print "(version: $version) ${VTyellow}***${VTnorm}\n";
 	print "\n";
 	print "LXR root directory is ${VTbold}$rootdir${VTnorm}\n";
 	print "Configuration read from ${VTbold}$lxrconf${VTnorm}\n";
@@ -263,6 +259,14 @@ if (! -d $confdir) {
 		print "directory ${VTbold}$confdir${VTnorm} created\n";
 	}
 }
+
+if (! -d $confdir.'/db-scripts.d') {
+	make_path($confdir.'/db-scripts.d');	# equivalent to mkdir -p
+	if ($verbose) {
+		print "directory ${VTbold}$confdir/db-scripts.d${VTnorm} created\n";
+	}
+}
+
 
 ##############################################################
 #
@@ -294,15 +298,28 @@ my $manualreload = contextReload ($verbose, $lxrctx);
 if ($manualreload) {
 	print "\n";
 	if ($verbose) {
-		print "The following questions are intended to rebuild the global\n";
-		print "databases options (which may be overridden in individual\n";
-		print "trees. Answer with the choices you made previously,\n";
-		print "otherwise your DB will not be what LXR expects.\n";
+		print <<END_CTX_INTRO;
+The following questions are intended to rebuild the global
+databases options (which may be overridden in individual
+trees. Answer with the choices you made previously,
+otherwise your DB will not be what LXR expects.
+
+END_CTX_INTRO
 	}
+	print <<END_CTX_NOTE;
+${VTyellow}NOTE:${VTnorm} This is a simplified context recovery procedure,
+      only for the purpose of reconstructing the DB creation scripts.
+      To recover the context in a more reliable and exhaustive way,
+      launch the configuration wizard with ${VTbold}--add${VTnorm} option and
+      stop it after context backup.
+${VTyellow}WARNING:${VTnorm} Single-tree context recovery is only possible here
+         but it cannot be saved.
+
+END_CTX_NOTE
 	contextTrees ($verbose);
 	contextDB ($verbose);
 	if ($dbuser) {
-		$users{$dbuser} = $dbpass;	# Record global user/password
+		$users{$dbengine.$dbuser} = $dbpass;	# Record global user/password
 	}
 }
 
@@ -314,6 +331,15 @@ if ($manualreload) {
 
 # Dummy sub to disable 'range' file reads
 sub readfile {}
+sub dummyfiles {	# dummy "files" object constructor to disable 'range' functions
+	my $self = {};
+	bless $self;
+	return $self;
+};
+sub AUTOLOAD {		# silence all 'files' methods
+	return undef;
+}
+my $files = dummyfiles();
 
 unless (open(CONFIG, $lxrconf)) {
 	print "${VTred}ERROR:${VTnorm} could not open configuration file ${VTred}$lxrconf${VTnorm}\n";
@@ -366,9 +392,6 @@ shift @config;	# Remove global part
 
 my %markers =
 		( '%_singlecontext%' => $cardinality eq 's'
-		, '%_createglobals%' => $cardinality eq 'm'
-							&&	(  1 == $dbenginechanged
-								)
 		, '%_dbengine%'	=> $dbengine
 		, '%_dbpass%'	=> $dbpass
 		, '%_dbprefix%'	=> $dbprefix
@@ -402,9 +425,9 @@ $markers{'%DB_global_prefix%'} = $dbprefix if $dbprefix;
 ##############################################################
 
 unlink "${confdir}/${scriptout}";
-open(DEST, '>', "${confdir}/${scriptout}")
-or die("${VTred}ERROR:${VTnorm} couldn't open output file \"${confdir}/$scriptout\"\n");
-print DEST "#!/bin/sh\n";
+open(GLOBAL, '>', "${confdir}/${scriptout}")
+or die("${VTred}ERROR:${VTnorm} couldn't open output file \"${confdir}/${scriptout}\"\n");
+print GLOBAL "#!/bin/sh\n";
 
 if ($verbose) {
 	print "\n";
@@ -412,30 +435,17 @@ if ($verbose) {
 foreach my $config (@config) {
 
 	if ($verbose) {
-		print "${VTyellow}***${VTnorm} scanning ${VTbold}$$config{'virtroot'}${VTnorm} tree configuration section ${VTyellow}***${VTnorm}\n";
+		print "${VTyellow}***${VTnorm} scanning ${VTbold}$$config{'treename'}${VTnorm} tree configuration section ${VTyellow}***${VTnorm}\n";
+# NOTE:	the treename is displayed ONLY when 'routing' is 'argument', which is the now
+#		recommended method. Managing all the variants would require too much effort.
+#		In single tree context, not displaying a tree name really does not matter
+#		since there is a single tree after all.
 	}
 	#	Start each iteration in default configuration
 	$markers{'%_dbuseroverride%'} = 0;
 	delete $markers{'%DB_tree_user%'};
 	delete $markers{'%DB_tree_password'};
 	delete $markers{'%DB_tbl_prefix%'};
-
-	#	Have new DB user and password been defined?
-	if (exists($config->{'dbuser'})) {
-		$markers{'%_dbuseroverride%'} = 1;
-		$users{$markers{'%DB_tree_user%'}} = $config->{'dbuser'};
-	}
-	if (exists($config->{'dbpass'})) {
-		$markers{'%_dbuseroverride%'} = 1;
-		$users{$markers{'%DB_tree_password%'}} = $config->{'dbpass'};
-	}
-	#	New DB table prefix?
-	if (exists($config->{'dbprefix'})) {
-		$markers{'%DB_tbl_prefix%'} = $config->{'dbprefix'};
-	}
-	if (!defined($config->{'dbprefix'})) {
-		$markers{'%DB_tbl_prefix%'} = $dbprefix;
-	}
 
 	my $treedbengine = $dbengine;
 	if (exists($config->{'dbname'})) {
@@ -450,14 +460,30 @@ foreach my $config (@config) {
 	}
 	if (!defined($markers{'%DB_name%'})) {
 		print "${VTred}ERROR:${VTnorm} no data base name (either tree-specific or global)\n";
-		print "for tree ${VTred}$$config{'virtroot'}${VTnorm}!\n";
+		print "for tree ${VTred}$$config{'treename'}${VTnorm}!\n";
+# See NOTE above about 'treename'
 	}
 
 	if	(	$dbenginechanged
 		||	$treedbengine ne $dbengine && !$dbengine_seen{$treedbengine}
 		) {
-		$markers{'%_createglobals%'}  = 1;
 		$dbengine_seen{$treedbengine} = 1;
+	}
+
+	#	Have new DB user and password been defined?
+	if (exists($config->{'dbuser'})) {
+		$markers{'%_dbuseroverride%'} = 1;
+		$markers{'%DB_tree_user%'} = $config->{'dbuser'};
+		$markers{'%DB_tree_password%'} = $config->{'dbpass'};
+		$users{$treedbengine.$config->{'dbuser'}} = $config->{'dbpass'};
+	} else {
+		$users{$treedbengine.$dbuser} = $dbpass;
+	}
+	#	New DB table prefix?
+	if (exists($config->{'dbprefix'})) {
+		$markers{'%DB_tbl_prefix%'} = $config->{'dbprefix'};
+	} else {
+		$markers{'%DB_tbl_prefix%'} = $dbprefix;
 	}
 
 	my $input = $ovrdir . "/initdb/initdb-${treedbengine}-template.sql";
@@ -467,6 +493,20 @@ foreach my $config (@config) {
 	open(SOURCE, '<', $input)
 	or die("${VTred}ERROR:${VTnorm} couldn't open  script template file \"${input}\"\n");
 
+	my $dbscript = $markers{'%DB_name%'};
+	if ('s' eq $treedbengine) {	# SQLite DB name is a file path
+		$dbscript = substr($dbscript, 1);
+		$dbscript =~ s!/!@!g;
+	}
+	$dbscript = ${confdir}.'/db-scripts.d/'
+					. $treedbengine . ':'
+					. $dbscript . ':'
+					. $markers{'%DB_tbl_prefix%'}
+					. '.sh';
+	open( DEST, '>', $dbscript)
+	or die("${VTred}ERROR:${VTnorm} couldn't open output file \"${dbscript}\"\n");
+	print DEST "#!/bin/sh\n";
+
 	#	Expand script model
 	expand_slash_star	( sub{ <SOURCE> }
 						, \*DEST
@@ -475,11 +515,64 @@ foreach my $config (@config) {
 						);
 
 	close(SOURCE);
+	close(DEST);
+	chmod 0775, $dbscript;	# Make sure script has x permission
+	#	Stuff the individual DB script into the global script
+	print GLOBAL ". ${dbscript}\n";
 
 	#	Prevent doing one-time actions more than once
-	$markers{'%_createglobals%'} = 0;
 	$dbenginechanged = 0;
 }
 
-close(DEST);
+close(GLOBAL);
 chmod 0775,"${confdir}/${scriptout}";	# Make sure script has x permission
+
+##############################################################
+#
+#				Manage PostgreSQL passwords
+#
+##############################################################
+
+my $pwdf = "${confdir}/db-scripts.d/pgpass";
+unlink($pwdf);
+my @pguser = map {substr($_, 1)} grep (m/^p/, keys %users);
+if (0 < scalar(@pguser)) {
+	my %olduserdict;
+	if (-f $pwdf) {
+		open (PWD, '<', $pwdf)
+		or die("${VTred}ERROR:${VTnorm} couldn't open password file \"${pwdf}\"\n");
+		while (<PWD>) {
+			m/(\w+)=(.+)\n/;
+			$olduserdict{$1} = $2;
+		}
+		close(PWD);
+	}
+	my @pgnew = map {
+		if (exists $olduserdict{$_}) {
+			if ($olduserdict{$_} ne $users{'p'.$_}) {
+				print "${VTred}ERROR:${VTnorm} PostgreSQL role ${VTbold}$_${VTnorm} redefined"
+					, ' with password ', ${VTbold}, $users{'p'.$_}, ${VTnorm}
+					, 'different from stored ', ${VTbold}, $olduserdict{$_}, ${VTnorm}
+					, "\n"
+			}
+			()
+		} else {
+			$_;
+		}
+	} @pguser;
+	if (0 < scalar(@pgnew)) {
+		open (PWD, '>>', $pwdf)
+		or die("${VTred}ERROR:${VTnorm} couldn't create password file \"${pwdf}\"\n");
+		print PWD <<END_PWD_PROLOG;
+#
+#	Automatically generated file
+#	Manual changes will be lost on next update
+#
+END_PWD_PROLOG
+		foreach (@pgnew) {
+			print PWD '*:*:*:', $_, ':', $users{'p'.$_}, "\n"
+		}
+		close(PWD)
+	}
+	chmod 0600, $pwdf;	# permissions as per PostgreSQL manual
+}

@@ -1,5 +1,4 @@
 #!/bin/bash
-# $Id: kernel-vars-grab.sh,v 1.1 2012/09/22 09:01:48 ajlittoz Exp $
 
 shopt -s extglob
 . ${0%%+([^/])}ANSI-escape.sh
@@ -8,6 +7,9 @@ shopt -s extglob
 cmdname=${0##*/}
 
 confdir="custom.d"
+
+#	Update revision when modifying this script
+revision="1.1"
 
 #	Decode options and arguments
 verbose=0
@@ -71,7 +73,7 @@ fi
 kvd=${kvd%/}/
 
 if [ $verbose == 1 ] ; then
-	echo "${VTyellow}***${VTnorm} Kernel architecture variants enumeration for LXR (\$Revision: 1.1 $) ${VTyellow}***${VTnorm}"
+	echo "${VTyellow}***${VTnorm} Kernel architecture variants enumeration for LXR (Revision: ${revision}) ${VTyellow}***${VTnorm}"
 	echo "Kernel directory: $kvd"
 fi
 

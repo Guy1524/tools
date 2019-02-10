@@ -1,8 +1,6 @@
 # -*- tab-width: 4 -*-
 ###############################################
 #
-# $Id: Generic.pm,v 1.50 2014/03/09 15:26:25 ajlittoz Exp $
-#
 # Implements generic support for any language that ectags can parse.
 # This may not be ideal support, but it should at least work until
 # someone writes better support.
@@ -35,8 +33,6 @@ such as speed optimisation on specific languages.
 
 package LXR::Lang::Generic;
 
-$CVSID = '$Id: Generic.pm,v 1.50 2014/03/09 15:26:25 ajlittoz Exp $ ';
-
 use strict;
 use FileHandle;
 use LXR::Common;
@@ -48,21 +44,34 @@ my $seenDB;			# Worh was done for this DB
 our @ISA = ('LXR::Lang');
 
 
-=head2 C<new ($pathname, $releaseid, $lang)>
+=head2 C<new ($writeDB, $pathname, $releaseid, $lang)>
 
 Method C<new> creates a new language object.
 
 =over
 
-=item 1 C<$pathname>
+=item 1
+
+C<$writeDB>
+
+a I<boolean> I<integer> requesting to store language properties
+(huyman-readable type description) into the database
+
+=item 2
+
+C<$pathname>
 
 a I<string> containing the name of the file to parse
 
-=item 1 C<$releaseid>
+=item 3
+
+C<$releaseid>
 
 a I<string> containing the release (version) of the file to parse
 
-=item 1 C<$lang>
+=item 4
+
+C<$lang>
 
 a I<string> which is the I<key> for the specification I<hash>
 C<'langmap'> in file I<generic.conf>
@@ -82,7 +91,7 @@ specification if none is found.
 =cut
 
 sub new {
-	my ($proto, $pathname, $releaseid, $lang) = @_;
+	my ($proto, $writeDB, $pathname, $releaseid, $lang) = @_;
 	my $class = ref($proto) || $proto;
 	my $self = {};
 	bless($self, $class);
@@ -91,8 +100,11 @@ sub new {
 
 # 	read_config() if we meet a new DB to make sure the type dictionary
 #	is correctly annotated.
-	if	($seenDB != $LXR::Index::database_id) {
-		read_config();
+	
+	if	(	!defined($generic_config)
+		||	$seenDB != $LXR::Index::database_id
+		) {
+		read_config($writeDB);
 		$seenDB = $LXR::Index::database_id;
 	}
 	%$self = (%$self, %$generic_config);
@@ -118,51 +130,66 @@ sub new {
 }
 
 
-=head2 C<read_config ()>
+=head2 C<read_config ($writeDB)>
 
 Internal function (not method!) C<read_config> reads in language
 descriptions from configuration file.
 
+=over
+
+=item 1
+
+C<$writeDB>
+
+a I<boolean> I<integer> requesting to store language properties
+(huyman-readable type description) into the database
+
+=back
+
 Sets in global variable C<$config_contents> a reference to a I<hash>
 equivalent to the configuration file.
-The diffrences are:
+The differences are:
 
 =over
 
-=item 1 Keywords are uppercased is language is case-insensitive.
+=item
 
-=item 1 Keywords are stored in a I<hash> instead of an array to
+Keywords are uppercased if language is case-insensitive.
+
+=item
+
+Keywords are stored in a I<hash> instead of an array to
 speed up later retrieval (avoiding linear search and its quadratic
 average time)
 
-=item 1 Human-readable text for type is replaced by a record-id
+=item
+
+Human-readable text for type is replaced by a record-id
 in the database where text is recorded.
 
 =back
 
-Loading the file and transformung if is only executed once,
+Loading the file and transforming it is only executed once,
 saving the overhead of processing the config file each time.
 
 However, The mapping between I<ctags> tags and their human readable
 counterpart is stored in every database for every language.
-The mapping, as a table index in the DB, is keptin a new I<hash> C<'typeid'>.
+The mapping, as a table index in the DB, is kept in a new I<hash> C<'typeid'>.
 
 =cut
 
 sub read_config {
+	my ($writeDB) = @_;
+
 	open(CONF, $config->{'genericconf'})
 	or die 'Can\'t open ' . $config->{'genericconf'} . ", $!";
-
-	my $todo = !defined($generic_config);
-	if ($todo) {
-		local ($/) = undef;
-		my $config_contents = <CONF>;
-		$config_contents =~ m/(.*)/s;
-		$config_contents = $1;		#untaint it
-		$generic_config  = eval("\n#line 1 \"generic.conf\"\n" . $config_contents);
-		die($@) if $@;
-		close CONF;
-	}
+	local ($/) = undef;
+	my $config_contents = <CONF>;
+	$config_contents =~ m/(.*)/s;
+	$config_contents = $1;		#untaint it
+	$generic_config  = eval("\n#line 1 \"generic.conf\"\n" . $config_contents);
+	die($@) if $@;
+	close CONF;
 
 	my $langmap = $generic_config->{'langmap'};
 	my $langdesc;  # Language description hash
@@ -172,27 +199,25 @@ sub read_config {
 	my $langid;		# Language code
 
 	foreach my $lang (keys %$langmap) {
-		if ($todo) {
-			$langdesc = $langmap->{$lang};	# Dereference
+		$langdesc = $langmap->{$lang};	# Dereference
 	# Transform the 'reserved' keyword list to speed up lookup
-			my $insensitive = 0;
-			if (exists($langdesc->{'flags'})) {
-				foreach (@{$langdesc->{'flags'}}) {
-					if ($_ eq 'case_insensitive') {
-						$insensitive = 1;
-						last;
-					}
+		my $insensitive = 0;
+		if (exists($langdesc->{'flags'})) {
+			foreach (@{$langdesc->{'flags'}}) {
+				if ($_ eq 'case_insensitive') {
+					$insensitive = 1;
+					last;
 				}
 			}
-			if	(exists($langdesc->{'reserved'})) {
-				my @kwl = @{$langdesc->{'reserved'}};
-				$langdesc->{'reserved'} = {};
-				foreach (@kwl) {
-					if ($insensitive) {
-						$langdesc->{'reserved'}{uc($_)} = 1;
-					} else {
-						$langdesc->{'reserved'}{$_} = 1;
-					}
+		}
+		if	(exists($langdesc->{'reserved'})) {
+			my @kwl = @{$langdesc->{'reserved'}};
+			$langdesc->{'reserved'} = {};
+			foreach (@kwl) {
+				if ($insensitive) {
+					$langdesc->{'reserved'}{uc($_)} = 1;
+				} else {
+					$langdesc->{'reserved'}{$_} = 1;
 				}
 			}
 		}
@@ -200,7 +225,7 @@ sub read_config {
 		$typemap = $langdesc->{'typemap'};
 		$langid  = $langdesc->{'langid'};
 		while (($type, $tdescr) = each %$typemap) {
-			$langdesc->{'typeid'}{$type} = $index->decid($langid, $tdescr);
+			$langdesc->{'typeid'}{$type} = $index->decid($writeDB, $langid, $tdescr);
 		}
 	}
 ### The following line is commented out to improve performance.
@@ -219,25 +244,35 @@ the definitions in a file.
 
 =over
 
-=item 1 C<$name>
+=item 1
+
+C<$name>
 
 a I<string> containing the LXR file name
 
-=item 1 C<$path>
+=item 2
+
+C<$path>
 
 a I<string> containing the OS file name
 
 When files are stored in VCSes, C<$path> is the name of a temporary file.
 
-=item 1 C<$fileid>
+=item 3
+
+C<$fileid>
 
 an I<integer> containing the internal DB id for the file/revision
 
-=item 1 C<$index>
+=item 4
+
+C<$index>
 
 a I<reference> to the index (DB) object
 
-=item 1 C<$config>
+=item 5
+
+C<$config>
 
 a I<reference> to the configuration objet
 
@@ -261,6 +296,9 @@ sub indexfile {
 		$langforce = $self->language;
 	}
 
+	# Escape shell special characters (maybe overkill, but safer)
+	$path =~ s/([ |&;()<>!{}[\]])/\\$1/g;
+
 	# Launch ctags
 	if ($config->{'ectagsbin'}) {
 		open(CTAGS,
@@ -281,20 +319,21 @@ sub indexfile {
 		my @decls = <CTAGS>;
 		close(CTAGS);
 		$nsym = scalar(@decls);
+		my $type;
 		while ($_ = shift(@decls)) {
 			chomp;
 
-			my ($sym, $file, $line, $type, $ext) = split(/\t/o, $_);
-			$line =~ s/;\"$//o;  #" fix fontification
-			$ext  =~ m/language:(\w+)/o;
-			$type = $typeid->{$type};
+			my ($sym, $file, $line, $letter, $ext) = split(/\t/, $_);
+			$line =~ s/;\"$//;  #" fix fontification
+			$ext  =~ m/language:(\w+)/;
+			$type = $typeid->{$letter};
 			if (!defined $type) {
-				print 'Warning: Unknown type ', (split(/\t/o, $_))[3], "\n";
+				print 'Warning: Unknown type ', $letter, "\n";
 				next;
 			}
 
 			# TODO: can we make it more generic in parsing the extension fields?
-			if (defined($ext) && $ext =~ m/^(struct|union|class|enum):(.*)/o) {
+			if (defined($ext) && $ext =~ m/^(struct|union|class|enum):(.*)/) {
 				$ext = $2;
 				$ext =~ s/::<anonymous>//go;
 				$ext = uc($ext) if $insensitive;
@@ -323,25 +362,35 @@ the references in a file.
 
 =over
 
-=item 1 C<$name>
+=item 1
+
+C<$name>
 
 a I<string> containing the LXR file name
 
-=item 1 C<$path>
+=item 2
+
+C<$path>
 
 a I<string> containing the OS file name
 
 When files are stored in VCSes, C<$path> is the name of a temporary file.
 
-=item 1 C<$fileid>
+=item 3
+
+C<$fileid>
 
 an I<integer> containing the internal DB id for the file/revision
 
-=item 1 C<$index>
+=item 4
+
+C<$index>
 
 a I<reference> to the index (DB) object
 
-=item 1 C<$config>
+=item 5
+
+C<$config>
 
 a I<reference> to the configuration objet
 
@@ -365,7 +414,7 @@ sub referencefile {
 	if (!defined($fh)) {
 		return (-1, 0);
 	}
-	&LXR::SimpleParse::init	( $fh # FileHandle->new($path)
+	&LXR::SimpleParse::init	( $fh
 							, 1
 							, $self->parsespec
 							);
@@ -392,9 +441,9 @@ sub referencefile {
 				print "BTYPE was: $btype\n";
 			}
 		} else {
-			@lines = split(/\n/o, $frag, -1);
+			@lines = split(/\n/, $frag, -1);
 			foreach $l (@lines) {
-				foreach $string ($l =~ m/($identdef)\b/og) {
+				foreach $string ($l =~ m/($identdef)\b/g) {
 			#		print "considering $string\n";
 					$string = uc($string) if $insensitive;
 					if (!$self->isreserved($string)) {
@@ -426,7 +475,7 @@ sub referencefile {
 
 =head2 C<parsespec ()>
 
-Method C<parsespec> returns the list of category specification for
+Method C<parsespec> returns the list of category specifications for
 this language.
 
 The language specification is a list of I<hashes> describing the
@@ -452,7 +501,9 @@ present in the language-specific I<hash> C<'flags'>.
 
 =over
 
-=item 1 C<$flag>
+=item 1
+
+C<$flag>
 
 a I<string> containing the flag name
 
@@ -476,11 +527,15 @@ Method C<processinclude> is invoked to process a generic I<include> directive.
 
 =over
 
-=item 1 C<$frag>
+=item 1
+
+C<$frag>
 
 a I<string> containing the directive
 
-=item 1 C<$dir>
+=item 2
+
+C<$dir>
 
 an optional I<string> containing a preferred directory for the include'd file
 
@@ -505,15 +560,25 @@ allowing to split the include instruction or directive into 5 components:
 
 =over
 
-=item 1 directive name
+=item 1
 
-=item 1 spacer
+directive name
 
-=item 1 left delimiter (may be void for some languages)
+=item 2
 
-=item 1 included object
+spacer
 
-=item 1 right delimiter (may be void for some languages)
+=item 3
+
+left delimiter (may be void for some languages)
+
+=item 4
+
+included object
+
+=item 5
+
+right delimiter (may be void for some languages)
 
 =back
 
@@ -529,7 +594,7 @@ transforming language syntax into file designation. Elaborate
 path processing is available with> C<'incprefix'>I<,> C<'ignoredirs'>
 I< and >C<'maps'> I<processed by the link builder.>
 
-When done, C<E<lt>AE<gt>> links to the file and all intermediate
+When done, C<E<lt> A E<gt>> links to the file and all intermediate
 directories are build.
 
 =back
@@ -540,8 +605,8 @@ B<Note:>
 
 =item
 
-If no C<'include'> I<hash> is defined for this language, an internal
-C<'directive'> matching C/C++ and Perl syntax is used.
+I<If no C<'include'> I<hash> is defined for this language, an internal
+C<'directive'> matching C/C++ and Perl syntax is used.>
 
 =back
 
@@ -679,7 +744,9 @@ Method C<processcode> is invoked to process the fragment as generic code.
 
 =over
 
-=item 1 C<$code>
+=item 1
+
+C<$code>
 
 a I<string> to mark
 
@@ -740,7 +807,9 @@ the language-specific C<'reserved'> list.
 
 =over
 
-=item 1 C<$frag>
+=item 1
+
+C<$frag>
 
 a I<string> containing the word to check
 
@@ -780,7 +849,9 @@ from language description C<{'langmap'}{'language'}>.
 
 =over
 
-=item 1 C<$item>
+=item 1
+
+C<$item>
 
 a I<string> containing the name of the looked for sub-hash
 

@@ -3,8 +3,6 @@
 #
 # GIT.pm - A file backend for LXR based on GIT.
 #
-# $Id: GIT.pm,v 1.17 2013/12/03 13:38:23 ajlittoz Exp $
-#
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 2 of the License, or
@@ -35,24 +33,22 @@ B<Note:>
 
 =item
 
-GIT.pm was initially based on library Git.pm module.
-Unhappily, it systematically errored out with I<"Insecure
-dependency in &hellip;"> and was unusable.
+I<GIT.pm was initially based on library Git.pm module.
+Unfortunately, it systematically errored out with I<"Insecure
+dependency in &hellip;"> and was unusable.>
 
-Since it was inconvenient to chase all occurrences of arguments
+I<Since it was inconvenient to chase all occurrences of arguments
 to untaint them, it was considered easier to rewrite an interface
-method to git commands and untaint there.
+method to git commands and untaint there.>
 
-It is likely that it is less versatile and clean than the library
-module, but at least it works for LXR.
+I<It is likely that it is less versatile and clean than the library
+module, but at least it works for LXR.>
 
 =back
 
 =cut
 
 package LXR::Files::GIT;
-
-$CVSID = '$Id: GIT.pm,v 1.17 2013/12/03 13:38:23 ajlittoz Exp $';
 
 use strict;
 use Time::Local;
@@ -111,7 +107,7 @@ sub getdir {
 	}
 	close ($git);
 
-	return sort (@dirs), sort (@files);
+	return sort({lc($a) cmp lc($b)} @dirs), sort {lc($a) cmp lc($b)} @files;
 }
 
 sub getnextannotation {
@@ -207,6 +203,21 @@ sub getfilehandle {
 		}
 	}
 
+	return undef;
+}
+
+sub getrawfilehandle {
+	my ($self, $filename, $releaseid) = @_;
+
+	# Simplidied version of getfilehandle as we want "binary" access to content
+	$filename =~ s,^/+,,;
+	my $sha1hashline = $self->_git_oneline ('ls-tree', $releaseid, '--', $filename);
+	if ($sha1hashline =~ m/^\d+ blob ([[:xdigit:]]+)\t.*/) {
+		my $fh = $self->_git_cmd ('cat-file', 'blob', $1);
+		die('Error executing "git cat-file"') unless $fh;
+		binmode $fh;
+		return $fh;
+	}
 	return undef;
 }
 
@@ -330,6 +341,19 @@ sub isfile {
 
 
 #
+#		GenXRef functions
+#
+
+sub exporttree {
+	my ($self, $ckoutdir, $releaseid) = @_;
+
+	my $gitcmd="git --git-dir=$$self{'rootpath'} archive --prefix=$releaseid/ $releaseid";
+	$gitcmd .= "|(cd $ckoutdir && tar -x --keep-newer-files --warning=none)";
+	`$gitcmd`;
+}
+
+
+#
 #		Private functions
 #
 
@@ -339,11 +363,15 @@ C<_git_cmd> returns a handle to a pipe where the command outputs its result.
 
 =over
 
-=item 1 C<$cmd>
+=item 1
+
+C<$cmd>
 
 a I<string> containing the Git command
 
-=item 1 C<@args>
+=item 2
+
+C<@args>
 
 a I<list> containing the command arguments
 
@@ -370,7 +398,7 @@ sub _git_cmd {
 	$! = '';
 	$ENV{'PATH'} = $self->{'path'};
 	open	( $git
-			, '-|'
+			, '-|:utf8'
 			, 'git'
 			, '--git-dir='.$$self{'rootpath'}
 			, $cmd
@@ -387,11 +415,15 @@ result is expected.
 
 =over
 
-=item 1 C<$cmd>
+=item 1
+
+C<$cmd>
 
 a I<string> containing the Git command
 
-=item 1 C<@args>
+=item 2
+
+C<@args>
 
 a I<list> containing the command arguments
 
@@ -407,10 +439,10 @@ B<Note:>
 
 =item
 
-Pipe is closed before returning BUT close status is not checked
+I<Pipe is closed before returning BUT close status is not checked
 despite all warnings in perldoc. It is expected that the
 result line will be empty or undefined if something goes
-wrong with the pipe.
+wrong with the pipe.>
 
 =back
 

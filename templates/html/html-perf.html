@@ -1,0 +1,128 @@
+<!--				html-config.html
+		A template for displaying LXR configuration -->
+
+<!-- ajlittoz <ajlittoz@users.sf.net>	-->
+<!--
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+-->
+<h2>Tree indexation performance</h2>
+<ul>
+	<li>Durations marked with <strong class=error>*</strong>
+	denote steps which crashed.</li>
+	<li>Measurement accuracy is one second,
+	consequently figures for very short durations may not be meaningful
+	and also "empty" intervals may display as 0 or 1 second.</li>
+</ul>
+$perffullpurge{<p>Last full database purge (<code>--reindexall</code>) on $perfdate took $perfpurge.</p>}
+<h3><code>--reindexall</code> timings</h3>
+<table class=perfcontent>
+	<thead>
+		<tr class=perfheader>
+			<th class=perfversion>Version</th>
+			<th class=perfdate>Date (UTC)</th>
+			<th class=perfpurge>Purge</th>
+			<th class=perffreetext>Free-text</th>
+			<th class=perfdefn>Definitions</th>
+			<th class=perfrefs>References</th>
+			<th class=perftotal>Total</th>
+<!-- 			<th class=perfelapsed>Elapsed</th> -->
+		</tr>
+	</thead>
+	<tfoot>
+		<tr class=perffooter>
+			<th class=perfversion>Version</th>
+			<th class=perfdate>Date (UTC)</th>
+			<th class=perfpurge>Purge</th>
+			<th class=perffreetext>Free-text</th>
+			<th class=perfdefn>Definitions</th>
+			<th class=perfrefs>References</th>
+			<th class=perftotal>Total</th>
+<!-- 			<th class=perfelapsed>Elapsed</th> -->
+		</tr>
+	</tfoot>
+	<tbody>
+$perffull{		<tr class=$lineclass>
+			<td class=perfversion>$perfversion</td>
+			<td class=perfdate>$perfdate</td>
+			<td class=perfpurge>$perfpurge</td>
+			<td class=perffreetext>$preffreetext</td>
+			<td class=perfdefn>$perfdefn</td>
+			<td class=perfrefs>$perfrefs</td>
+			<td class=perftotal>$perftotal</td>
+<!-- 			<td class=perfelapsed>$perfelapsed</td> -->
+		</tr>
+}	</tbody>
+</table>
+<p>Approximate times to fully reindex the tree
+<br>(not counting global database purge but including individual partial purges)
+</p>
+<!--<p>Estimate for purely sequential execution is pessimistic
+when computed from a forked execution
+because system housekeeping for forking processes is kept in the sum.
+This housekeeping is not present in sequential execution.
+</p>-->
+<table class=perfestimate>
+	<tbody>
+		<tr>
+			<th>This execution
+<!-- 				<br>(forked if shorter than sequential) -->
+			</th>
+<!--			<td>$perfelapsed</td>
+		</tr>
+		<tr>
+			<th>Sequential execution upper bound</th>-->
+			<td>$perftotal</td>
+		</tr>
+	</tbody>
+</table>
+<h3>Incremental update timings</h3>
+<table class=perfcontent>
+	<thead>
+		<tr class=perfheader>
+			<th class=perfversion>Version</th>
+			<th class=perfdate>Date (UTC)</th>
+			<th class=perfpurge>Purge</th>
+			<th class=perffreetext>Free-text</th>
+			<th class=perfdefn>Definitions</th>
+			<th class=perfrefs>References</th>
+			<th class=perftotal>Total</th>
+<!-- 			<th class=perfelapsed>Elapsed</th> -->
+		</tr>
+	</thead>
+	<tfoot>
+		<tr class=perffooter>
+			<th class=perfversion>Version</th>
+			<th class=perfdate>Date (UTC)</th>
+			<th class=perfpurge>Purge</th>
+			<th class=perffreetext>Free-text</th>
+			<th class=perfdefn>Definitions</th>
+			<th class=perfrefs>References</th>
+			<th class=perftotal>Total</th>
+<!-- 			<th class=perfelapsed>Elapsed</th> -->
+		</tr>
+	</tfoot>
+	<tbody>
+$perfinc{		<tr class=$lineclass>
+			<td class=perfversion>$perfversion</td>
+			<td class=perfdate>$perfdate</td>
+			<td class=perfpurge>$perfpurge</td>
+			<td class=perffreetext>$preffreetext</td>
+			<td class=perfdefn>$perfdefn</td>
+			<td class=perfrefs>$perfrefs</td>
+			<td class=perftotal>$perftotal</td>
+<!-- 			<td class=perfelapsed>$perfelapsed</td> -->
+		</tr>
+}	</tbody>
+</table>
