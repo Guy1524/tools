@@ -1,8 +1,6 @@
 # -*- tab-width: 4 -*-
 ###############################################
 #
-# $Id: Perl.pm,v 1.14 2013/09/21 12:54:53 ajlittoz Exp $
-#
 # Enhances the support for the Perl language over that provided by
 # Generic.pm
 #
@@ -33,8 +31,6 @@ It only overrides C<processinclude> for efficiency.
 
 package LXR::Lang::Perl;
 
-$CVSID = '$Id: Perl.pm,v 1.14 2013/09/21 12:54:53 ajlittoz Exp $ ';
-
 use strict;
 use LXR::Common;
 use LXR::Lang;
@@ -49,11 +45,15 @@ Method C<processinclude> is invoked to process a Perl I<include> directive.
 
 =over
 
-=item 1 C<$frag>
+=item 1
+
+C<$frag>
 
 a I<string> containing the directive
 
-=item 1 C<$dir>
+=item 2
+
+C<$dir>
 
 an optional I<string> containing a preferred directory for the include'd file
 
@@ -87,8 +87,8 @@ sub processinclude {
 		$path    = $file;
 
 		# Faster surrogates for 'global' and 'last'
-		$path =~ s@::@/@g;		# Replace Perl delimiters
-		$path =~ s@$@.pm@;		# Add file extension
+		$path =~ s@::@/@g;					# Replace Perl delimiters
+		$path =~ s@$@.pm@ if $file ne '::';	# Add file extension
 
 		# Create the hyperlinks
 		$link = $self->_linkincludedirs

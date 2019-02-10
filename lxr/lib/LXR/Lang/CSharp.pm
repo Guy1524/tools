@@ -1,8 +1,7 @@
 # -*- tab-width: 4 -*-
 ###############################################
 #
-#
-# Enhances the support for the Java language over that provided by
+# Enhances the support for the C# language over that provided by
 # Generic.pm
 #
 # This program is free software; you can redistribute it and/or modify
@@ -18,21 +17,21 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+#
 ###############################################
 
-package LXR::Lang::Java;
+package LXR::Lang::CSharp;
 
 use strict;
 use LXR::Common;
-require LXR::Lang;
+use LXR::Lang;
 require LXR::Lang::Generic;
 
-@LXR::Lang::Java::ISA = ('LXR::Lang::Generic');
+@LXR::Lang::CSharp::ISA = ('LXR::Lang::Generic');
 
-# Only override the include handling.  For java, this is really package
+# Only override the include handling.  For C#, this is really package
 # handling, as there is no include mechanism, so deals with "package"
 # and "import" keywords
-
 sub processinclude {
 	my ($self, $frag, $dir) = @_;
 
@@ -41,21 +40,21 @@ sub processinclude {
 	my $file;		# language path
 	my $path;		# OS file path
 	my $link;		# link to file
-	my $class;		# Java class
+	my $class;		# C# class
 
 	# Deal with package declaration of the form
-	# "package java.lang.util"
+	# "namespace Company.fubar"
 	if ($source =~ s/^
-				(package\s+)
+				(namespace\s+)
 				([\w.]+)	# package 'path'
 				//sx) {
 		$dirname = $1;
 		$file    = $2;
 		$path    = $file;
-		$path =~ s@\.@/@g;		# Replace Java delimiters
+		$path =~ s@\.@/@g;		# Replace C# delimiters
 		$link = $self->_linkincludedirs
 					( &LXR::Lang::incdirref
-							($file, "include", $path, $dir)
+						($file, "include", $path, $dir)
 					, $file
 					, '.'
 					, $path
@@ -64,13 +63,11 @@ sub processinclude {
 	}
 
 	# Deal with import declaration of the form
-	# "import java.awt.*" by providing link to the package
-
-	# Deal with import declaration of the form
-	# "import java.awt.classname" by providing links to the
-	# package and the class
+	# - "using System.*" by providing link to the package
+	# - "using System.Runtime.classname" by providing links to the
+	#		package and the class
 	elsif ($source =~ s/^
-				(import\s+(?:static\s+)?)
+				(using\s+(?:static\s+)?)
 				([\w.]+)	# package 'path'
 				\.(\*|\w+)	# class or *
 				//sx) {
@@ -78,7 +75,7 @@ sub processinclude {
 		$file    = $2;
 		$path    = $file;
 		$class   = $3;
-		$path =~ s@\.@/@g;		# Replace Java delimiters
+		$path =~ s@\.@/@g;		# Replace C# delimiters
 		$link = $self->_linkincludedirs
 					( &LXR::Lang::incdirref
 							($file, "include", $path, $dir)
@@ -92,6 +89,7 @@ sub processinclude {
 				? join($class, @{$$self{'itag'}})
 				: $class
 				);
+
 	} else {
 		# Guard against syntax error or variant
 		# Advance past keyword, so that parsing may continue without loop.
@@ -100,7 +98,7 @@ sub processinclude {
 		$link = '';
 	}
 
-	# As a goodie, rescan the tail of package/import for Java code
+	# As a goodie, rescan the tail of package/import for C# code
 	&LXR::SimpleParse::requeuefrag($source);
 
 	# Assemble the highlighted bits
@@ -109,4 +107,3 @@ sub processinclude {
 }
 
 1;
-

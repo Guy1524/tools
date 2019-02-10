@@ -1,8 +1,6 @@
 # -*- tab-width: 4 -*-
 ###############################################
 #
-# $Id: CVS.pm,v 1.51 2013/11/08 14:22:25 ajlittoz Exp $
-#
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 2 of the License, or
@@ -30,8 +28,6 @@ Methods are sorted in the same order as in the super-class.
 =cut
 
 package LXR::Files::CVS;
-
-$CVSID = '$Id: CVS.pm,v 1.51 2013/11/08 14:22:25 ajlittoz Exp $ ';
 
 use strict;
 use Time::Local;
@@ -83,7 +79,7 @@ sub getdir {
 			if ($node eq 'Attic/') {
 				push(@files, $self->getdir($pathname . $node, $releaseid));
 			} else {
-			# Directory to keep (unless empty): suffix name with a slash
+			# Directory to keep (unless empty)
 				push(@dirs, $node)
 				  unless defined($releaseid)
 				  && $self->dirempty($pathname . $node, $releaseid);
@@ -97,14 +93,14 @@ sub getdir {
 
 			# For normal display (i.e. some revisions reachable from 'head'),
 			# check if requested version is alive. Looking for the file
-			# the "Attic" is not enough because a requested side-branch
+			# in "Attic" is not enough because a requested side-branch
 			# may be dead while the main trunk revision is alive.
 			# A file in the "Attic" means all revisions are dead.
 			# NOTE:	same processing in toreal sub.
 			#		Don't forget to change in case of update
 			if (!$$LXR::Common::HTTP{'param'}{'_showattic'}) {
 				$self->parsecvs($pathname . $1);
-				my $rev = $cvs{'header'}{'symbols'}{$releaseid};
+				my $rev = $cvs{'header'}{'symbols'}{$self->_realrelease($releaseid)};
 				if ($cvs{'branch'}{$rev}{'state'} eq 'dead') {
 					next;
 				}
@@ -117,7 +113,7 @@ sub getdir {
 	}
 	closedir($DIRH);
 
-	return (sort(@dirs), sort(@files));
+	return sort({lc($a) cmp lc($b)} @dirs), sort {lc($a) cmp lc($b)} @files;
 }
 
 sub getannotations {
@@ -264,7 +260,7 @@ sub filerev {
 		return $1;
 	} else {
 		$self->parsecvs($filename);
-		return $cvs{'header'}{'symbols'}{$releaseid};
+		return $cvs{'header'}{'symbols'}{$self->_realrelease($releaseid)};
 	}
 }
 
@@ -305,7 +301,7 @@ sub getfilehandle {
 	return $fileh;
 }
 
-#	Unhappily, computing the file size requires reading it.
+#	Unfortunately, computing the file size requires reading it.
 sub getfilesize {
 	my ($self, $filename, $releaseid) = @_;
 
@@ -350,11 +346,15 @@ real full OS-absolute path.
 
 =over
 
-=item 1 C<$pathname>
+=item 1
+
+C<$pathname>
 
 a I<string> containing the path relative to C<'sourceroot'>
 
-=item 1 C<$releaseid>
+=item 2
+
+C<$releaseid>
 
 the release (or version) in which C<$pathname> is expected to
 be found
@@ -372,7 +372,7 @@ B<Note:>
 
 =item
 
-This function should not be used outside this module.
+I<This function should not be used outside this module.>
 
 =back
 
@@ -387,14 +387,14 @@ sub toreal {
 
 	# For normal display (i.e. some revisions reachable from 'head'),
 	# check if requested version is alive. Looking for the file
-	# the "Attic" is not enough because a requested side-branch
+	# in "Attic" is not enough because a requested side-branch
 	# may be dead while the main trunk revision is alive.
 	# A file in the "Attic" means all revisions are dead.
 	# NOTE:	same processing in getdir sub.
 	#		Don't forget to change in case of update
 	if (!$$LXR::Common::HTTP{'param'}{'_showattic'}) {
 		$self->parsecvs($pathname);
-		my $rev = $cvs{'header'}{'symbols'}{$releaseid};
+		my $rev = $cvs{'header'}{'symbols'}{$self->_realrelease($releaseid)};
 		if ($cvs{'branch'}{$rev}{'state'} eq 'dead') {
 			return undef;
 		}
@@ -424,15 +424,21 @@ version.
 
 =over
 
-=item 1 C<$filename>
+=item 1
+
+C<$filename>
 
 a I<string> containing the filename
 
-=item 1 C<$release1>
+=item 2
+
+C<$release1>
 
 a I<string> containing the source version
 
-=item 1 C<$release2>
+=item 3
+
+C<$release2>
 
 a I<string> containing the final version
 
@@ -489,11 +495,15 @@ C<dirempty> returns 1 (I<true>) if the directory is empty,
 
 =over
 
-=item 1 C<$pathname>
+=item 1
+
+C<$pathname>
 
 a I<string> containing the path
 
-=item 1 C<$releaseid>
+=item 2
+
+C<$releaseid>
 
 the release (or version) in which C<$pathname> is expected to
 be found
@@ -550,7 +560,9 @@ C<cleanstring> returns its argument with all "dangerous" characters removed.
 
 =over
 
-=item 1 C<$in>
+=item 1
+
+C<$in>
 
 I<String> to clean
 
@@ -587,13 +599,15 @@ file.
 
 =over
 
-=item 1 C<$filename>
+=item 1
+
+C<$filename>
 
 A I<string> containing the filename
 
 =back
 
-A I<release> is not a numeric I<revision>, it is specific user symbol.
+A I<release> is not a numeric I<revision>, it is a specific user symbol.
 It is a tag usually associated with a software release,
 but may also name a branching point.
 
@@ -608,14 +622,26 @@ of variable C<'v'>.
 
 sub allreleases {
 	my ($self, $filename) = @_;
+	my @releases;
 
 	$self->parsecvs($filename);
 
 	if (exists $cvs{'header'}{'symbols'}) {
-		return sort keys %{ $cvs{'header'}{'symbols'} };
+		if (exists $self->{'config'}{'cvsversion'}) {
+			foreach (keys %{ $cvs{'header'}{'symbols'} }) {
+				my $mapped;
+				if (defined ($mapped = $self->{'config'}->cvsversion($_))) {
+					push @releases, $mapped;
+				} else {
+					push @releases, $_;
+				}
+			}
+		} else {
+			@releases = keys %{ $cvs{'header'}{'symbols'} };
+		}
+		return sort @releases;
 	} else {
 	# no header symbols for a directory, so we use the default and the current release
-		my @releases;
 		push @releases, $$LXR::Common::HTTP{'param'}{'v'} if $$LXR::Common::HTTP{'param'}{'v'};
 		push @releases, $self->{'config'}->vardefault('v');
 		return @releases;
@@ -629,7 +655,9 @@ file.
 
 =over
 
-=item 1 C<$filename>
+=item 1
+
+C<$filename>
 
 A I<string> containing the filename
 
@@ -659,9 +687,13 @@ C<byrevision> is an auxiliary compare function for C<sort>.
 
 =over
 
-=item 1 C<$a>
+=item 1
 
-=item 1 C<$b>
+C<$a>
+
+=item 2
+
+C<$b>
 
 I<Strings> to compare (CVS revision numbers)
 
@@ -696,7 +728,9 @@ contained in the CVS difference file C<$filename>.
 
 =over
 
-=item 1 C<$filename>
+=item 1
+
+C<$filename>
 
 A I<string> containing the filename
 
@@ -815,14 +849,6 @@ sub parsecvs {
 			}
 		}
 
-		#	Next try an user-configurable transformation on symbol
-		#	(will be undef if parameter does not exist)
-		$nrel = $self->{'config'}->cvsversion($orel);
-		next unless defined($nrel);
-		if ($nrel ne $orel) {
-			delete($cvs{'header'}{'symbols'}{$orel});
-			$cvs{'header'}{'symbols'}{$nrel} = $rev if $nrel;
-		}
 	}
 
 	# Make 'head' look like other symbols
@@ -858,6 +884,44 @@ sub parsecvs {
 #	                                         +----description-----+
 	$cvs{'desc'} =~ s/^@|@($|@)/$1/gs;	# "Unquote" string
 
+}
+
+
+=head2 C<_realrelease ($releaseid)>
+
+C<_realrelease> recovers the real release tag corresponding to C<$releaseid>,
+in effect reversing application of C<'cvsversion'> parameter.
+
+=over
+
+=item 1
+
+C<$releaseid>
+
+A I<string> containing the user-known release
+
+=back
+
+C<_realrelease> applies C<'cvsversion'> function to all markers/tags in
+C<$cvs{'header'}{'symbols'}> and compares the result to C<$releaseid>.
+If there is a match, the original tag is returned;
+otherwise, unchanged C<$releaseid> is returned.
+
+=cut
+
+sub _realrelease {
+	my ($self, $releaseid) = @_;
+	my $rel;
+
+	if (exists $self->{'config'}{'cvsversion'}) {
+		foreach (keys %{ $cvs{'header'}{'symbols'} }) {
+			$rel = $self->{'config'}->cvsversion($_);
+			if ($releaseid eq $rel) {
+				return $_;
+			}
+		}
+	}
+	return $releaseid;
 }
 
 1;

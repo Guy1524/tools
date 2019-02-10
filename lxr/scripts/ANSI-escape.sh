@@ -1,5 +1,4 @@
 #!/bin/bash
-# $Id: ANSI-escape.sh,v 1.1 2012/04/02 19:01:35 ajlittoz Exp $
 
 # ANSI escape sequences
 

@@ -1,8 +1,6 @@
 # -*- tab-width: 4 perl-indent-level: 4-*-
 ###############################
 #
-# $Id: Postgres.pm,v 1.40 2013/11/17 08:57:26 ajlittoz Exp $
-#
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 2 of the License, or
@@ -20,8 +18,6 @@
 ###############################
 
 package LXR::Index::Postgres;
-
-$CVSID = '$Id: Postgres.pm,v 1.40 2013/11/17 08:57:26 ajlittoz Exp $ ';
 
 use strict;
 use DBI;
@@ -47,6 +43,12 @@ sub new {
 								, {'AutoCommit' => 0}
 								)
 	or die "Can't open connection to database: $DBI::errstr\n";
+
+	return $self;
+}
+
+sub write_open {
+	my ($self) = @_;
 
 	my $prefix = $config->{'dbprefix'};
 
@@ -122,10 +124,10 @@ sub new {
 	# Variant U
 # User unique record id management
 	$self->uniquecountersinit($prefix);
-	# The final $x_num will be saved in final_cleanup before disconnecting
+	# The final $x_num will be saved in write_close before disconnecting
 	# End of variants
 
-	return $self;
+	$self->SUPER::write_open();
 }
 
 #
@@ -134,7 +136,7 @@ sub new {
 
 ##### To activate PostgreSQL built-in record id management,
 ##### uncomment the following block.
-##### Check also purgeall() and final_cleanup()
+##### Check also purgeall() and write_close()
 
 # sub fileid {
 # # 	my ($self, $filename, $revision) = @_;
@@ -191,36 +193,59 @@ sub new {
 sub purgeall {
 	my ($self) = @_;
 
+	my $dbname = $config->{'dbname'};
+	$dbname =~ s/^.*dbname=//;
+	$dbname =~ s/;.*$//;
+	my $prefix = $config->{'dbprefix'};
+	my $ttc = $self->{dbh}->prepare
+			( 'select count(*) from information_schema.tables'
+			. ' where table_schema = \'public\''
+			);
+	$ttc->execute();
+	my ($tablecount) = $ttc->fetchrow_array();
+	$ttc = undef;
+#	If DB is fully dedicated to this tree,
+#	drop DB and reconstruct it.
+#	It may be faster than prunig tables.
+	if ($LXR::Index::schema_table_count == $tablecount) {
+		$self->write_close();
+		$self->final_cleanup();
+		# Database is fully unlocked, we can launch scripts against it
+# 		print STDERR	# uncomment if trace of next statement needed
+		`NO_USER=1 ./${LXR::Index::db_script_dir}p:${dbname}:${prefix}.sh`;
+		# Recoonect
+		$self->{dbh} = DBI->connect	( $config->{'dbname'}
+									, $config->{'dbuser'}
+									, $config->{'dbpass'}
+									, {'AutoCommit' => 0}
+									)
+			or die "Can't open connection to database: $DBI::errstr\n";
+		# Reconfigure prepared transactions
+		$self->read_open();
+		$self->write_open();
+	} else {
 # Not really necessary, but nicer for debugging
-
 	# Variant B
-#D 	my $prefix = $self->{'config'}{'dbprefix'};
-#B 	my $rfn = $self->{dbh}->prepare
-#B 		("select setval('${prefix}filenum', 1, false)");
-#B 	$rfn->execute;
-#B 	$rfn = undef;
-#B 	my $rsn = $self->{dbh}->prepare
-#B 		("select setval('${prefix}symnum',  1, false)");
-#B 	$rsn->execute;
-#B 	$rsn = undef;
-#B 	my $rtn = $self->{dbh}->prepare
-#B 		("select setval('${prefix}typenum', 1, false)");
-#B 	$rtn->execute;
-#B 	$rtn = undef;
+#B 		$self->{dbh}->do
+#B 			("select setval('${prefix}filenum', 1, false)");
+#B 		$self->{dbh}->do
+#B 			("select setval('${prefix}symnum',  1, false)");
+#B 		$self->{dbh}->do
+#B 			("select setval('${prefix}typenum', 1, false)");
 	# Variant U
-	$self->uniquecountersreset(-1);
-	$self->uniquecounterssave();
-	$self->uniquecountersreset(0);
+		$self->uniquecountersreset(-1);
+		$self->uniquecounterssave();
+		$self->uniquecountersreset(0);
 	# End of variants
-
-	$self->{'purge_all'}->execute;
+		$self->{'purge_all'}->execute;
+	}
 }
 
 #	PostgreSQL is in auto commit mode; disable calls to
 #	commit to suppress warning messages.
 # sub commit{}
 
-sub final_cleanup {
+sub write_close {
 	my ($self) = @_;
 
 	# Variant U
@@ -235,8 +260,46 @@ sub final_cleanup {
 #B 	$self->{'reset_symnum'} = undef;
 #B 	$self->{'reset_typenum'} = undef;
 	# End of variants
-	$self->dropuniversalqueries();
-	$self->{dbh}->disconnect() or die "Disconnect failed: $DBI::errstr";
+
+	$self->SUPER::write_close();
+}
+
+# sub final_cleanup {
+# 	my ($self) = @_;
+# 
+# 	$self->dropuniversalqueries();
+# 	$self->{dbh}->disconnect() or die "Disconnect failed: $DBI::errstr";
+# }
+
+sub post_processing {
+	my ($self) = @_;
+
+# 	TEMPORARY COMMENT - TEMPORARY COMMENT - TEMPORARY COMMENT !
+#	It looks like the PGPASSFILE, PGPASSWORD parameter passing
+#	or even ~/.pgpass reference does not work. Could not
+#	determine the origin of the problem: Pg library, Perl library,
+#	file permissions or working directory preset.
+#	Consequently, use --novacuum option when indexing unattended
+#	PostgreSQL databases.
+#	-- ajl - 2016-09
+#	To be removed when fixed
+
+	my $dbname = $config->{'dbname'};
+	my $dbhost = $dbname;
+	$dbname =~ s/^.*dbi:Pg:dbname=//;
+	$dbname =~ s/;.*$//;
+	if ($dbhost =~ s/^.*host=//) {
+		$dbhost =~ s/;.*$//;
+	} else {
+		$dbhost = '';
+	}
+	my $dbuser = $config->{'dbuser'};
+	my $dbpass = $config->{'dbpass'};
+	if ($dbhost) {
+		`PGPASSFILE=custom.d/db-scripts.d/pgpass psql -d $dbname -h $dbhost -U $dbuser -W -c 'vacuum analyze;'`
+	} else {
+		`PGPASSFILE=custom.d/db-scripts.d/pgpass psql -d $dbname -U $dbuser -W -c 'vacuum analyze;'`
+	}
 }
 
 1;

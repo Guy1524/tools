@@ -1,7 +1,3 @@
-/*
- *	$Id: lxr.css,v 1.21 2014/03/10 16:58:21 ajlittoz Exp $
- */
-
 /* Some definitions are grouped together to allow modification
  * of attributes for related classes in a single location
  */
@@ -108,6 +104,22 @@
 ; text-transform: uppercase
 ; padding-bottom: 0.3cm
 ; margin: 0
+}
+
+  .indexstate
+{ margin: 0.3cm 2cm 0.5cm 2cm
+; padding: 10px 0.5cm
+; background-color: #f8f8f8
+; border: thin solid #888888
+; text-align: center
+}
+
+  P.indexstate.error
+{ border: thick solid red
+}
+
+  P.indexstate.warning
+{ border: thin solid red
 }
 
 /***********************/
@@ -322,46 +334,72 @@
 ; font-style: italic
 }
 
-/******************/
-/* directory view */
-/******************/
-/** directory listing header **/
+/****************/
+/* tabular data */
+/****************/
+/* used fordirectory listing and indexing performance statistics */
+/** table header/footer **/
   .dirheader
+, .dirfooter
+/*, .perfheader
+, .perffooter*/
 { background-color: #aaddff
 ; color: #000000
 }
+/* Just for fun, so that table cannot be mistaken for directory*/
+  .perfheader
+, .perffooter
+{ background-color: #ffddaa
+}
 
-/** directory listing area **/
+/** table content area **/
   .dircontent
+, .perfcontent
 { width: 100%
 ; border: none
 }
 
-  .dircontent TH
+  .dirheader TH
+, .dirfooter TH
+, .perfheader TH
+, .perffooter TH
 { border-right: 1pt solid white
 ; border-left: none
 ; border-top: none
-; border-bottom: 1pt solid blue
 ; text-align: center
+}
+
+  .dirheader TH
+, .perfheader TH
+{ border-bottom: 1pt solid blue
+}
+
+  .dirfooter TH
+, .perffooter TH
+{ border-top: 1pt solid blue
 }
 
 /* "odd" lines (three at once) */
   .dirrow1
+, .perfrow1
 { background-color: white
 ; font-size: 10pt
 }
 /* "even" lines (three at once) */
   .dirrow2
+, .perfrow2
 { background-color: #eeeeee
 ; font-size: 10pt
 }
 
   .dirrow1 TD
 , .dirrow2 TD
+, .perfrow1 TD
+, .perfrow2 TD
 { border-right: thin solid #999999
 }
 
-/** individual cell formatting **/
+/** individual cell formatting for directory listing **/
 /* link to file or folder */
   A.dirfile
 , A.dirfolder
@@ -390,7 +428,7 @@
 
   TD.dirname
 { text-align: left
-; padding: 0 1pt 0 2pt
+; padding: 0 3pt
 }
 
   TD.dirsize
@@ -402,7 +440,7 @@
 , TD.dirindex
 , TD.dirindexinvalid
 { text-align: right
-; padding: 0 1pt 0 5pt
+; padding: 0 5pt
 }
 
   TD.dirindexinvalid
@@ -413,6 +451,7 @@
   TD.dirdesc
 { text-align: left
 ; padding-left: 5pt
+; padding-right: 3pt
 }
 
   TD.dirdesc P
@@ -425,6 +464,60 @@
 { color: #666666
 ; font-style: italic
 }
+
+/** individual cell formatting for performance data **/
+  .perfcomment
+{ padding: 0
+; text-align: center
+; font-size: 10pt
+}
+/* indexed version */
+  TD.perfversion
+{ padding: 0 1em 0 0
+}
+
+/* indexation date */
+  TD.perfdate
+{ padding: 0 1em
+; text-align: center
+}
+
+/* durations */
+  TD.perfpurge
+, TD.perffreetext
+, TD.perfdefn
+, TD.perfrefs
+{ text-align: right
+; padding: 0 1em
+}
+/* total durations */
+  TD.perftotal
+, TD.perfelapsed
+{ text-align: right
+; font-style: italic
+; font-weight: bold
+; padding: 0 1em
+}
+
+/* estimates */
+  TABLE.perfestimate
+{ border: thin solid
+; border-collapse: separate
+; border-spacing: 3px
+; margin-left: auto
+; margin-right: auto
+}
+  .perfestimate TH
+{ font-weight: normal
+; border: solid 1pt
+; padding: 2pt 1em
+}
+  .perfestimate TD
+{ border: solid 1pt
+; padding: 2pt 1em
+; text-align: right
+}
+
 
 /*************/
 /* file view */

@@ -1,8 +1,6 @@
 #!/usr/bin/perl -T
 ######################################################################
-# $Id: search,v 1.53 2014/04/06 17:14:42 ajlittoz Exp $
-##
-
+#
 # search --	Freetext search
 #
 #	Arne Georg Gleditsch <argggh@ifi.uio.no>
@@ -25,8 +23,6 @@
 #
 ######################################################################
 
-$CVSID = '$Id: search,v 1.53 2014/04/06 17:14:42 ajlittoz Exp $ ';
-
 use strict;
 use lib do { $0 =~ m{(.*)/} ? "$1/lib" : 'lib' }; # if LXR modules are in ./lib
 
@@ -46,52 +42,6 @@ use LXR::Template;
 my $maxhits = 1000;
 
 
-=head2 C<varinputs ($templ)>
-
-Function C<varinputs> is a "$function" substitution function.
-It returns a string which is a concatenation of tags
-
-C<E<lt>input type="hidden" name=">I<variable_name>C<" value=">I<variable_value>C<"E<gt>>
-
-one for each variable defined in configuration parameter C<'variables'>.
-
-This is how the current state is forwarded to the next HTTP request..
-
-=over
-
-=item 1 C<$templ>
-
-a I<string> containing the template (i.e. argument)
-
-=back
-
-=cut
-
-# NOTE:	ident contains a different implementation, which is semantically
-#		equivalent, but not substituable because there is an argument
-#		block (to be expanded) here, while there is none in ident.
-# TODO;	decide in favor of one or the other, so that this sub can
-#		be common factored into Template.pm
-
-sub varinputs {
-	my $templ = shift;
-	my $ret   = '';
-
-	foreach ($config->allvariables) {
-		if ($config->variable($_) ne $config->vardefault($_)) {
-			$ret .= expandtemplate
-						( $templ
-						,	( 'variable' => sub { $_ }
-							, 'value'    => sub { $config->variable($_) }
-							, 'varname'  => sub { $config->vardescription($_) }
-							)
-						);
-		}
-	}
-	return $ret;
-}
-
-
 =head2 C<filename_matches ($filetext, $advanced, $casesensitive, $file)>
 
 Function C<filename_matches> tells if search results for $file should
@@ -99,19 +49,28 @@ be kept for display.
 
 =over
 
-=item 1 C<$filetext>
+=item 1
+
+C<$filetext>
 
 a I<string> containing the desired name fragment or pattern
 
-=item 1 C<$advanced>
+=item 2
+
+C<$advanced>
 
 an I<integer> equal to 1 if C<$filetext> is a pattern, 0 otherwise
 
-=item 1 C<$casesensitive>
+=item 3
+
+C<$casesensitive>
 
 an I<integer> equal to 1 if comparison is case-sensitive, 0 otherwise
 
-=item 1 C<$file>
+=item 4
+
+
+C<$file>
 
 a I<string> containing the filename to check
 
@@ -151,19 +110,27 @@ Function C<glimpsesearch> searches the tree with I<glimpse>.
 
 =over
 
-=item 1 C<$searchtext>
+=item 1
+
+C<$searchtext>
 
 a I<string> containing the text to look for
 
-=item 1 C<$filetext>
+=item 2
+
+C<$filetext>
 
 a I<string> containing the desired name fragment or pattern
 
-=item 1 C<$advanced>
+=item 3
+
+C<$advanced>
 
 an I<integer> equal to 1 if C<$filetext> is a pattern, 0 otherwise
 
-=item 1 C<$casesensitive>
+=item 4
+
+C<$casesensitive>
 
 an I<integer> equal to 1 if comparison is case-sensitive, 0 otherwise
 
@@ -177,7 +144,11 @@ The remaining hits are returned in an array.
 
 sub glimpsesearch {
 	my ($searchtext, $filetext, $advanced, $casesensitive) = @_;
-	my $sourceroot = $config->{'sourceroot'} . '/' . $releaseid . '/';
+	my $sourceroot = $config->{$files->isa('LXR::Files::Plain')
+								? 'sourceroot'
+								: 'sourcetext'
+								}
+					. '/' . $releaseid . '/';
 
 	$ENV{'PATH'} = '/bin:/usr/local/bin:/usr/bin:/usr/sbin';
 	$! = '';
@@ -269,19 +240,27 @@ Function C<swishsearch> searches the tree with I<Swish-e>.
 
 =over
 
-=item 1 C<$searchtext>
+=item 1
+
+C<$searchtext>
 
 a I<string> containing the text to look for
 
-=item 1 C<$filetext>
+=item 2
+
+C<$filetext>
 
 a I<string> containing the desired name fragment or pattern
 
-=item 1 C<$advanced>
+=item 3
+
+C<$advanced>
 
 an I<integer> equal to 1 if C<$filetext> is a pattern, 0 otherwise
 
-=item 1 C<$casesensitive>
+=item 4
+
+C<$casesensitive>
 
 an I<integer> equal to 1 if comparison is case-sensitive, 0 otherwise
 
@@ -307,7 +286,8 @@ sub swishsearch {
 	$ENV{'PATH'} = '/bin:/usr/local/bin:/usr/bin:/usr/sbin';
   my $swishCommand =  $config->{'swishbin'}
 					. ' -f ' . $swishIndex
-					. ' -w \'(' . $searchtext . ')\''
+					. ' -s swishdocpath'
+					. " -w '($searchtext)'"
 					;
   my $ret = `$swishCommand`;
   my @result = grep { not /^[\#\.]/ } split(/\n/, $ret);
@@ -347,7 +327,9 @@ Otherwise, it returns an empty string.
 
 =over
 
-=item 1 C<$file>
+=item 1
+
+C<$file>
 
 a I<string> containing the filename to check
 
@@ -366,7 +348,7 @@ sub checkvalidref {
 				( $file
 				, $files->filerev($file, $releaseid)
 				)
-		&&	LXR::Lang::parseable($file)
+		&&	LXR::Lang::parseable($file, $releaseid)
 		) {
 		'searchinvalid'
 	} else {
@@ -383,15 +365,21 @@ expanded argument applied to every search result.
 
 =over
 
-=item 1 C<$templ>
+=item 1
+
+C<$templ>
 
 a I<string> containing the template (i.e. argument)
 
-=item 1 C<$searchtext>
+=item 2
+
+C<$searchtext>
 
 a I<string> containing the looked-for text
 
-=item 1 C<@results>
+=item 3
+
+C<@results>
 
 an I<array> containing the search results
 
@@ -510,9 +498,9 @@ B<Note:>
 
 =item
 
-Filename search may give inaccurate results if source-tree has
+I<Filename search may give inaccurate results if source-tree has
 been modified since last F<genxref> indexation because search is
-done against an internal list captured at indexing time.
+done against an internal list captured at indexing time.>
 
 =back
 
@@ -524,7 +512,6 @@ sub search {
 
 	$templ = gettemplate	( 'htmlsearch'
 							, $errorsig
-							, ''
 							);
 	if ($templ =~ m/^$errorsig/) {
 		die "Free-text search not available without 'htmlsearch' template\n";
@@ -539,10 +526,20 @@ sub search {
 
 	my @results;
 	if ($searchtext ne '') {
+		my $escapedsearchtext = $searchtext;
+		# Protect us against arbitrary command injection:
+		# Since the pattern is enclosed within single quotes, remove any single
+		# quote from search text so that malicious user can't close the parameter
+		# and start a new command.
+		# NOTE: quote in pattern, even if escaped with \ does not seem to work
+		#		well; therefore it should not be a big loss of functionality.
+		#		The GLIMPSE engine is word based and it is very hard to search
+		#		for isolated non-alphameric characters. Here again, not a big loss.
+		$escapedsearchtext =~ s/'//g;
 		if ($config->{'glimpsebin'}) {
-			@results = glimpsesearch($searchtext, $filetext, $advanced, $casesensitive);
+			@results = glimpsesearch($escapedsearchtext, $filetext, $advanced, $casesensitive);
 		} elsif ($config->{'swishbin'} && $config->{'swishdir'}) {
-			@results = swishsearch($searchtext, $filetext, $advanced, $casesensitive);
+			@results = swishsearch($escapedsearchtext, $filetext, $advanced, $casesensitive);
 		} else {
 			warn "No freetext search engine configured.\n";
 		}
@@ -569,7 +566,8 @@ sub search {
 			warn "Freetext search engine required for file search, and no freetext search engine is configured\n";
 			return;
 		}
-		my $sourceroot = $config->{'sourceroot'} . '/' . $releaseid . '/';
+		my $sourceroot = $config->{$files->isa('LXR::Files::Plain') ? 'sourceroot' : 'sourcetext'}
+						. '/' . $releaseid . '/';
 		while (<$FILELISTING>) {
 			chomp;
 			s/^$sourceroot//;
@@ -580,7 +578,7 @@ sub search {
 
 	print expandtemplate
 		( $templ
-		,	( 'variables'			=> \&varinputs
+		,	( 'variables'			=> \&varexpand
 			, 'searchtext'			=> sub { $_ = $searchtext; s/&/&amp;/g; s/</&lt;/g; s/>/&gt;/g; return $_; }
 			, 'searchtext_escaped'	=> sub { $_ = $searchtext; s/&/&amp;/g; s/\"/&quot;/g; s/</&lt;/g; s/>/&gt;/g; return $_; }
 			, 'filetext_escaped'	=> sub { $_ = $filetext; s/\"/&quot;/g; return $_; }
@@ -588,6 +586,7 @@ sub search {
 			, 'casesensitivechecked'=> sub { $casesensitive ? 'checked' : '' }
 			, 'varbtnaction'		=> sub { varbtnaction(@_, 'search') }
 			, 'urlargs'				=> sub { urlexpand('-', 'search') }
+			, 'noquery'				=> sub { return 'hidden' if $searchtext eq '' && $filetext eq '' }
 			, 'maxhits_message'		=> sub {
 				return @results == $maxhits
 				  ? "<b>Too many hits, displaying first $maxhits</b><br>"
@@ -596,6 +595,7 @@ sub search {
 
 			, 'results'     => sub { printresults(@_, $searchtext, @results) }
 			, 'resultcount' => sub { return scalar @results }
+			, 'indexstate'	=> sub { displayindexstate('search') }
 			)
 		);
 }
@@ -608,9 +608,12 @@ for the real job.
 
 =cut
 
-httpinit;
+httpinit();
+std_http_headers('search');
 makeheader('search');
-if ($files->isa('LXR::Files::Plain')) {
+if	(	$files->isa('LXR::Files::Plain')
+	||	exists $config->{'sourcetext'}
+	) {
 	if	(	$config->{'glimpsebin'}
 			&& $config->{'glimpsebin'} =~ m!^(.*/)?true$!
 		||	$config->{'swishbin'}

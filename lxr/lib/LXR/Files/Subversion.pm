@@ -1,8 +1,6 @@
 # -*- tab-width: 4 -*-
 ###############################################
 #
-# $Id: Subversion.pm,v 1.9 2013/12/03 13:38:23 ajlittoz Exp $
-#
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 2 of the License, or
@@ -30,8 +28,6 @@ Methods are sorted in the same order as in the super-class.
 =cut
 
 package LXR::Files::Subversion;
-
-$CVSID = '$Id: Subversion.pm,v 1.9 2013/12/03 13:38:23 ajlittoz Exp $ ';
 
 use strict;
 use FileHandle;
@@ -82,7 +78,7 @@ sub getdir {
 	}
 	close(DIR);
 
-	return sort(@dirs), sort(@files);
+	return sort({lc($a) cmp lc($b)} @dirs), sort {lc($a) cmp lc($b)} @files;
 }
 
 sub getannotations {
@@ -278,7 +274,7 @@ sub isfile {
 #	NOTE:	it is roughly equivalent to toreal() in the other
 #			SCM backends.
 #	In subversion, a revision identified by a r[0-9]+ tag can be
-#	stored anywhere: in the /trunk line, a /branches ou /tags
+#	stored anywhere: in the /trunk line, a /branches or /tags
 #	subdirectory. These two pieces of information must be merged
 #	in a single value for variable 'v'.
 #	The chosen solution  is to combine the location and revision
@@ -313,7 +309,7 @@ sub allreleases {
 	open(LOG,"svn log $uri |")
 	or die("svn subprocess died unexpextedly: $!");
 	while(<LOG>){
-		if (m/^(r[\d]+)/) {
+		if (m/^(r\d+)/) {
 			$rel{"trunk==$1"} = 1;
 		}
 	}
@@ -346,7 +342,7 @@ sub allbranches {
 		open(LOG,"svn log $uri |")
 		or die("svn subprocess died unexpextedly: $!");
 		while(<LOG>){
-			if (m/^(r[\d]+)/) {
+			if (m/^(r\d+)/) {
 				$rel{"$br==$1"} = 1;
 			}
 		}
@@ -359,6 +355,7 @@ sub allbranches {
 sub alltags {
 	my ($self, $filename) = @_;
 	my ($uri, @tags, %rel);
+	my %lasttagrev;
 
 	$uri = $self->{'rootpath'} . '/tags';
 	$uri =~ m/(.*)/;
@@ -380,14 +377,36 @@ sub alltags {
 		open(LOG,"svn log $uri |")
 		or die("svn subprocess died unexpextedly: $!");
 		while(<LOG>){
-			if (m/^(r[\d]+)/) {
-				$rel{"$tag==$1"} = 1;
+# 			if (m/^(r\d+)/) {
+# 				$rel{"$tag==$1"} = 1;
+# 			}
+		# For tags, retain only last revision
+			if (m/^r(\d+)/) {
+				if ($lasttagrev{$tag} < $1) {
+					$lasttagrev{$tag} = $1
+				}
 			}
 		}
 		close(LOG);
 	}
+	foreach (keys %lasttagrev) {
+		$rel{$_.'==r'.$lasttagrev{$_}} = 1;
+	}
 	return undef unless %rel;
 	return sort(keys %rel);
+}
+
+
+#
+#		GenXRef functions
+#
+
+sub exporttree {
+	my ($self, $ckoutdir, $releaseid) = @_;
+
+	my $path = $self->revpath('/',$releaseid);
+	$ENV{'PATH'} = $self->{'path'};
+	`svn export --force $path $ckoutdir/$releaseid`;
 }
 
 1;

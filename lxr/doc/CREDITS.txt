@@ -45,8 +45,9 @@ Andre-Littoz <ajlittoz@users.sf.net>
 	"	Directory re-org
 	"	Git, Mercurial & Subversion backends
 	"	SQLite backend & many DB patches
-	"	lighttpd, nginx, Cherokee, thtpd web-server support
+	"	lighttpd, nginx, Cherokee, thttpd web-server support
 	"	Generic parser optimisation
+	"	Conversion of CVS repository to Git
 
 
 -------------------------------------------------------------------------

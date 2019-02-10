@@ -1,8 +1,6 @@
 # -*- tab-width: 4 -*-
 ###############################################
 #
-# $Id: Markup.pm,v 1.10 2013/11/08 08:38:19 ajlittoz Exp $
-#
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 2 of the License, or
@@ -19,8 +17,6 @@
 
 #############################################################
 
-# =encoding utf8	Not recognised??
-
 =head1 Markup module
 
 This module is the markup engine in charge of highlighting the
@@ -29,8 +25,6 @@ syntactic components or otherwise interesting elements of a block.
 =cut
 
 package LXR::Markup;
-
-$CVSID = '$Id: Markup.pm,v 1.10 2013/11/08 08:38:19 ajlittoz Exp $';
 
 use strict;
 
@@ -43,7 +37,6 @@ our @EXPORT = qw(
 	&freetextmarkup
 	&markupfile
 );
-# our @EXPORT_OK = qw();
 
 require Local;
 require LXR::SimpleParse;
@@ -54,16 +47,20 @@ use LXR::Common;
 
 =head2 C<markupstring ($string, $virtp)>
 
-Function C<markupstring> returns $string after marking up some items
+Function C<markupstring> returns C<$string> after marking up some items
 deemed "interesting" (e-mail addresses, URLs, files, identifiers, ...).
 
 =over
 
-=item 1 C<$string>
+=item 1
+
+C<$string>
 
 a I<string> to mark up
 
-=item 1 C<$virtp>
+=item 2
+
+C<$virtp>
 
 a I<string> containing the HTML-path for the directory of files
 
@@ -73,7 +70,7 @@ directory
 =back
 
 This is a smaller version of sub C<markupfile> meant for marking up the
-descriptions in source directory listings (see Local.pm).
+descriptions in source directory listings (see I<Local.pm>).
 
 =cut
 
@@ -120,13 +117,15 @@ sub markupstring {
 
 =head2 C<is_linkworthy ($string)>
 
-Function C<is_linkworthy> returns true if $string is in the identifier DB
+Function C<is_linkworthy> returns true if C<$string> is in the identifier DB
 and seems to be used as an identifier (not just some word that happens to
 have been used as a variable name somewhere).
 
 =over
 
-=item 1 C<$string>
+=item 1
+
+C<$string>
 
 a I<string> containing the symbol to check
 
@@ -176,14 +175,16 @@ with a NUL (\0).
 
 =over
 
-=item 1 C<$string>
+=item 1
+
+C<$string>
 
 a I<string> to tag
 
 =back
 
 This sub is called before editing (highlighting) the string argument
-so that we can later distinguish between original litteral HTML special
+so that we can later distinguish between original literal HTML special
 characters and those added as part of HTML tags.
 
 =cut
@@ -200,7 +201,9 @@ and HTML-quote them.
 
 =over
 
-=item 1 C<$string>
+=item 1
+
+C<$string>
 
 a I<string> to untag
 
@@ -208,11 +211,8 @@ a I<string> to untag
 
 This sub is called as the last step of editing (highlighting) before
 emitting the string as HTML stream.
-The originally litteral special HTML characters are replaced by their
+The originally literal special HTML characters are replaced by their
 entity name equivalent.
-
-At the same time, the "start of line" marker added by sub C<nextfrag> is
-also removed to revert to the original source text.
 
 =cut
 
@@ -229,7 +229,9 @@ Function C<freetextmarkup> creates links in its argument for URLs and e-mail add
 
 =over
 
-=item 1 C<$string>
+=item 1
+
+C<$string>
 
 a I<string> to edit
 
@@ -253,20 +255,25 @@ Function C<markupfile> is the edition driver.
 
 =over
 
-=item 1 C<$fileh>
+=item 1
+
+C<$fileh>
 
 a I<filehandle> for the source file
 
-=item 1 C<$outfun>
+=item 2
+
+C<$outfun>
 
 a reference to a I<sub> which outputs the HTML stream
 
 =back
 
-This sub calls the parser to split the source file into homogeneous
-fragments which are highlighted by various specialized support routines.
+The parser is repeatedly called to split the source file into homogeneous
+fragments which are highlighted by one of the preceding specialized support
+routines.
 
-Sub C<&outfun> is called to output the HTML stream.
+Sub C<&$outfun> is called to output the HTML stream.
 Use of a subroutine allows to do the highlighting with C<markupfile> in
 every context (single file display by I<source> or dual file display
 by I<diff>).
@@ -277,7 +284,6 @@ sub markupfile {
 
 	my ($fileh, $outfun) = @_;
 	my ($dir) = $pathname =~ m|^(.*/)|;
-	my $graphic = $config->{'graphicfile'};
 
 	#	Every line is tagged with an <A> anchor so that it can be referenced
 	#	and jumped to. The easiest way to create this anchor is to generate
@@ -302,7 +308,7 @@ sub markupfile {
 	# This allows to make no assumption on idref result.
 	my $itagtarget = '---';
 	my @itag = &idref($itagtarget, 'fid', $itagtarget) =~ m/^(.*)$itagtarget(.*)$itagtarget(.*)$/;
-	my $lang = LXR::Lang->new($pathname, $releaseid, @itag);
+	my $lang = LXR::Lang->new(0, $pathname, $releaseid, @itag);
 
 	my ($btype, $frag, $ofrag);
 	if ($lang) {
@@ -312,7 +318,7 @@ sub markupfile {
 
 		($btype, $frag) = &LXR::SimpleParse::nextfrag;
 
-		&$outfun(join($line++, @ltag)) if defined($frag);
+		&$outfun("\n".join($line++, @ltag)) if defined($frag);
 
 		#	Loop until nextfrag returns no more fragments
 		while (defined($frag)) {
@@ -356,17 +362,10 @@ sub markupfile {
 
 			&$outfun($ofrag);
 		}
+		return;
+	}
 
-	} elsif ($pathname =~ m/\.($graphic)$/) {
-	# Graphic files are detected by their extension
-		&$outfun('<b>Image: </b>');
-		&$outfun('<img src="'
-				. $config->{'sourceaccess'}
-				. '/' . $config->variable('v')
-				. $pathname
-				. '" border="0"'
-				. " alt=\"No access to $pathname or browser cannot display this format\">");
-	} elsif ($pathname =~ m|/CREDITS$|) {
+	if ($pathname =~ m|/CREDITS$|) {
 	# Special case
 		while (defined($_ = $fileh->getline)) {
 			&LXR::SimpleParse::untabify($_);
@@ -377,45 +376,86 @@ sub markupfile {
 			s/^(W:\s+)(.*)/$1<a href=\"$2\">$2<\/a>/gm;
 			&$outfun(join($line++, @ltag) . $_);
 		}
-	} else {
-		return unless defined($_ = $fileh->getline);
-
-		# If it's not a script or something with an Emacs spec header and
-		# the first line is very long or containts control characters...
-		if	(	substr($_, 0, 2) ne '#!'
-			&&	! m/-\*-.*-\*-/
-			&&	(	length($_) > 132
-				||	m/[\x00-\x08\x0B\x0C\x0E-\x1F\x80-\x9F]/
-				)
-			) {
-			# We postulate that it's a binary file.
-			&$outfun('<ul><b>Binary File: ');
-			# jwz: URL-quote any special characters.
-			my $uname = $pathname;
-			$uname =~ s|([^-a-zA-Z0-9.\@/_\r\n])|sprintf("%%%02X", ord($1))|ge;
-
-			&$outfun	( '<a href="'
-						. $config->{'virtroot'}
-						. 'source'
-						. $uname
-						. &urlargs('_raw=1')
-						. '">'
-						);
-			&$outfun("$pathname</a></b>");
-			&$outfun('</ul>');
-
-		} else {
-		# Unqualified text file, do minimal work
-			do {
-				&LXR::SimpleParse::untabify($_);
-				&markspecials($_);
-				&freetextmarkup($_);
-				&htmlquote($_);
-				&$outfun(join($line++, @ltag) . $_);
-			} while (defined($_ = $fileh->getline));
-
-		}
+		return;
 	}
+
+	my $isgraphic = $pathname =~ m/\.$config->{'graphicfile'}$/;
+	# Graphic files detected by their extension
+	my ($extract, $mime);
+	if (! $isgraphic) {
+		my $rfh = $files->getrawfilehandle($pathname, $releaseid);
+		die "Can't get raw filehandle for $pathname in version $releaseid,"
+			unless $rfh;
+		read ($rfh, $extract, 1024);
+		$mime = $config->{'&mimetype'}($extract);
+		$isgraphic = 'image/' eq substr($mime, 0, 6);
+	# Graphic files detected on their content
+	}
+	if ($isgraphic) {
+		print '</pre>';
+		if ($files->isa('LXR::Files::Plain')) {
+			print '<p><b>Image';
+			if ($mime) {
+				print ' </b>', $mime, '<b>';
+			}
+			print ':</b> ';
+			print	'<img src="'
+					. $config->{'sourceaccess'}
+					. '/' . $config->variable('v')
+					. $pathname
+					. '" border="0"'
+					. " alt=\"No access to $pathname or browser cannot display this format\">"
+					;
+		} else {
+			print '<p class=error>Sorry, no graphic file display under VCS storage!</p>', "\n";
+			print '<p>Alternatively, you may download it and locally play with it: ';
+			print fileref($pathname, '', $pathname, 0, '_raw=1');
+			if ($mime) {
+				print ' (<em>', $mime, '</em>)';
+			}
+		}
+		print '</p><pre>', "\n";
+		return;
+	}
+
+	if	(	'text/' ne substr($mime, 0, 5)
+		&&	substr($extract, 0, 2) ne '#!'
+		&&	$extract !~ m/-\*-.*-\*-/
+		&&	(	$extract =~ m/[\x00-\x08\x0B\x0C\x0E-\x1F\x80-\x9F\xFF]/
+			||	(	$extract !~ m/(.*)\R/	# no newline
+				||	length($1) > 132
+				)
+			)
+		) {
+		# If it's not a script or something with an Emacs spec header and
+		# the first line is very long or contains control characters...
+		# We postulate that it's a binary file.
+		print '</pre><p><b>Binary File </b>(', $mime, ')<b>:</b> ';
+		# jwz: URL-quote any special characters.
+		my $uname = $pathname;
+		$uname =~ s|([^-a-zA-Z0-9.\@/_\r\n])|sprintf("%%%02X", ord($1))|ge;
+
+		print fileref($pathname, '', $pathname, 0, '_raw=1');
+		print '</p><pre>', "\n";
+		return;
+	}
+
+		# Unqualified text file, do minimal work
+		# If it comes from a Git repository, revert what we did in printfile()
+	if ($files->isa('LXR::Files::GIT')) {
+		$files->{'git_blame'} = $config->{'sourceparams'}{'git_blame'};
+		$files->{'git_annotations'} = $config->{'sourceparams'}{'git_annotations'}
+				|| $config->{'sourceparams'}{'git_blame'};
+	}
+	&$outfun("\n");
+	while (defined($_ = $fileh->getline)) {
+		&LXR::SimpleParse::untabify($_);
+		&markspecials($_);
+		&freetextmarkup($_);
+		&htmlquote($_);
+		&$outfun(join($line++, @ltag) . $_);
+	};
+
 }
 
 1;

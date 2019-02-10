@@ -1,8 +1,6 @@
 # -*- tab-width: 4 -*-
 ###############################################
 #
-# $Id: Mercurial.pm,v 1.5 2013/12/03 13:38:23 ajlittoz Exp $
-#
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 2 of the License, or
@@ -30,8 +28,6 @@ Methods are sorted in the same order as in the super-class.
 =cut
 
 package LXR::Files::Mercurial;
-
-$CVSID = '$Id: Mercurial.pm,v 1.5 2013/12/03 13:38:23 ajlittoz Exp $ ';
 
 use strict;
 use Time::Local;
@@ -89,7 +85,7 @@ sub getdir {
 		}
 	}
 	closedir(DIR);
-	return (sort(@dirs), sort(@files));
+	return sort({lc($a) cmp lc($b)} @dirs), sort {lc($a) cmp lc($b)} @files;
 }
 
 sub getnextannotation {
@@ -287,7 +283,9 @@ file.
 
 =over
 
-=item 1 C<$filename>
+=item 1
+
+C<$filename>
 
 A I<string> containing the filename
 
@@ -326,7 +324,9 @@ file.
 
 =over
 
-=item 1 C<$filename>
+=item 1
+
+C<$filename>
 
 A I<string> containing the filename
 
@@ -360,7 +360,9 @@ contained in the Mercurial log for file C<$filename>.
 
 =over
 
-=item 1 C<$filename>
+=item 1
+
+C<$filename>
 
 A I<string> containing the filename
 
@@ -400,6 +402,19 @@ sub parsehg {
 		$hg{'date2rev'}{$2 + $3} = $1;
 	}
 	close(HG);
+}
+
+
+#
+#		GenXRef functions
+#
+
+sub exporttree {
+	my ($self, $ckoutdir, $releaseid) = @_;
+	my $rev = $self->filerev('/', $releaseid);
+
+	print "revision # $rev\n";
+	`$$self{'hg-cmd'} archive -t files -r $rev $ckoutdir/$releaseid`;
 }
 
 1;

@@ -1,8 +1,6 @@
 # -*- tab-width: 4 perl-indent-level: 4-*-
 ###############################
 #
-# $Id: Mysql.pm,v 1.39 2013/11/20 14:57:19 ajlittoz Exp $
-#
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 2 of the License, or
@@ -20,8 +18,6 @@
 ###############################
 
 package LXR::Index::Mysql;
-
-$CVSID = '$Id: Mysql.pm,v 1.39 2013/11/20 14:57:19 ajlittoz Exp $ ';
 
 use strict;
 use DBI;
@@ -43,6 +39,12 @@ sub new {
 #	difference on the medium-sized test cases is difficult to
 #	appreciate since it is within the measurement error).
 		or die "Can't open connection to database: $DBI::errstr\n";
+
+	return $self;
+}
+
+sub write_open {
+	my ($self) = @_;
 
 	my $prefix = $config->{'dbprefix'};
 
@@ -66,9 +68,9 @@ sub new {
 	# Variant B
 #B	$self->{'last_auto_val'} = 
 #B		$self->{dbh}->prepare('select last_insert_id()');
-	# End of variants
+	# End of prefix for variant B
 
-	# Variant A & B
+	# Variants A & B
 #AB	$self->{'files_insert'} =
 #AB		$self->{dbh}->prepare
 #AB			( "insert into ${prefix}files"
@@ -85,11 +87,11 @@ sub new {
 #AB
 #AB	$self->{'langtypes_insert'} =
 #AB		$self->{dbh}->prepare
-#AB			( "insert into ${prefix}langtypes"
+#AB		( "insert into ${prefix}langtypes"
 #AB			. ' (typeid, langid, declaration)'
 #AB			. ' values (NULL, ?, ?)'
 #AB			);
-	# End of variants
+	# End of variants A & B
 
 	$self->{'purge_all'} = $self->{dbh}->prepare
 		( "call ${prefix}PurgeAll()"
@@ -100,7 +102,20 @@ sub new {
 	# The final $x_num will be saved in final_cleanup before disconnecting
 	# End of variants
 
-	return $self;
+	$self->SUPER::write_open();
+}
+
+sub write_close {
+	my ($self) = @_;
+
+	# Variant U
+	$self->uniquecounterssave();
+	# End of variants
+	# Variant B
+#B 	$self->{'last_auto_val'} = undef;
+	# End of variants
+
+	$self->SUPER::write_close();
 }
 
 ##### To activate MySQL built-in record id management,
@@ -182,24 +197,131 @@ sub new {
 sub purgeall {
 	my ($self) = @_;
 
-	$self->{'purge_all'}->execute();
-	# Variant U
-	$self->uniquecountersreset(0);
-	# End of variants
+	my $dbname = $config->{'dbname'};
+	$dbname =~ s/^.*dbname=//;
+	$dbname =~ s/;.*$//;
+	my $prefix = $config->{'dbprefix'};
+	my $ttc = $self->{dbh}->prepare
+			( 'select count(*) from information_schema.tables'
+			. ' where table_schema = \''
+			. $dbname
+			. '\''
+			);
+	$ttc->execute();
+	my ($tablecount) = $ttc->fetchrow_array();
+	$ttc = undef;
+#	If DB is fully dedicated to this tree,
+#	drop DB and reconstruct it.
+#	It is faster than prunig tables because of a performance
+#	bug xith TRUNCATE TABLES in MySQL.
+	if ($LXR::Index::schema_table_count == $tablecount) {
+		$self->write_close();
+		$self->final_cleanup();
+		# Database is fully unlocked, we can launch scripts against it
+# 		print STDERR	# uncomment if trace of next statement needed
+		`NO_USER=1 ./${LXR::Index::db_script_dir}m:${dbname}:${prefix}.sh`;
+		# Recoonect
+		$self->{dbh} = DBI->connect	( $config->{'dbname'}
+									, $config->{'dbuser'}
+									, $config->{'dbpass'}
+									, {'AutoCommit' => 0}
+									)
+			or die "Can't open connection to database: $DBI::errstr\n";
+		# Reconfigure prepared transactions
+		$self->read_open();
+		$self->write_open();
+	} else {
+#	DB hosts several trees. Since we do not know if the other trees
+#	should be purged, purge only the tables related to this tree.
+		$self->{'purge_all'}->execute();
+		# Variant U
+		$self->uniquecountersreset(0);
+		# End of variants
+		# Fix a collateral effect of TRUNCATE TABLES performance bug workaround
+		$self->{dbh}->do
+				("drop trigger if exists ${prefix}remove_file");
+		$self->{dbh}->do
+				( "create trigger ${prefix}remove_file"
+				. " after delete on ${prefix}status"
+				. ' for each row'
+				. "  delete from ${prefix}files"
+				. '   where fileid = old.fileid'
+				);
+		$self->{dbh}->do
+				("drop trigger if exists ${prefix}add_release");
+		$self->{dbh}->do
+				( "create trigger ${prefix}add_release"
+				. " after insert on ${prefix}releases"
+				. ' for each row'
+				. "  update ${prefix}status"
+				. '   set relcount = relcount + 1'
+				. '   where fileid = new.fileid'
+				);
+		$self->{dbh}->do
+				("drop trigger if exists ${prefix}remove_release");
+		$self->{dbh}->do
+				( "create trigger ${prefix}remove_release"
+				. " after delete on ${prefix}releases"
+				. ' for each row'
+				. "  update ${prefix}status"
+				. '   set relcount = relcount - 1'
+				. '   where fileid = old.fileid'
+				. '     and relcount > 0'
+				);
+		$self->{dbh}->do
+				("drop trigger if exists ${prefix}remove_definition");
+		$self->{dbh}->do
+				( "create trigger ${prefix}remove_definition"
+				. " after delete on ${prefix}definitions"
+				. ' for each row'
+				. '  begin'
+				. "   call ${prefix}decsym(old.symid);"
+				. '   if old.relid is not null'
+				. "   then call ${prefix}decsym(old.relid);"
+				. '   end if;'
+				. '  end'
+				);
+		$self->{dbh}->do
+				( "drop trigger if exists ${prefix}remove_usage");
+		$self->{dbh}->do
+				( "create trigger ${prefix}remove_usage"
+				. " after delete on ${prefix}usages"
+				. ' for each row'
+				. "  call ${prefix}decsym(old.symid)"
+				);
+	}
 }
 
-sub final_cleanup {
+sub post_processing {
 	my ($self) = @_;
 
-	# Variant U
-	$self->uniquecounterssave();
-	# End of variants
-	$self->commit();
-	# Variant B
-#B 	$self->{'last_auto_val'} = undef;
-	# End of variants
-	$self->dropuniversalqueries();
-	$self->{dbh}->disconnect() or die "Disconnect failed: $DBI::errstr";
+	my $dbfile = $config->{'dbname'};
+	my $dbhost = $dbfile;
+	$dbfile =~ s/^.*dbi:mysql:dbname=//;
+	$dbfile =~ s/;.*$//;
+	$dbhost =~ s/^.*host=//;
+	$dbhost =~ s/;.*$//;
+	my $dbuser = $config->{'dbuser'};
+	my $dbpass = $config->{'dbpass'};
+	my $prefix = $config->{'dbprefix'};
+	my $statement = 'optimize local table'
+				. " ${prefix}files"
+				. " ${prefix}status"
+				. " ${prefix}releases"
+				. " ${prefix}langtypes"
+				. " ${prefix}symbols"
+				. " ${prefix}definitions"
+				. " ${prefix}usages";
+	`mysql $dbfile -u $dbuser -p$dbpass -e $statement`;
+	$statement = 'analyze local table'
+				. " ${prefix}files"
+				. " ${prefix}status"
+				. " ${prefix}releases"
+				. " ${prefix}langtypes"
+				. " ${prefix}symbols"
+				. " ${prefix}definitions"
+				. " ${prefix}usages";
+	`mysql $dbfile -u $dbuser -p$dbpass -e $statement`;
 }
 
 1;

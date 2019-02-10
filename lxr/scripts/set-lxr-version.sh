@@ -1,5 +1,4 @@
 #!/bin/bash
-# $Id: set-lxr-version.sh,v 1.2 2012/08/27 08:59:30 ajlittoz Exp $
 
 shopt -s extglob
 . ${0%%+([^/])}ANSI-escape.sh

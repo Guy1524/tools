@@ -1,8 +1,6 @@
 # -*- tab-width: 4 -*-
 ###############################################
 #
-# $Id: Cobol.pm,v 1.6 2013/11/08 09:04:27 ajlittoz Exp $
-#
 # Enhances the support for the Cobol language over that provided by
 # Generic.pm
 #
@@ -19,10 +17,10 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+#
+###############################################
 
 package LXR::Lang::Cobol;
-
-my $CVSID = '$Id: Cobol.pm,v 1.6 2013/11/08 09:04:27 ajlittoz Exp $ ';
 
 use strict;
 use LXR::Common;

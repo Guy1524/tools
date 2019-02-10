@@ -1,8 +1,6 @@
 # -*- tab-width: 4 -*-
 ###############################################
 #
-# $Id: Tagger.pm,v 1.3 2013/11/17 15:57:42 ajlittoz Exp $
-#
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 2 of the License, or
@@ -21,23 +19,21 @@
 
 package Tagger;
 
-$CVSID = '$Id: Tagger.pm,v 1.3 2013/11/17 15:57:42 ajlittoz Exp $ ';
-
 use strict;
 use LXR::Lang;
 use VTescape;
 
 sub processfile {
-	my ($pathname, $releaseid, $config, $files, $index) = @_;
+	my ($pathname, $releaseid, $config, $files, $index, $trace) = @_;
 
-	my $lang = LXR::Lang->new($pathname, $releaseid);
+	my $lang = LXR::Lang->new(1, $pathname, $releaseid);
 	return undef unless $lang;
 
 	my $revision = $files->filerev($pathname, $releaseid);
 	return undef unless $revision;
 
 	(my $filename = $pathname) =~ s!.*/!!;
-	print(STDERR "--- $releaseid $filename $revision");
+	print STDERR "--- $releaseid $filename $revision" if $trace;
 
 	if ($index) {
 		my $fileid = $index->fileid($pathname, $revision);
@@ -45,12 +41,12 @@ sub processfile {
 
 		if (!$index->fileindexed($fileid)) {
 # 			$index->emptycache();
-			print(STDERR " ${VTgreen}$fileid${VTnorm}");
+			print STDERR " ${VTgreen}$fileid${VTnorm}" if $trace;
 
 			my $path = $files->realfilename($pathname, $releaseid);
 			if (defined($path)) {
 				my $ns = $lang->indexfile($pathname, $path, $fileid, $index, $config);
-				print(STDERR ' :: ', $ns, "\n");
+				print STDERR ' :: ', $ns, "\n" if $trace;
 				$index->flushcache(0);
 				$index->setfileindexed($fileid);
 ### The following line is commented out to improve performance.
@@ -60,14 +56,14 @@ sub processfile {
 # 				$index->commit();
 ### This line is ABSOLUTELY mandatory in case multi-thread is publicly released
 			} else {
-				print(STDERR " ${VTred}FAILED${VTnorm}\n");
+				print STDERR " ${VTred}FAILED${VTnorm}\n" if $trace;
 			}
 			$files->releaserealfilename($path);
 		} else {
-			print(STDERR " ${VTyellow}already indexed${VTnorm}\n");
+			print STDERR " ${VTyellow}already indexed${VTnorm}\n" if $trace;
 		}
 	} else {
-		print(STDERR " ${VTred}FAILED${VTnorm}\n");
+		print STDERR " ${VTred}FAILED${VTnorm}\n" if $trace;
 	}
 	$lang     = undef;
 	$revision = undef;
@@ -75,22 +71,22 @@ sub processfile {
 }
 
 sub processrefs {
-	my ($pathname, $releaseid, $config, $files, $index) = @_;
+	my ($pathname, $releaseid, $config, $files, $index, $trace) = @_;
 
-	my $lang = LXR::Lang->new($pathname, $releaseid);
+	my $lang = LXR::Lang->new(1, $pathname, $releaseid);
 	return undef unless $lang;
 
 	my $revision = $files->filerev($pathname, $releaseid);
 	return undef unless $revision;
 
 	(my $filename = $pathname) =~ s!.*/!!;
-	print(STDERR "--- $releaseid $filename $revision");
+	print STDERR "--- $releaseid $filename $revision" if $trace;
 
 	if ($index) {
 		my $fileid = $index->fileid($pathname, $revision);
 
 		if (!$index->filereferenced($fileid)) {
-			print(STDERR " ${VTgreen}$fileid${VTnorm} ");
+			print STDERR " ${VTgreen}$fileid${VTnorm} " if $trace;
 
 			my $path = $files->realfilename($pathname, $releaseid);
 			if	(defined($path)) {
@@ -103,9 +99,9 @@ sub processrefs {
 							);
 				if (0 > $ln) {
 					# This happens sometimes in CVS
-					print(STDERR " ${VTred}### FAILED${VTnorm}\n");
+					print STDERR " ${VTred}### FAILED${VTnorm}\n" if $trace;
 				} else {
-					print(STDERR "+++ $ln/$ns\n");
+					print STDERR "+++ $ln/$ns\n" if $trace;
 				}
 				$index->flushcache(0);
 				$index->setfilereferenced($fileid);
@@ -116,14 +112,14 @@ sub processrefs {
 # 				$index->commit();
 ### This line is ABSOLUTELY mandatory in case multi-thread is publicly released
 			} else {
-				print(STDERR " ${VTred}FAILED${VTnorm}\n");
+				print STDERR " ${VTred}FAILED${VTnorm}\n" if $trace;
 			}
 			$files->releaserealfilename($path);
 		} else {
-			print(STDERR " ${VTyellow}already referenced${VTnorm}\n");
+			print STDERR " ${VTyellow}already referenced${VTnorm}\n" if $trace;
 		}
 	} else {
-		print(STDERR " ${VTred}FAILED${VTnorm}\n");
+		print STDERR " ${VTred}FAILED${VTnorm}\n" if $trace;
 	}
 
 	$lang     = undef;

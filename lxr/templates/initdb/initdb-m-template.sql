@@ -1,8 +1,7 @@
 /*- -*- tab-width: 4 -*- */
 /*-
  *	SQL template for creating MySQL tables
- *	(C) 2012-2013 A. Littoz
- *	$Id: initdb-m-template.sql,v 1.6 2013/11/17 15:33:55 ajlittoz Exp $
+ *	(C) 2012-2016 A. Littoz
  *
  *	This template is intended to be customised by Perl script
  *	initdb-config.pl which creates a ready to use shell script
@@ -10,7 +9,6 @@
  *		./custom.d/"customised result file name"
  *
  */
-
 /* **************************************************************
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,126 +24,165 @@
  * along with this program. If not, see <http://www.gnu.org/licences/>.
  * **************************************************************
 -*/
+###
+#
+#		*** MySQL: %DB_name% ***
+#
+###
+/*- ***********************************
+ *  **         **         **         **
+ *  ** CAUTION ** CAUTION ** CAUTION **
+ *  **         **         **         **
+ *  ***********************************
+ *
+ * As of 2016-08, there is still a performance BUG in MySQL where
+ * TRUNCATE TABLE is horribly slow (mostly noticeable on big tables).
+ * A workaround has been implementaed with
+ * RENAME TABLE; CREATE TABLE; DROP TABLE; instead.
+ * BUT (1): TRIGGERS associated with the dropped table are also erased.
+ *		They must therefore be recreated.
+ * BUT (2): CREATE TRIGGER cannot be used in a PROCEDURE.
+ *		The idea was to have the definition of the TRIGGER only once
+ *		in a procedure and to CALL it when creating the DB and also
+ *		inside PurgeAll() when "truncating" the table with the
+ *		workaround.
+ *		This can't be done.
+ * So BEWARE: the code to create the triggers must be duplicatied
+ * in Mysql.pm's purgeall().
+ * Do not forget this duplication as long as the workaround is necessary!
+ *
+ *  ** END OF CAUTION COMMENT
+-*/
+/*- - - - - - - - - - - - - - - - - - - - - - - - -*/
+/*-						Part 1					  -*/
+/*- - - - - - - - - - - - - - - - - - - - - - - - -*/
+/*- ---===>   One-time initialisations   <===---  -*/
+/*-												  -*/
+/*- Do not repeat if multiple databases are       -*/
+/*- created with MySQL:                           -*/
+/*- - users are global, can't be duplicated       -*/
+/*- - - - - - - - - - - - - - - - - - - - - - - - -*/
+/*- - - - - - - - - - - - - - - - - - - - - - - - -*/
 /*-	The following shell command sequence will succeed even if an
 	individual command fails because the object exists or cannot
 	be created. This is the reason to have many commands instead
 	of a single mysql invocation. -*/
 /*--*/
 /*--*/
-/*@IF	%_createglobals% */
-/*@XQT echo "*** MySQL - Creating global user %DB_user%"*/
-/*@XQT mysql -u root -p <<END_OF_USER*/
-drop user '%DB_user%'@'localhost';
-/*@XQT END_OF_USER*/
-/*@XQT mysql -u root -p <<END_OF_USER*/
+
+# NOTE: in LXR, users have universal access to any MySQL databases.
+#       If you want to restrict access, manually configure your
+#       user rights.
+
+/*@IF	%_dbuser% */
+/*@	XQT if [ ${NO_USER:-0} -eq 0 -a ${M_U_%DB_user%:-0} -eq 0 ] ; then */
+/*@	XQT echo "*** MySQL - Creating global user %DB_user%"*/
+/*@	XQT mysql -u root -p <<END_OF_USER*/
+drop user if exists '%DB_user%'@'localhost';
+/*@	XQT END_OF_USER*/
+/*@	XQT mysql -u root -p <<END_OF_USER*/
 create user '%DB_user%'@'localhost' identified by '%DB_password%';
 grant all on *.* to '%DB_user%'@'localhost';
-/*@XQT END_OF_USER*/
-/*@ENDIF	%_createglobals% */
+/*@	XQT END_OF_USER*/
+/*@	XQT M_U_%DB_user%=1 */
+/*@	XQT fi */
+/*@ENDIF	%_dbuser% */
 /*@IF	%_dbuseroverride% */
-/*@XQT echo "*** MySQL - Creating tree user %DB_tree_user%"*/
-/*@XQT mysql -u root -p <<END_OF_USER*/
+/*@	XQT if [ ${M_U_%DB_tree_user%:-0} -lt 1 ] ; then */
+/*@	XQT mysql -u root -p <<END_OF_USER*/
+drop user if exists '%DB_tree_user%'@'localhost';
+/*@	XQT END_OF_USER*/
+/*@	XQT echo "*** MySQL - Creating tree user %DB_tree_user%"*/
+/*@	XQT mysql -u root -p <<END_OF_USER*/
 create user '%DB_tree_user%'@'localhost' identified by '%DB_tree_password%';
 grant all on *.* to '%DB_tree_user%'@'localhost';
-/*@XQT END_OF_USER*/
+/*@	XQT END_OF_USER*/
+/*@	XQT M_U_%DB_tree_user%=1 */
+/*@	XQT fi */
 /*@ENDIF	%_dbuseroverride% */
 /*--*/
 /*--*/
 
+/*@XQT if [ ${NO_DB:-0} -eq 0 -a ${M_DB_%DB_name%:-0} -eq 0 ] ; then */
 /*-		Create databases under LXR user
 -*//*- to activate place "- * /" at end of line (without spaces) -*/
-/*@IF	%_createglobals% && %_globaldb% */
-/*@XQT echo "*** MySQL - Creating global database %DB_name%"*/
-/*@XQT mysql -u %DB_user% -p%DB_password% <<END_OF_CREATE*/
+/*@IF	%_globaldb% */
+/*@	XQT echo "*** MySQL - Creating global database %DB_name%"*/
+/*@	XQT mysql -u %DB_user% -p%DB_password% <<END_OF_CREATE*/
 drop database if exists %DB_name%;
 create database %DB_name%;
-/*@XQT END_OF_CREATE*/
-/*@ENDIF*/
-/*@IF	!%_globaldb% */
-/*@XQT echo "*** MySQL - Creating tree database %DB_name%"*/
-/*@IF		%_dbuseroverride% */
-/*@XQT mysql -u %DB_tree_user% -p%DB_tree_password% <<END_OF_CREATE*/
-/*@ELSE*/
-/*@XQT mysql -u %DB_user% -p%DB_password% <<END_OF_CREATE*/
-/*@ENDIF*/
+/*@	XQT END_OF_CREATE*/
+/*@ELSE */
+/*@	XQT echo "*** MySQL - Creating tree database %DB_name%"*/
+/*@	IF		%_dbuseroverride% */
+/*@		XQT mysql -u %DB_tree_user% -p%DB_tree_password% <<END_OF_CREATE*/
+/*@	ELSE*/
+/*@		XQT mysql -u %DB_user% -p%DB_password% <<END_OF_CREATE*/
+/*@	ENDIF*/
 drop database if exists %DB_name%;
 create database %DB_name%;
-/*@XQT END_OF_CREATE*/
-/*@ENDIF	!%_globaldb% */
+/*@	XQT END_OF_CREATE*/
+/*@ENDIF	%_globaldb% */
 /*- end of disable/enable comment -*/
 /*--*/
 /*--*/
 /*-		Create databases under master user,
 		may be restricted by site rules
 -*//*- to activate place "- * /" at end of line (without spaces)
-/*@IF	%_createglobals% && %_globaldb% */
-/*@XQT echo "*** MySQL - Creating global database %DB_name%"*/
-/*@XQT mysql -u root -p <<END_OF_CREATE*/
+/*@IF	%_globaldb% */
+/*@	XQT echo "*** MySQL - Creating global database %DB_name%"*/
+/*@	XQT mysql -u root -p <<END_OF_CREATE*/
 drop database if exists %DB_name%;
 create database %DB_name%;
-/*@XQT END_OF_CREATE*/
-/*@ENDIF*/
-/*@IF	!%_globaldb% */
-/*@XQT echo "*** MySQL - Creating tree database %DB_name%"*/
-/*@XQT mysql -u root -p <<END_OF_CREATE*/
+/*@	XQT END_OF_CREATE*/
+/*@ELSE */
+/*@	XQT echo "*** MySQL - Creating tree database %DB_name%"*/
+/*@	XQT mysql -u root -p <<END_OF_CREATE*/
 drop database if exists %DB_name%;
 create database %DB_name%;
-/*@XQT END_OF_CREATE*/
-/*@ENDIF	!%_globaldb% */
+/*@	XQT END_OF_CREATE*/
+/*@ENDIF	%_globaldb% */
 /*- end of disable/enable comment -*/
-/*--*/
-/*--*/
-
-/*@XQT echo "*** MySQL - Configuring tables %DB_tbl_prefix% in database %DB_name%"*/
-/*-		Create tables under LXR user
--*//*- to activate place "- * /" at end of line (without spaces) -*/
-/*@IF	%_createglobals% && %_globaldb% */
-/*@XQT mysql -u %DB_user% -p%DB_password% <<END_OF_TEMPLATE*/
-/*@ENDIF*/
-/*@IF	!%_globaldb% */
-/*@IF		%_dbuseroverride% */
-/*@XQT mysql -u %DB_tree_user% -p%DB_tree_password% <<END_OF_TEMPLATE*/
-/*@ELSE*/
-/*@XQT mysql -u %DB_user% -p%DB_password% <<END_OF_TEMPLATE*/
-/*@ENDIF*/
-/*@ENDIF	!%_globaldb% */
-/*- end of disable/enable comment -*/
-/*--*/
-/*--*/
-/*-		Create tables under master user,
-		may be restricted by site rules
--*//*- to activate place "- * /" at end of line (without spaces)
-/*@IF	%_createglobals% && %_globaldb% */
-/*@XQT mysql -u root -p <<END_OF_TEMPLATE*/
-/*@ENDIF*/
-/*@IF	!%_globaldb% */
-/*@XQT mysql -u root -p <<END_OF_TEMPLATE*/
-/*@ENDIF	!%_globaldb% */
-/*- end of disable/enable comment -*/
-/*--*/
-/*--*/
+/*@ADD initdb/mysql-command.sql*/
 use %DB_name%;
-
 /*@IF 0 */
 /*@	DEFINE autoinc='auto_increment'*/
 /*@ELSE*/
 /*- Unique record id user management (initially developed for SQLite) -*/
 /*@	DEFINE autoinc='              '*/
-/*@ADD initdb/unique-user-sequences.sql*/
+/*@	ADD initdb/unique-user-sequences.sql*/
 alter table %DB_tbl_prefix%filenum
 	engine = MyISAM;
 alter table %DB_tbl_prefix%symnum
 	engine = MyISAM;
 alter table %DB_tbl_prefix%typenum
 	engine = MyISAM;
-
 /*@ENDIF*/
+/*@XQT END_OF_SQL*/
+/*@XQT M_DB_%DB_name%=1 */
+/*@XQT fi */
+/*--*/
+/*--*/
+
+/*- - - - - - - - - - - - - - - - - - - - - - - - -*/
+/*-						Part 2					  -*/
+/*- - - - - - - - - - - - - - - - - - - - - - - - -*/
+/*- ---===>    Tree database creation    <===---  -*/
+/*-												  -*/
+/*- Always to be done, this (re)creates the tables-*/
+/*- for the specific database.                    -*/
+/*- SQL is "safe".                                -*/
+/*- - - - - - - - - - - - - - - - - - - - - - - - -*/
+/*- - - - - - - - - - - - - - - - - - - - - - - - -*/
+/*@XQT echo "*** MySQL - Configuring tables %DB_tbl_prefix% in database %DB_name%"*/
+/*@ADD initdb/mysql-command.sql*/
+use %DB_name%;
 
 /* Base version of files */
 /*	revision:	a VCS generated unique id for this version
 				of the file
  */
-create table %DB_tbl_prefix%files
+create table if not exists %DB_tbl_prefix%files
 	( fileid    int %autoinc% not null primary key
 	, filename  varbinary(255)     not null
 	, revision  varbinary(255)     not null
@@ -168,7 +205,7 @@ create table %DB_tbl_prefix%files
 /* Deletion of a record automatically removes the associated
  * base version files record.
  */
-create table %DB_tbl_prefix%status
+create table if not exists %DB_tbl_prefix%status
 	( fileid    int     not null primary key
 	, relcount  int
 	, indextime int
@@ -183,6 +220,9 @@ create table %DB_tbl_prefix%status
  * (from releases), once status has been deleted so that
  * foreign key constrained has been cleared.
  */
+/*-
+ *  ==> See CAUTION comment at beginning of file
+-*/
 drop trigger if exists %DB_tbl_prefix%remove_file;
 create trigger %DB_tbl_prefix%remove_file
 	after delete on %DB_tbl_prefix%status
@@ -196,7 +236,7 @@ create trigger %DB_tbl_prefix%remove_file
  *	fileid:		refers to base version
  *	releaseid:	"public" release tag
  */
-create table %DB_tbl_prefix%releases 
+create table if not exists %DB_tbl_prefix%releases 
 	( fileid    int            not null
 	, releaseid varbinary(255) not null
 	, constraint %DB_tbl_prefix%pk_releases
@@ -210,6 +250,9 @@ create table %DB_tbl_prefix%releases
 /* The following triggers maintain relcount integrity
  * in status table after insertion/deletion of releases
  */
+/*-
+ *  ==> See CAUTION comment at beginning of file
+-*/
 drop trigger if exists %DB_tbl_prefix%add_release;
 create trigger %DB_tbl_prefix%add_release
 	after insert on %DB_tbl_prefix%releases
@@ -222,6 +265,9 @@ create trigger %DB_tbl_prefix%add_release
  * to cause reindexing, especially if the file is shared by
  * several releases
  */
+/*-
+ *  ==> See CAUTION comment at beginning of file
+-*/
 drop trigger if exists %DB_tbl_prefix%remove_release;
 create trigger %DB_tbl_prefix%remove_release
 	after delete on %DB_tbl_prefix%releases
@@ -237,7 +283,7 @@ create trigger %DB_tbl_prefix%remove_release
 /* Types for a language */
 /*	declaration:	provided by generic.conf
  */
-create table %DB_tbl_prefix%langtypes
+create table if not exists %DB_tbl_prefix%langtypes
 	( typeid       smallint         not null %autoinc%
 	, langid       tinyint unsigned not null
 	, declaration  varchar(255)     not null
@@ -251,7 +297,7 @@ create table %DB_tbl_prefix%langtypes
  * 	symcount:	number of definitions and usages for this name
  *	symname:	symbol name
  */
-create table %DB_tbl_prefix%symbols
+create table if not exists %DB_tbl_prefix%symbols
 	( symid    int            not null %autoinc% primary key
 	, symcount int
 	, symname  varbinary(255) not null unique
@@ -261,6 +307,7 @@ create table %DB_tbl_prefix%symbols
 /* The following function decrements the symbol reference count
  * (to be used in triggers).
  */
+drop procedure if exists %DB_tbl_prefix%decsym;
 delimiter //
 create procedure %DB_tbl_prefix%decsym(in whichsym int)
 begin
@@ -279,14 +326,14 @@ delimiter ;
  *	relid:	optional id of the englobing declaration
  *			(refers to another symbol, not a definition)
  */
-create table %DB_tbl_prefix%definitions
+create table if not exists %DB_tbl_prefix%definitions
 	( symid   int              not null
 	, fileid  int              not null
 	, line    int              not null
 	, typeid  smallint         not null
 	, langid  tinyint unsigned not null
 	, relid   int
-	, index %DB_tbl_prefix%i_definitions (symid)
+	, index %DB_tbl_prefix%i_definitions (symid, fileid)
 	, constraint %DB_tbl_prefix%fk_defn_symid
 		foreign key (symid)
 		references %DB_tbl_prefix%symbols(symid)
@@ -305,8 +352,11 @@ create table %DB_tbl_prefix%definitions
 /* The following trigger maintains correct symbol reference count
  * after definition deletion.
  */
-delimiter //
+/*-
+ *  ==> See CAUTION comment at beginning of file
+-*/
 drop trigger if exists %DB_tbl_prefix%remove_definition;
+delimiter //
 create trigger %DB_tbl_prefix%remove_definition
 	after delete on %DB_tbl_prefix%definitions
 	for each row
@@ -319,11 +369,11 @@ create trigger %DB_tbl_prefix%remove_definition
 delimiter ;
 
 /* Usages */
-create table %DB_tbl_prefix%usages
+create table if not exists %DB_tbl_prefix%usages
 	( symid   int not null
 	, fileid  int not null
 	, line    int not null
-	, index %DB_tbl_prefix%i_usages (symid)
+	, index %DB_tbl_prefix%i_usages (symid, fileid)
 	, constraint %DB_tbl_prefix%fk_use_symid
 		foreign key (symid)
 		references %DB_tbl_prefix%symbols(symid)
@@ -336,12 +386,33 @@ create table %DB_tbl_prefix%usages
 /* The following trigger maintains correct symbol reference count
  * after usage deletion.
  */
+/*-
+ *  ==> See CAUTION comment at beginning of file
+-*/
 drop trigger if exists %DB_tbl_prefix%remove_usage;
 create trigger %DB_tbl_prefix%remove_usage
 	after delete on %DB_tbl_prefix%usages
 	for each row
 	call %DB_tbl_prefix%decsym(old.symid);
 
+/* Statistics */
+/*	releaseid:	"public" release tag
+ *	reindex  :	reindex-all flag
+ *	stepname :	step name
+ *	starttime:	step start time
+ *	endtime  :	step end time
+ */
+drop table if exists %DB_tbl_prefix%times;
+create table %DB_tbl_prefix%times
+	( releaseid varbinary(255)
+	, reindex   int
+	, stepname  char(1)
+	, starttime int
+	, endtime   int
+	)
+	engine = MyISAM;
+
+drop procedure if exists %DB_tbl_prefix%PurgeAll;
 delimiter //
 create procedure %DB_tbl_prefix%PurgeAll ()
 begin
@@ -360,15 +431,49 @@ begin
 	insert into %DB_tbl_prefix%typenum
 		(rcd, tid) VALUES (0, 0);
 /*@ENDIF*/
-	truncate table %DB_tbl_prefix%definitions;
-	truncate table %DB_tbl_prefix%usages;
-	truncate table %DB_tbl_prefix%langtypes;
-	truncate table %DB_tbl_prefix%symbols;
-	truncate table %DB_tbl_prefix%releases;
-	truncate table %DB_tbl_prefix%status;
-	truncate table %DB_tbl_prefix%files;
+/* *** *** ajl 160815 *** *** */
+/* A bug in TRUNCATE TABLE management causes it to become
+ * unacceptably slow on huge tables. To avoid the performance
+ * penalty, an alternate strategy is used.
+ * The tables which are deemed to have small to "acceptable"
+ * sizes are processed as usual.
+ */
+--	truncate table %DB_tbl_prefix%definitions;
+--	truncate table %DB_tbl_prefix%usages;
+--	truncate table %DB_tbl_prefix%langtypes;
+--	truncate table %DB_tbl_prefix%symbols;
+--	truncate table %DB_tbl_prefix%releases;
+--	truncate table %DB_tbl_prefix%status;
+--	truncate table %DB_tbl_prefix%files;
+/* This is the workaround: */
+/*-
+ *  ==> See CAUTION comment at beginning of file
+-*/
+	rename table %DB_tbl_prefix%definitions to trash;
+	create table %DB_tbl_prefix%definitions like trash;
+	drop table trash;
+	rename table %DB_tbl_prefix%usages to trash;
+	create table %DB_tbl_prefix%usages like trash;
+	drop table trash;
+	rename table %DB_tbl_prefix%langtypes to trash;
+	create table %DB_tbl_prefix%langtypes like trash;
+	drop table trash;
+	rename table %DB_tbl_prefix%symbols to trash;
+	create table %DB_tbl_prefix%symbols like trash;
+	drop table trash;
+	rename table %DB_tbl_prefix%releases to trash;
+	create table %DB_tbl_prefix%releases like trash;
+	drop table trash;
+	rename table %DB_tbl_prefix%status to trash;
+	create table %DB_tbl_prefix%status like trash;
+	drop table trash;
+	rename table %DB_tbl_prefix%files to trash;
+	create table %DB_tbl_prefix%files like trash;
+	drop table trash;
+/* End of work around */
+	truncate table %DB_tbl_prefix%times;
 	set session foreign_key_checks = @old_check;
 end//
 delimiter ;
-/*@XQT END_OF_TEMPLATE*/
+/*@XQT END_OF_SQL*/
 

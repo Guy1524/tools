@@ -1,8 +1,6 @@
 # -*- tab-width: 4 -*-
 ###############################################
 #
-# $Id: VTescape.pm,v 1.3 2013/11/07 16:32:40 ajlittoz Exp $
-#
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 2 of the License, or
@@ -18,8 +16,6 @@
 # Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 #
 ###############################################
-
-# $Id: VTescape.pm,v 1.3 2013/11/07 16:32:40 ajlittoz Exp $
 
 package VTescape;
 

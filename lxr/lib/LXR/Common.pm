@@ -1,8 +1,6 @@
 # -*- tab-width: 4 -*-
 ###############################################
 #
-# $Id: Common.pm,v 1.111 2014/03/09 15:26:25 ajlittoz Exp $
-#
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 2 of the License, or
@@ -26,7 +24,9 @@ B<Note:>
 
 =over
 
-=item I<It initially contained nearly all support routines
+=item
+
+I<It initially contained nearly all support routines
 but for the "object" collections (files, index, lang), and was
 then correctly the "common" module.
 Its size grew beyond maintanability and readability and forced a
@@ -40,8 +40,6 @@ content.>
 
 package LXR::Common;
 
-$CVSID = '$Id: Common.pm,v 1.111 2014/03/09 15:26:25 ajlittoz Exp $ ';
-
 use strict;
 
 require Exporter;
@@ -52,8 +50,10 @@ our @EXPORT = qw(
 	$files $index $config
 	$HTTP  $HTMLheadOK
 	$pathname $releaseid $identifier
+	&_edittime
+	&indexstate
 	&urlargs &nonvarargs &fileref &diffref &idref &incref
-	&httpinit &httpclean
+	&std_http_headers &httpinit &httpclean
 );
 
 require Local;
@@ -72,8 +72,12 @@ our $identifier;
 our $HTTP;
 our $HTMLheadOK;
 
-# Debugging flag - MUST be set to zero before public release
+# Debugging flag - MUST be set to one to be immune against missing headers
 my $wwwdebug = 1;
+# In case something goes wrong very early, the debugging routines below emit
+# HTTP headers so that a browser sees a standard HTTP/HTML stream.
+# It can be set to zero but gain is really negligible and if header template
+# cannot be found, we'll get 'did not send HTTP headers' error!
 
 # Initial value of temp file counter (see sub tmpcounter below)
 my $tmpcounter = 23;
@@ -98,7 +102,9 @@ and optionally on screen.
 
 =over
 
-=item 1 C<$msg>
+=item 1
+
+C<$msg>
 
 a I<string> containing the message
 
@@ -113,7 +119,7 @@ entity name equivalent.
 I<This function is called after successful initialisation.
 There is no need to check for HTTP header state,
 since early errors are fatal and handled by the next function.
-However, the C<E<lt>HTMLE<gt>> tag and C<E<lt>BODYE<gt>> element
+However, the C<E<lt> HTML E<gt>> tag and C<E<lt> BODY E<gt>> element
 may not yet have been emitted if this is an error on the page header
 template.>
 
@@ -121,9 +127,9 @@ B<Note:>
 
 =over
 
-=item
+=item *
 
-I<Since it proved a valuable debuging aid, the function has been modified
+I<Since it proved a valuable debugging aid, the function has been modified
 so that it can be used very early in LXR initialisation.
 Variable C<$HTMLheadOK> tells if the "standard" header part of the
 page has already been sent to screen.
@@ -145,6 +151,9 @@ sub warning {
 	my $c = join(', line ', (caller)[ 0, 2 ]);
 	print(STDERR '[', scalar(localtime), "] warning: $c: $msg\n");
 	if ($wwwdebug) {
+		if (!$HTTP_inited) {
+			minimal_http_headers();
+		}
 		if (!$HTMLheadOK) {
 			print '<html><head><title>No LXR Page Header Warning!</title>', "\n";
 			print '<base href="', $HTTP->{'host_access'}, $HTTP->{'script_path'}, "/\">\n";
@@ -171,7 +180,9 @@ issues an error message and quits.
 
 =over
 
-=item 1 C<$msg>
+=item 1
+
+C<$msg>
 
 a I<string> containing the message
 
@@ -185,7 +196,7 @@ The message is printed both on STDERR and in the HTML stream.
 If variable C<$HTTP_inited> is not set,
 HTTP standard headers have not yet been emitted.
 In this case, minimal headers and HTML initial elements
-(start of stream, C<E<lt>HEADE<gt>> element and start of body)
+(start of stream, C<E<lt> HEAD E<gt>> element and start of body)
 are printed before the message
 and the HTML page is properly closed.
 
@@ -196,7 +207,7 @@ B<Note>:
 =item
 
 I<The message may be emitted after the final closing
-C<&lt;/HTMLE<gt>> tag if some regular HTML precedes the call
+C<&lt; /HTML E<gt>> tag if some regular HTML precedes the call
 to this subroutine.
 This is not HTML-compliant.
 Some browsers may complain.>
@@ -215,7 +226,7 @@ sub fatal {
 	# If HTTP is not yet initialised, emit a minimal set of headers
 	if ($wwwdebug) {
 		if (!$HTTP_inited) {
-			httpminimal();
+			minimal_http_headers();
 			print '<html><head><title>LXR Fatal Error!</title>', "\n";
 			print '<base href="', $HTTP->{'host_access'}, $HTTP->{'script_path'}, "/\">\n";
 		# Next line in the hope situation is not too bad
@@ -244,6 +255,133 @@ Function C<tmpcounter> returns a unique id for numbering temporary files.
 
 sub tmpcounter {
 	return $tmpcounter++;
+}
+
+
+#######################################
+#
+#	Useful general purpose functions
+#
+
+
+=head2 C<_edittime ($thetime)>
+
+Function C<_edittime>  returns a human-readable date/time in a string.
+
+=over
+
+=item 1
+
+C<$thetime>
+
+an I<integer> containing an UTC time in seconds since the epoch
+
+=back
+
+=cut
+
+sub _edittime {
+	my ($thetime) = @_;
+
+	if (0 <= index($thetime, ':')) { # Was a formatted string provided?
+		return $thetime;
+	} else {
+		my @t = gmtime($thetime);
+		my ($sec, $min, $hour, $mday, $mon, $year) = @t;
+		return sprintf(
+			'%04d-%02d-%02d %02d:%02d:%02d',
+			$year + 1900,
+			$mon + 1, $mday, $hour, $min, $sec
+		);
+	}
+}
+
+
+=head2 C<indexstate ($who)>
+
+Function C<indexstate> returns the most recent indexation time for the current
+tree or 0 if it is not indexed yet, -1 if indexing crashed,
+-2 if indexing is in progress.
+
+=over
+
+=item 1
+
+C<$who>
+
+a I<string> containing the main script name
+(used to avoid to retrieve records unrelated to present script,
+mainly in the I<perf> case)
+
+=back
+
+=head3 Algorithm
+
+The I<times> table records pertaining to the current version of
+the tree are read in: first the global "in-progress" sentinel record,
+then either the I<genxref>'s free-text indexing or declaration parsing
+dates.
+
+If the "in-progress" record is still there,
+I<genxref> is still working or crashed (depending on the sign of end time).
+
+If no date record was retrieved, the tree has not been indexed.
+Otherwise, the termination time of the usage collection step is returned.
+Incremental indexing takes precedence over full reindexing
+because incremental times are erased when full reindexation takes place.
+
+=cut
+
+sub indexstate {
+	my ($who) = @_;
+	my (@milestones_f, @milestones_i);
+
+	my ($starttime, $endtime)
+		= $index->getperformance('', 0, '');	# indexing in progress flag
+
+	if	(	'perf' eq $who
+		&&	defined($starttime)
+		) {
+		if (0 == $endtime) {
+			return (-2, $starttime);	# still in progress
+		}
+		if (0 > $endtime) {
+			return (-1, $starttime, -$endtime);	# crashed
+		}
+	}
+
+	if ('search' eq $who) {
+		$who = 'T';
+	} else {
+		$who = 'U';
+	}
+	@milestones_f = $index->getperformance($releaseid, 1, $who);	# full indexing
+	@milestones_i = $index->getperformance($releaseid, 0, $who);	# incremental indexing
+	if	(	$#milestones_f < 0
+		&&	$#milestones_i < 0
+		) {
+		if	(defined($starttime)) {
+			if (0 == $endtime) {
+				return (-2, $starttime);	# still in progress
+			}
+			if (0 > $endtime) {
+				return (-1, $starttime, -$endtime);	# crashed
+			}
+		}
+		return 0;	# not indexed
+	}
+	my $indextime = $milestones_i[1] ? $milestones_i[1] : $milestones_f[1];
+	if	(	0 == $indextime
+		&&	defined($starttime)
+		) {
+		if (0 == $endtime) {
+			return (-2, $starttime);	# still in progress
+		}
+		if (0 > $endtime) {
+			return (-1, $starttime, -$endtime);	# crashed
+		}
+	}
+	return $indextime;
 }
 
 
@@ -286,7 +424,9 @@ as the query part of an URL.
 
 =over
 
-=item 1 C<@args>
+=item 1
+
+C<@args>
 
 an I<array> containing "key=value" elements
 
@@ -330,29 +470,39 @@ sub urlargs {
 
 =head2 C<fileref ($desc, $css, $path, $line, @args)>
 
-Function C<fileref> returns an C<E<lt>AE<gt>> link to a specific line
+Function C<fileref> returns an C<E<lt> A E<gt>> link to a specific line
 of a source file.
 
 =over
 
-=item 1 C<$desc>
+=item 1
+
+C<$desc>
 
 a I<string> for the user-visible part of the link,
 usually the file name
 
-=item 1 C<$css>
+=item 2
+
+C<$css>
 
 a I<string> containing the CSS class for the link
 
-=item 1 C<$path>
+=item 3
+
+C<$path>
 
 a I<string> containing HTML path to the source file
 
-=item 1 C<$line>
+=item 4
+
+C<$line>
 
 an I<integer> containing the line number to reference (or void)
 
-=item 1 C<@args>
+=item 5
+
+C<@args>
 
 an I<array> containing "key=value" elements
 
@@ -362,15 +512,15 @@ B<Notes:>
 
 =over
 
-=item 1 All non alphanumeric characters in C<$path> are URL-quoted
+=item * I<All non alphanumeric characters in C<$path> are URL-quoted
 to avoid conflicts between unconstrained file name and URL reserved
-characters.
+characters.>
 
-=item 1 Since line anchor ids in LXR are at least 4 characters in length,
-the line number is eventually extended with zeros on the left.
+=item * I<Since line anchor ids in LXR are at least 4 characters in length,
+the line number is eventually extended with zeros on the left.>
 
-=item 1 The @args argument is used to pass state and makes use of sub
-C<urlargs>.
+=item * I<The @args argument is used to pass state and makes use of sub
+C<urlargs>.>
 
 =back
 
@@ -409,25 +559,33 @@ sub fileref {
 
 =head2 C<diffref ($desc, $css, $path, @args)>
 
-Function C<diffref> returns an C<E<lt>AE<gt>> link for the first
+Function C<diffref> returns an C<E<lt> A E<gt>> link for the first
 step of difference display selection.
 
 =over
 
-=item 1 C<$desc>
+=item 1
+
+C<$desc>
 
 a I<string> for the user-visible part of the link,
 usually the file name
 
-=item 1 C<$css>
+=item 2
+
+C<$css>
 
 a I<string> containing the CSS class for the link
 
-=item 1 C<$path>
+=item 3
+
+C<$path>
 
 a I<string> containing the HTML path to the source file
 
-=item 1 C<@args>
+=item 4
+
+C<@args>
 
 an I<array> containing "key=value" elements
 
@@ -468,25 +626,33 @@ sub diffref {
 
 =head2 C<idref ($desc, $css, $id, @args)>
 
-Function C<idref> returns an C<E<lt>AE<gt>> link to the cross
+Function C<idref> returns an C<E<lt> A E<gt>> link to the cross
 reference list of an identifier.
 
 =over
 
-=item 1 C<$desc>
+=item 1
+
+C<$desc>
 
 a I<string> for the user-visible part of the link,
 usually the identifier
 
-=item 1 C<$css>
+=item 2
+
+C<$css>
 
 a I<string> containing the CSS class for the link
 
-=item 1 C<$id>
+=item 3
+
+C<$id>
 
 a I<string> containing the name of the identifier to search
 
-=item 1 C<@args>
+=item 4
+
+C<@args>
 
 an I<array> containing "key=value" elements
 
@@ -524,25 +690,33 @@ sub idref {
 
 =head2 C<incref ($name, $css, $file, @paths)>
 
-Function C<incref> returns an C<E<lt>AE<gt>> link to an C<include>d
+Function C<incref> returns an C<E<lt> A E<gt>> link to an C<include>d
 file or C<undef> if the file is unknown.
 
 =over
 
-=item 1 C<$name>
+=item 1
+
+C<$name>
 
 a I<string> for the user-visible part of the link,
 usually the file name
 
-=item 1 C<$css>
+=item 2
+
+C<$css>
 
 a I<string> containing the CSS class for the link
 
-=item 1 C<$file>
+=item 3
+
+C<$file>
 
 a I<string> containing the HTML path to the include'd file
 
-=item 1 C<@paths>
+=item 4
+
+C<@paths>
 
 an I<array> containing a list of base directories to search for the file
 
@@ -550,7 +724,7 @@ an I<array> containing a list of base directories to search for the file
 
 If the include'd file does not exist (as determined by sub C<incfindfile>),
 the function returns C<undef>.
-Otherwise, it returns an E<lt>aE<gt> link as computed by sub C<fileref>.
+Otherwise, it returns an E<lt> A E<gt> link as computed by sub C<fileref>.
 
 =cut
 
@@ -580,7 +754,9 @@ of a URL-quote.
 
 =over
 
-=item 1 C<$name>
+=item 1
+
+C<$name>
 
 a I<string> to URL-unquote
 
@@ -606,7 +782,9 @@ Function C<http_encode> returns its argument URL-quoted.
 
 =over
 
-=item 1 C<$name>
+=item 1
+
+C<$name>
 
 a I<string> to URL-quote
 
@@ -628,7 +806,9 @@ access to files or directories.
 
 =over
 
-=item 1 C<$node>
+=item 1
+
+C<$node>
 
 a I<string> for the path to fix
 
@@ -641,17 +821,17 @@ Also C</./> and all repeating C</> are replaced by a single slash.
 The OS will then be presented only "canonical" paths without access
 computation, minimizing the risk of unwanted access.
 
-B<Note:>
+B<Caution!>
 
 =over
 
-=item
+=item *
 
-Caution! Any use of this sub before full LXR context initialisation
+I< Any use of this sub before full LXR context initialisation
 (i.e. before return from sum C<httpinit>) is doomed to fail
 because the test for directory type needs a proper value in
 C<$releaseid>. This failure is invisible: it does not lead to
-run-time error, it just returns a non-sensical status.
+run-time error, it just returns a non-sensical status.>
 
 =back
 
@@ -670,61 +850,76 @@ sub fixpaths {
 }
 
 
-=head2 C<httpminimal ()>
+=head2 C<minimal_http_headers ()>
 
-Function C<printhttp> ouputs minimal HTTP headers.
+Function C<minimal_http_headers> ouputs minimal HTTP headers
+for emergency situation during early initialisation.
 
 =cut
 
-sub httpminimal {
+sub minimal_http_headers {
 	print 'Content-Type: text/html; charset=utf-8', "\n";
 	#Since this a transient error, don't keep it in cache
-	print 'Expires: Thu, 01 Jan 1970 00:00:00 GMT', "\n";
+	print 'Cache-Control: no-cache', "\n";
 	print "\n";
 	$HTTP_inited = 1;
 }
 
 
-=head2 C<printhttp ()>
+=head2 C<std_http_headers ($who)>
 
-Function C<printhttp> ouputs the HTTP headers.
+Function C<std_http_headers> ouputs the "expected" HTTP headers
+and a blank line to switch to content (body) mode.
 
-Presently, only a Last-Modified and a Content-Type header are output.
+=over
+
+=item 1
+
+C<$who>
+
+an optional I<string> containing the main script name
+
+=back
+
+Presently, only a Last-Modified and a Content-Type headers are output.
+
+If C<$who> is undefined, current time is used in the Last-Modified header
+which is an elegant way to tell the browser to refresh its cache.
+This is useful for "dynamic" views like I<perf> or I<showconfig>.
 
 =cut
 
-sub printhttp {
+sub std_http_headers {
+	my ($who) = @_;
+	my $time;
 
-	# Print out a Last-Modified date that is the larger of: the
-	# underlying file that we are presenting (passed in as an
-	# argument to this function) and the configuration file lxr.conf.
-	# If we can't stat either of them, don't print out a L-M header.
-	# (Note that this stats lxr.conf but not lxr/lib/LXR/Common.pm.
-	# Oh well, I can live with that I guess...)	-- jwz, 16-Jun-98
+	# Print out a Last-Modified date that is the larger of:
+	#	- the underlying file that we are presenting
+	#	- the configuration file lxr.conf
+	#	- last indexation time
+	#	- optionally, indexation time for this file
+	# ajl-150813: this a new attempt to make smart use of Last-Modified header
+	#	in the hope to eradicate frequent "did not send HTTP headers" warning
+	#	in Apache log (seems to occur after code is modified or page content
+	#	conflicts with some cache on the way).
+	# For prior implementation, see git history; there has been many hesitations
+	# about it.
 
-	# Made it stat all currently loaded modules.  -- agg.
-
-	my $time = $files->getfiletime($pathname, $releaseid);
-	my $time2 = (stat($config->{'confpath'}))[9];
-	$time = $time2 if !defined $time || $time2 > $time;
-
-	# Remove this to see if we get a speed increase by not stating all
-	# the modules.  Since for most sites the modules change rarely,
-	# this is a big hit for each access.
-
-	# 	my %mods = ('main' => $0, %INC);
-	# 	my ($mod, $path);
-	# 	while (($mod, $path) = each %mods) {
-	# 		$mod  =~ s/.pm$//;
-	# 		$mod  =~ s|/|::|g;
-	# 		$path =~ s|/+|/|g;
-
-	# 		no strict 'refs';
-	# 		next unless $ {$mod.'::CVSID'};
-
-	# 		$time2 = (stat($path))[9];
-	# 		$time = $time2 if $time2 > $time;
-	# 	}
+	if (defined $who) {
+		$time = $files->getfiletime($pathname, $releaseid);
+		my $time2 = (stat($config->{'confpath'}))[9];
+		$time = $time2 if !defined $time || $time2 > $time;
+		($time2) = indexstate($who);
+		$time = $time2 if $time2 > $time;
+		if ('/' ne substr($pathname, -1)) {
+			$time2 = $index->filetimestamp	( $pathname
+											, $files->filerev($pathname, $releaseid)
+											);
+			$time = $time2 if $time2 > $time;
+		}
+	} else {
+		$time = time();
+	}
 
 	if ($time > 0) {
 		my ($sec, $min, $hour, $mday, $mon, $year, $wday) = gmtime($time);
@@ -781,13 +976,21 @@ invocation to the other. The URL (query) arguments are spread into
 
 =over
 
-=item 1 -none-: standard C<'variables'>
+=item *
 
-=item 1 exclamation mark (C<!>): override C<'variables'> value
+-none-: standard C<'variables'>
 
-=item 1 tilde (C<~>): difference C<'variables'>
+=item *
 
-=item 1 underscore (C<_>): LXR operational parameter
+exclamation mark (C<!>): override C<'variables'> value
+
+=item *
+
+tilde (C<~>): difference C<'variables'>
+
+=item *
+
+underscore (C<_>): LXR operational parameter
 
 =back
 
@@ -799,6 +1002,7 @@ sub httpinit {
 	$SIG{__WARN__} = \&warning;
 	$SIG{__DIE__}  = \&fatal;
 	$HTTP_inited = undef;
+	$HTMLheadOK = undef;
 	my $olddebug = $wwwdebug;
 	$wwwdebug = 1;	# Display something for early errors
 					# instead of leaving user with a blank screen
@@ -862,7 +1066,7 @@ sub httpinit {
 						, $script_path
 						, $HTTP->{'path_root'}
 						);
-		httpminimal;
+		minimal_http_headers;
 		LXR::Template::makeerrorpage('htmlfatal');
 	# There is a race condition under thttpd between STDOUT and STDERR
 	# causing debug information (sent to STDOUT) to be printed before
@@ -923,7 +1127,6 @@ sub httpinit {
 	$pathname   =~ m/(.*)/;
 	$pathname   = $1;	# untaint for future use
 
-	printhttp;
 	$wwwdebug = $olddebug;	# Safe now
 }
 
@@ -935,7 +1138,9 @@ otherwise the default value for variable C<'v'>.
 
 =over
 
-=item 1 C<$releaseid>
+=item 1
+
+C<$releaseid>
 
 a I<string> containing the release (version) to check
 
@@ -947,19 +1152,20 @@ B<Note:>
 
 =item
 
-This filtering breaks with CVS if a file is not targeted
-i.e. directory listing or identifier query.
+I<This filtering breaks with CVS if a file is not targeted
+i.e. directory listing or identifier query.>
 
-For a directory, the default release is not a pain, since it is
+I<For a directory, the default release is not a pain, since it is
 easy to change it to the desired one as soon as a file is accessed.
 The provided release is however kept for the case where directory
 display comes from a link in a file and user then jumps to another
 file in the directory.
-It is assumed that usually user wants both files with same version.  
+It is assumed that usually user wants both files with same version.>
 
-For identifier query, the provided release MUST be kept, even if it
-does not exist, since there is no way in I<ident> to set a
-version (all links would then point to default version).
+I<For identifier query, under some VCS, the provided release could be
+reverted to the default one if the eventual file in the query string
+does not exist in this version It is recommended to submit user queries
+(as opposed to those from a link in a source) without path info.>
 
 =back
 
@@ -971,13 +1177,21 @@ sub clean_release {
 	if	(	!$files->isa('LXR::Files::CVS')
 		||	substr($pathname, -1) ne '/'
 		) {
-		my @rels = $config->varrange('v');
-		my %test;
-		@test{@rels} = undef;
-
-		if(!exists $test{$releaseid}) {
-			$releaseid = $config->vardefault('v');
+# ajl 20160116 - which is faster?
+#	Sequential scan through versions, but no hash construction
+#	average: half the number of versions
+		foreach ($config->varrange('v')) {
+			return $releaseid if $_ eq $releaseid;
 		}
+		$releaseid = $config->vardefault('v');
+#	Direct access through hash, with cost of building hash
+# 		my @rels = $config->varrange('v');
+# 		my %test;
+# 		@test{@rels} = undef;
+#
+# 		if(!exists $test{$releaseid}) {
+# 			$releaseid = $config->vardefault('v');
+# 		}
 	}
 	return $releaseid;
 }
@@ -990,20 +1204,22 @@ characters.
 
 =over
 
-=item 1 C<$id>
+=item 1
+
+C<$id>
 
 a I<string> representing the identifier
 
 =back
 
-B<Caveat:>
+B<Caveat!>
 
 =over
 
 =item
 
-When adding new languages, check that the definition of "unusual" in
-this sub does not conflict with the lexical form of identifiers.
+I<When adding new languages, check that the definition of "unusual" in
+this sub does not conflict with the lexical form of identifiers.>
 
 =back
 
@@ -1029,7 +1245,9 @@ good characters.
 
 =over
 
-=item 1 C<$path>
+=item 1
+
+C<$path>
 
 a I<string> containing the path to check
 
@@ -1044,10 +1262,10 @@ B<Note:>
 
 =item
 
-Is this really necessary since it restricts the user choice of
+I<Is this really necessary since it restricts the user choice of
 filenames, even if the set covers the common needs?
 All is needed to protect against malicious attacks is to "quote"
-HTML reserved characters.
+HTML reserved characters.>
 
 =back
 

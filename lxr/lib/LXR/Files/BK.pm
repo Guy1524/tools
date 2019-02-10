@@ -1,8 +1,6 @@
 # -*- tab-width: 4 -*-
 ###############################################
 #
-# $Id: BK.pm,v 1.13 2013/12/03 13:38:23 ajlittoz Exp $
-
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 2 of the License, or
@@ -16,7 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
-
+#
 ###############################################
 
 =head1 BK module
@@ -35,7 +33,7 @@ B<Caveat:>
 
 As BitKeeper is proprietary software since 2005, this package is
 in the state it reached at that date, apart from commenting,
-sorting the methods to match Files.pm order, removal of C<getfile>
+sorting the methods to match I<Files.pm> order, removal of C<getfile>
 (which is abstract enough to be coded in the super class).
 
 =back
@@ -45,8 +43,6 @@ Andre J. Littoz - April 2012
 =cut
 
 package LXR::Files::BK;
-
-$CVSID = '$Id: BK.pm,v 1.13 2013/12/03 13:38:23 ajlittoz Exp $ ';
 
 use strict;
 use File::Spec;
@@ -96,7 +92,7 @@ sub getdir {
 		my ($path, $node) = $_ =~ m!(.*/)([^/]+)$!;
 		!$self->_ignorefiles($path, $node);
 			} @files;
-	return (sort(@dirs), sort(@files));
+	return sort({lc($a) cmp lc($b)} @dirs), sort {lc($a) cmp lc($b)} @files;
 }
 
 sub getannotations {

@@ -3,6 +3,242 @@ which could impact your existing trees.
 
 If they result in an incompatibility, you must reindex your tree.
 
+        =========================
+        LXR 2.3.3  -->  LXR 2.3.4
+        =========================
+
+Bug fix release.
+
+Lang.pm
+-------
+fix for an endless loop case on include-like source statements when a
+malformed path is submitted
+
+        =========================
+        LXR 2.3.2  -->  LXR 2.3.3
+        =========================
+
+Bug fix release.
+
+Apache web server
+------
+event MPM worker is now installed and enabled by default. It was not handled
+by LXR, resulting in incorrect initialisation. This module is also not
+compatible with mod_perl, needing fall back to pure CGI processing.
+
+genxref
+-------
+A bug caused recursive inclusion of glimpse indexing DBs into its private
+directory, resulting in uncontrolled growth of indexing directory.
+
+        =========================
+        LXR 2.3.1  -->  LXR 2.3.2
+        =========================
+
+Bug fix release.
+
+Support for language parsers (Lang.pm)
+----------------------------
+Under some circumstances, language parsers pass to "include" suport routine
+non-sanitised arguments causing an infinite loop when trying to hyperlink
+elements of a path. This is frequently the case with Python.
+
+        =========================
+        LXR 2.3.0  -->  LXR 2.3.1
+        =========================
+
+Bug fix release.
+Vulnerability JVN#7258938 was not fully fixed, done in 2.3.1.
+
+        =========================
+        LXR 2.2.1  -->  LXR 2.3.0
+        =========================
+
+Feature release, vulnerability fixed, bugs fixed.
+Manual slightly updated.
+
+Operational vulnerability (IMPORTANT)
+-------------------------
+Since release 1.0.0, a carefully crafted search string may be used to
+execute arbitrary shell commands on the server, no matter which search
+engine you installed.
+If your LXR server is accessible from the internet, you are urged to
+update to protect yourself. This can be done without the need to reindex
+the tree when there is no modification. Just save your lxr.conf and
+custom.d, substitute the new LXR root directory content, then restore
+lxr.conf and custom.d/. For more information, see INSTALL.
+
+search
+------
+May be enabled during configuration to allow free-text search when tree
+is stored in a source control management system (git, svn, hg, CVS).
+
+Python language
+---------------
+Improved handling of from/import statement
+
+        =========================
+        LXR 2.2.0  -->  LXR 2.2.1
+        =========================
+
+Bug fix release, no change needed in manuals.
+
+configure-lxr.pl
+----------------
+2 typos in an access key to the DB user/password dictionary
+1 semicolon missing between two statements
+1 mispelled variable (users instead of dbusersdict)
+
+templates/Apache/htaccess-generic
+---------------------------------
+New MPM module Event selected by default in Ubuntu distros
+whereas Prefork or Worker expected, resulting in no initialisation at all
+Fix by testing for Prefork only and initialise all others the same
+
+        =======================
+        LXR 2.1.0  -->  LXR 2.2
+        =======================
+
+Feature release, bugs fixed, manual changed.
+
+Configuration
+-------------
+Fully revised with much more checks, individual DB SQL saved
+
+genxref
+-------
+New -T option to suppress trace log
+Purge strategy changed to DB disposal and recreation when possible (much
+faster than deleting from the tables)
+Without --reindexall, Glimpse indexation is now incremental
+Glimpse indexation "offline" to minimize downtime of LXR server with quick
+index DB switch at end
+Statistics about time spent in the various sub-steps recorded in the DB
+(see perf below)
+
+recreate.db
+-----------
+Produces individual scripts capable of upgrading DB schema without losing
+contents in addition to the usual initdb.sh
+
+C# language parser added
+-----------
+
+New script perf to display indexation performance
+           ----
+Implies modifications to DB schema !!!
+												=> DB fix before reindexing
+
+search
+------
+SWISH-E results sorted by filename instead of "relevancy"
+
+Internal
+--------
+DB interface modified such that access is guaranteed read-only while browsing
+
+        =======================
+        LXR 2.0.3  -->  LXR 2.1
+        =======================
+
+Feature release, bugs fixed, no change in manuals.
+
+Tcl language parser added
+------------
+
+source
+------
+Fix author's name truncation (when source file comes from a VCS) to better
+detect character boundary (inluding diacritics), but diff still not adjusted
+Sort files case-insensitively in directory listing as this seems more useful
+to users
+Improve non-text file screening to avoid UTF-8 fatal error
+
+DB backends (suggested by Juraj Variny)
+-----------
+Index usages table on symbol and file (instead of only symbol) to improve
+performance
+Add table optimisation transaction at end of DB loading
+
+Git storage engine
+------------------
+Improved support and configuration
+
+genxref
+-------
+Make sure the version requested by --version= option exists, otherwise
+genxref would index an empty tree without error notification
+
+doc/HACKING
+-----------
+Fix incorrect link to extracted inline documentation on LXR SourceForge site
+
+doc/INSTALL, BUGS
+-----------------
+Change .shtml page URL to .php for LXR site
+
+lighttpd configuration
+----------------------
+LXR becomes a virtual host to facilitate integration with existing site
+Consistent configuration across URL style choices
+
+Apache configuration
+--------------------
+Configuration files have been made independent of 2.2/2.4 changes; upgrading or
+downgrading Apache version is even possible without reconfiguring
+
+Internal
+--------
+Version management converted to Git, causing changes to avoid errors about
+UTF-8 sanity when accessing files in binary mode (anyway, character set
+management is clumsy, if not faulty, and should be redesigned)
+ChangeLog no longer generated during release procedure (unless users request
+it, it will not be provided from now on)
+
+        =========================
+        LXR 2.0.2  -->  LXR 2.0.3
+        =========================
+
+Bug fix release, no feature added, no change in manuals.
+
+Debian-based compatibility (configuration wizard)
+--------------------------
+Debian-based distros (Ubuntu among these) appear to not set properly the
+working directory before launching LXR CGI scripts, resulting in various
+"file not found" errors. Configuration wizard is updated to use only
+OS-absolute paths.
+
+tree-server1.conf.part
+----------------------
+A syntax error prevents correct canonization of hostanme (relevant only in
+multiple-trees context with tree selection based on hostname)
+
+source
+------
+Attempt to truncate author's name (when source file comes from a VCS) on a
+valid UTF-8 character boundary. If 'encoding' parameter is not set to 'utf-8',
+you may see strange glyphs since the UTF-8 sequence is not transcoded.
+NOTE: truncation should be checked likewise in diff's htmljust() sub
+      but this has not been done and causes an incorrect glyph to be
+      displayed in the last pane column (if this character is not a pure
+      ASCII one).
+
+        =========================
+        LXR 2.0.1  -->  LXR 2.0.2
+        =========================
+
+Bug fix release, no feature added, no change in manuals.
+
+XSS protection
+--------------
+Characters & < > are always replaced by the HTML entity reference so that
+they can't be interpreted as an HTML tag
+
+Query state (URL arguments)
+-----------
+All user query criteria forwarded in the generated URL (useful mainly for
+ident and search)
+
         =======================
         LXR 2.0  -->  LXR 2.0.1
         =======================

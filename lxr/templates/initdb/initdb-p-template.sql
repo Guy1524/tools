@@ -1,8 +1,7 @@
 /*- -*- tab-width: 4 -*- -*/
 /*-
  *	SQL template for creating PostgreSQL tables
- *	(C) 2012-2013 A. Littoz
- *	$Id: initdb-p-template.sql,v 1.6 2013/11/17 15:33:55 ajlittoz Exp $
+ *	(C) 2012-2016 A. Littoz
  *
  *	This template is intended to be customised by Perl script
  *	initdb-config.pl which creates a ready to use shell script
@@ -10,7 +9,6 @@
  *		./custom.d/"customised result file name"
  *
  */
-
 /* **************************************************************
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,32 +24,60 @@
  * along with this program. If not, see <http://www.gnu.org/licences/>.
  * **************************************************************
 -*/
+###
+#
+#		*** PostgreSQL: %DB_name% ***
+#
+###
+/*- - - - - - - - - - - - - - - - - - - - - - - - -*/
+/*-						Part 1					  -*/
+/*- - - - - - - - - - - - - - - - - - - - - - - - -*/
+/*- ---===>   One-time initialisations   <===---  -*/
+/*-												  -*/
+/*- Do not repeat if multiple databases are       -*/
+/*- created with MySQL:                           -*/
+/*- - users are global, can't be duplicated       -*/
+/*- - - - - - - - - - - - - - - - - - - - - - - - -*/
+/*- - - - - - - - - - - - - - - - - - - - - - - - -*/
 /*-	The following shell command sequence will succeed even if an
 	individual command fails because the object exists or cannot
 	be created. This is the reason to have many commands instead
 	of a single psql invocation. -*/
 /*--*/
 /*--*/
-/*@IF	%_createglobals% */
-/*@XQT echo "Note: deletion of user below fails if it owns databases"*/
-/*@XQT echo "      and other objects."*/
-/*@XQT echo "      If you want to keep some databases, ignore the error"*/
-/*@XQT echo "      Otherwise, manually delete the objects"*/
-/*@XQT echo "      and relaunch this script."*/
+
+# NOTE: LXR does not manage PostgreSQL groups
+#       If you need them, manually configure your role properties
+
 /*@IF		%_dbuser%*/
-/*@XQT echo "*** PostgreSQL - Creating global user %DB_user%"*/
-/*@XQT dropuser   -U postgres %DB_user%*/
-/*@XQT createuser -U postgres %DB_user% -d -P -R -S*/
+/*@	XQT if [ ${NO_USER:-0} -eq 0 -a ${P_U_%DB_user%:-0} -eq 0 ] ; then */
+/*@	XQT echo "*** PostgreSQL - Creating global user %DB_user%"*/
+/*@	XQT echo "Note: deletion of user below fails if it owns databases"*/
+/*@	XQT echo "      and other objects."*/
+/*@	XQT echo "      If you want to keep some databases, ignore the error"*/
+/*@	XQT echo "      Otherwise, manually delete the objects"*/
+/*@	XQT echo "      and relaunch this script."*/
+/*@	XQT dropuser   -U postgres %DB_user%*/
+/*@	XQT createuser -U postgres %DB_user% -d -P -R -S*/
+/*@	XQT P_U_%DB_user%=1 */
+/*@	XQT fi */
 /*@ENDIF		%_dbuser%*/
-/*@ENDIF	%_createglobals% */
 /*@IF	%_dbuseroverride% */
-/*@XQT echo "*** PostgreSQL - Creating tree user %DB_tree_user%"*/
-/*@XQT dropuser   -U postgres %DB_tree_user%*/
-/*@XQT createuser -U postgres %DB_tree_user% -d -P -R -S*/
+/*@	XQT if [ ${NO_USER:-0} -eq 0 -a ${P_U_%DB_tree_user%:-0} -eq 0 ] ; then */
+/*@	XQT echo "*** PostgreSQL - Creating tree user %DB_tree_user%"*/
+/*@	XQT echo "Note: deletion of user below fails if it owns databases"*/
+/*@	XQT echo "      and other objects."*/
+/*@	XQT echo "      If you want to keep some databases, ignore the error"*/
+/*@	XQT echo "      Otherwise, manually delete the objects"*/
+/*@	XQT echo "      and relaunch this script."*/
+/*@	XQT dropuser   -U postgres %DB_tree_user%*/
+/*@	XQT createuser -U postgres %DB_tree_user% -d -P -R -S*/
+/*@	XQT P_U_%DB_tree_user%=1 */
+/*@	XQT fi */
+
 /*@ENDIF	%_dbuseroverride% */
 /*--*/
 /*--*/
-
 /*-	-------------------------------------------------------------
  *-		Note about createlang below
  *-	Prior to PostgreSQL release 9.0, the SQL driver is not loaded
@@ -62,95 +88,56 @@
 /*-		Create databases under LXR user
 		but it prevents from deleting user if databases exist
 -*//*- to activate place "- * /" at end of line (without spaces) -*/
-/*@IF	%_createglobals% && %_globaldb% */
-/*@XQT echo "*** PostgreSQL - Creating global database %DB_name%"*/
-/*@XQT dropdb     -U %DB_user% %DB_name%*/
-/*@XQT createdb   -U %DB_user% %DB_name%*/
-/*@XQT createlang -U %DB_user% -d %DB_name% plpgsql*/
-/*@ENDIF*/
-/*@IF	!%_globaldb% */
-/*@IF		%_dbuseroverride% */
-/*@XQT echo "*** PostgreSQL - Creating tree database %DB_name%"*/
-/*@XQT dropdb     -U %DB_tree_user% %DB_name%*/
-/*@XQT createdb   -U %DB_tree_user% %DB_name%*/
-/*@XQT createlang -U %DB_tree_user% -d %DB_name% plpgsql*/
-/*@ELSE*/
+/*@XQT if [ ${NO_DB:-0} -eq 0 -a ${P_DB_%DB_name%:-0} -eq 0 ] ; then */
+/*@IF	%_globaldb% */
+/*@	XQT echo "*** PostgreSQL - Creating global database %DB_name%"*/
+/*@	XQT dropdb     -U %DB_user% %DB_name%*/
+/*@	XQT createdb   -U %DB_user% %DB_name%*/
+/*@	XQT createlang -U %DB_user% -d %DB_name% plpgsql*/
+/*@ELSE */
+/*@	IF		%_dbuseroverride% */
+/*@		XQT echo "*** PostgreSQL - Creating tree database %DB_name%"*/
+/*@		XQT dropdb     -U %DB_tree_user% %DB_name%*/
+/*@		XQT createdb   -U %DB_tree_user% %DB_name%*/
+/*@		XQT createlang -U %DB_tree_user% -d %DB_name% plpgsql*/
+/*@	ELSE*/
 /*-	When an overriding username is already known, %_dbuseroverride% is left
  *	equal to zero to prevent generating a duplicate user. We must however
  *	test the existence of %DB_tree_user% to operate under the correct
  *	DB owner. -*/
-/*@XQT echo "*** PostgreSQL - Creating tree database %DB_name%"*/
-/*@IF			%DB_tree_user% */
-/*@XQT dropdb     -U %DB_tree_user% %DB_name%*/
-/*@XQT createdb   -U %DB_tree_user% %DB_name%*/
-/*@XQT createlang -U %DB_tree_user% -d %DB_name% plpgsql*/
-/*@ELSE*/
-/*@XQT dropdb     -U %DB_user% %DB_name%*/
-/*@XQT createdb   -U %DB_user% %DB_name%*/
-/*@XQT createlang -U %DB_user% -d %DB_name% plpgsql*/
-/*@ENDIF		%DB_tree_user% */
-/*@ENDIF	%_dbuseroverride% */
-/*@ENDIF !%_globaldb% */
+/*@		XQT echo "*** PostgreSQL - Creating tree database %DB_name%"*/
+/*@		IF			%DB_tree_user% */
+/*@			XQT dropdb     -U %DB_tree_user% %DB_name%*/
+/*@			XQT createdb   -U %DB_tree_user% %DB_name%*/
+/*@			XQT createlang -U %DB_tree_user% -d %DB_name% plpgsql*/
+/*@		ELSE*/
+/*@			XQT dropdb     -U %DB_user% %DB_name%*/
+/*@			XQT createdb   -U %DB_user% %DB_name%*/
+/*@			XQT createlang -U %DB_user% -d %DB_name% plpgsql*/
+/*@		ENDIF		%DB_tree_user% */
+/*@	ENDIF	%_dbuseroverride% */
+/*@ENDIF %_globaldb% */
 /*- end of disable/enable comment -*/
 /*--*/
 /*--*/
 /*-		Create databases under master user, usually postgres
 		may be restricted by site rules
 -*//*- to activate place "- * /" at end of line (without spaces)
-/*@IF	%_createglobals% && %_globaldb% */
-/*@XQT echo "*** PostgreSQL - Creating global database %DB_name%"*/
-/*@XQT dropdb     -U postgres %DB_name%*/
-/*@XQT createdb   -U postgres %DB_name%*/
-/*@XQT createlang -U postgres -d %DB_name% plpgsql*/
-/*@ENDIF*/
-/*@IF	!%_globaldb% */
-/*@XQT echo "*** PostgreSQL - Creating tree database %DB_name%"*/
-/*@XQT dropdb     -U postgres %DB_name%*/
-/*@XQT createdb   -U postgres %DB_name%*/
-/*@XQT createlang -U postgres -d %DB_name% plpgsql*/
-/*@ENDIF	!%_globaldb% */
+/*@IF	%_globaldb% */
+/*@	XQT echo "*** PostgreSQL - Creating global database %DB_name%"*/
+/*@	XQT dropdb     -U postgres %DB_name%*/
+/*@	XQT createdb   -U postgres %DB_name%*/
+/*@	XQT createlang -U postgres -d %DB_name% plpgsql*/
+/*@ELSE */
+/*@	XQT echo "*** PostgreSQL - Creating tree database %DB_name%"*/
+/*@	XQT dropdb     -U postgres %DB_name%*/
+/*@	XQT createdb   -U postgres %DB_name%*/
+/*@	XQT createlang -U postgres -d %DB_name% plpgsql*/
+/*@ENDIF	%_globaldb% */
 /*- end of disable/enable comment -*/
-/*--*/
-/*--*/
 
-/*@XQT echo "*** PostgreSQL - Configuring tables %DB_tbl_prefix% in database %DB_name%"*/
-/*-		Create databases under LXR user
- *		but it prevents from deleting user if databases exist
- *
- * Note:
- *	When an overriding username is already known, %_dbuseroverride% is left
- *	equal to zero to prevent generating a duplicate user. We must however
- *	test the existence of %DB_tree_user% to register the correct DB owner.
- *
--*//*- to activate place "- * /" at end of line (without spaces) -*/
-/*@IF	%_dbuseroverride% */
-/*@XQT psql -q -U %DB_tree_user% %DB_name% <<END_OF_TABLES*/
-/*@ELSE*/
-/*@IF		%DB_tree_user% */
-/*@XQT psql -q -U %DB_tree_user% %DB_name% <<END_OF_TABLES*/
-/*@ELSE*/
-/*@XQT psql -q -U %DB_user% %DB_name% <<END_OF_TABLES*/
-/*@ENDIF		%DB_tree_user% */
-/*@ENDIF	%_dbuseroverride% */
-/*- end of disable/enable comment -*/
-/*--*/
-/*--*/
-/*-		Create databases under master user, usually postgres
-		may be restricted by site rules
--*//*- to activate place "- * /" at end of line (without spaces)
-/*@XQT psql -q -U postgres %DB_name% <<END_OF_TABLES*/
-/*- end of disable/enable comment -*/
-/*-	NOTE:	a substantial performance gain resulted in
-  -			not using SERIAL autoincrementing fields, numbering
-  -			them with unique ids obtained from SEQUENCEs.
-  -			A further marginal gain was possible replacing the
-  -			sequences with user managed numbering.
-  -		The reasons was in the drastic decrease in COMMIT statements.
-  - CAUTION! Since sequence number update is committed to the DB with
-  -			low frequency, this optimisation is not compatible with
-  -			multiple DB writes, i.e. multi-threading or concurrent
-  -			table loading.
-  -*/
+/*@XQT echo "*** PostgreSQL - Erasing tables %DB_tbl_prefix% in database %DB_name%"*/
+/*@ADD initdb/psql-command.sql*/
 /*@IF 0 */
 /*- Built-in unique record id management -*/
 drop sequence if exists %DB_tbl_prefix%filenum;
@@ -164,27 +151,90 @@ create sequence %DB_tbl_prefix%typenum;
 /*@ADD initdb/unique-user-sequences.sql*/
 /*@ENDIF*/
 
-drop table    if exists %DB_tbl_prefix%files cascade;
-drop table    if exists %DB_tbl_prefix%symbols cascade;
-drop table    if exists %DB_tbl_prefix%definitions cascade;
-drop table    if exists %DB_tbl_prefix%releases cascade;
-drop table    if exists %DB_tbl_prefix%usages cascade;
-drop table    if exists %DB_tbl_prefix%status cascade;
-drop table    if exists %DB_tbl_prefix%langtypes cascade;
+drop table if exists %DB_tbl_prefix%files cascade;
+drop index if exists %DB_tbl_prefix%filelookup;
+drop table if exists %DB_tbl_prefix%symbols cascade;
+drop table if exists %DB_tbl_prefix%definitions cascade;
+drop index if exists %DB_tbl_prefix%i_definitions;
+drop table if exists %DB_tbl_prefix%releases cascade;
+drop table if exists %DB_tbl_prefix%usages cascade;
+drop index if exists %DB_tbl_prefix%i_usages;
+drop table if exists %DB_tbl_prefix%status cascade;
+drop table if exists %DB_tbl_prefix%langtypes cascade;
+drop table if exists %DB_tbl_prefix%times cascade;
+/*@XQT END_OF_SQL*/
+/*@XQT P_DB_%DB_name%=1 */
+/*@XQT fi */
+/*--*/
+/*-If we don't erase the database, we must erase the triggers
+ *- so that they can be recreated/replaced by the new version.
+ *- However, PostgreSQL requires the associated tables to exist
+ *- otherwise it issues an error.
+ *- Therefore we add an intermediaite step before dropping the
+ *- tables.
+-*/
+/*@XQT if [ ${NO_DB:-0} -ne 0 ] ; then */
+/*@XQT echo "*** PostgreSQL - Erasing triggers in database %DB_name%"*/
+/*@ADD initdb/psql-command.sql*/
+drop trigger if exists %DB_tbl_prefix%remove_definition
+	on %DB_tbl_prefix%definitions;
+drop trigger if exists %DB_tbl_prefix%add_release
+	on %DB_tbl_prefix%releases;
+drop trigger if exists %DB_tbl_prefix%remove_usage
+	on %DB_tbl_prefix%usages;
+drop trigger if exists %DB_tbl_prefix%remove_release
+	on %DB_tbl_prefix%releases;
+drop trigger if exists %DB_tbl_prefix%remove_file
+	on %DB_tbl_prefix%status;
+/*@XQT END_OF_SQL*/
+/*@XQT fi */
+/*--*/
+/*--*/
 
+/*- - - - - - - - - - - - - - - - - - - - - - - - -*/
+/*-						Part 2					  -*/
+/*- - - - - - - - - - - - - - - - - - - - - - - - -*/
+/*- ---===>    Tree database creation    <===---  -*/
+/*-												  -*/
+/*- Always to be done, this (re)creates the tables-*/
+/*- for the specific database.                    -*/
+/*- SQL is "safe".                                -*/
+/*- - - - - - - - - - - - - - - - - - - - - - - - -*/
+/*- - - - - - - - - - - - - - - - - - - - - - - - -*/
+/*@XQT echo "*** PostgreSQL - Configuring tables %DB_tbl_prefix% in database %DB_name%"*/
+/*-
+-*-	Special initialisation mandatory for PostgreSQL < 9.5
+-*- For higher versions, enable the "create index if not exists" statements.
+-*/
+/*@XQT if [ ${NO_DB:-0} -ne 0 -o ${P_DB_%DB_name%:-0} -ne 0 ] ; then */
+/*@ADD initdb/psql-command.sql*/
+drop index if exists %DB_tbl_prefix%filelookup;
+drop index if exists %DB_tbl_prefix%i_definitions;
+drop index if exists %DB_tbl_prefix%i_usages;
+/*@XQT END_OF_SQL*/
+/*@XQT fi*/
+/*- End of special initialisation -*/
 
+/*@ADD initdb/psql-command.sql*/
 /* Base version of files */
 /*	revision:	a VCS generated unique id for this version
 				of the file
  */
-create table %DB_tbl_prefix%files
+create table if not exists %DB_tbl_prefix%files
 	( fileid		int   not null primary key -- given by filenum
 	, filename		bytea not null
 	, revision		bytea not null
 	, constraint %DB_tbl_prefix%uk_files
 		unique		(filename, revision)
 	);
-create index %DB_tbl_prefix%filelookup
+/*- CAUTION! CAUTION! -*/
+/*- "if not exists" is valid only from PostgreSQL version 9.5 onwards.
+-*/
+create index
+/*@	IF 0 */
+	if not exists
+/*@	ENDIF */
+	%DB_tbl_prefix%filelookup
 	on %DB_tbl_prefix%files
 	using btree (filename);
 
@@ -198,7 +248,7 @@ create index %DB_tbl_prefix%filelookup
 	Though this table could be merged with 'files',
 	performance is improved with access to a very small item.
  */
-create table %DB_tbl_prefix%status
+create table if not exists %DB_tbl_prefix%status
 	( fileid	int      not null primary key
 	, relcount  int
 	, indextime int
@@ -233,8 +283,6 @@ create function %DB_tbl_prefix%erasefile()
 	$$;
 /*@ENDIF	%_shell% */
 
-drop trigger if exists %DB_tbl_prefix%remove_file
-	on %DB_tbl_prefix%status;
 create trigger %DB_tbl_prefix%remove_file
 	after delete on %DB_tbl_prefix%status
 	for each row
@@ -246,7 +294,7 @@ create trigger %DB_tbl_prefix%remove_file
 	fileid:		refers to base version
 	releaseid:	"public" release tag
  */
-create table %DB_tbl_prefix%releases
+create table if not exists %DB_tbl_prefix%releases
 	( fileid    int   not null
 	, releaseid bytea not null
 	, constraint %DB_tbl_prefix%pk_releases
@@ -284,8 +332,6 @@ create function %DB_tbl_prefix%increl()
 	$$;
 /*@ENDIF	%_shell% */
 
-drop trigger if exists %DB_tbl_prefix%add_release
-	on %DB_tbl_prefix%releases;
 create trigger %DB_tbl_prefix%add_release
 	after insert on %DB_tbl_prefix%releases
 	for each row
@@ -321,8 +367,6 @@ create function %DB_tbl_prefix%decrel()
 	$$;
 /*@ENDIF	%_shell% */
 
-drop trigger if exists %DB_tbl_prefix%remove_release
-	on %DB_tbl_prefix%releases;
 create trigger %DB_tbl_prefix%remove_release
 	after delete on %DB_tbl_prefix%releases
 	for each row
@@ -331,7 +375,7 @@ create trigger %DB_tbl_prefix%remove_release
 /* Types for a language*/
 /*	declaration:	provided by generic.conf
  */
-create table %DB_tbl_prefix%langtypes
+create table if not exists %DB_tbl_prefix%langtypes
 	( typeid		smallint     not null -- given by typenum
 	, langid		smallint     not null
 	, declaration	varchar(255) not null
@@ -344,7 +388,7 @@ create table %DB_tbl_prefix%langtypes
 	symcount:	number of definitions and usages for this name
 	symname:	symbol name
  */
-create table %DB_tbl_prefix%symbols
+create table if not exists %DB_tbl_prefix%symbols
 	( symid		int   not null primary key -- given by symnum
 	, symcount  int
 	, symname	bytea not null
@@ -421,7 +465,7 @@ create function %DB_tbl_prefix%decusage()
 	relid:	optional id of the englobing declaration
 			(refers to another symbol, not a definition)
  */
-create table %DB_tbl_prefix%definitions
+create table if not exists %DB_tbl_prefix%definitions
 	( symid		int      not null
 	, fileid	int      not null
 	, line		int      not null
@@ -442,9 +486,16 @@ create table %DB_tbl_prefix%definitions
 		foreign key (relid)
 		references %DB_tbl_prefix%symbols(symid)
 	);
-create index %DB_tbl_prefix%i_definitions
+/*- CAUTION! CAUTION! -*/
+/*- "if not exists" is valid only from PostgreSQL version 9.5 onwards.
+-*/
+create index
+/*@	IF 0 */
+	if not exists
+/*@	ENDIF */
+	%DB_tbl_prefix%i_definitions
 	on %DB_tbl_prefix%definitions
-	using btree (symid);
+	using btree (symid, fileid);
 
 /* The following trigger maintains correct symbol reference count
  * after definition deletion.
@@ -469,15 +520,13 @@ create index %DB_tbl_prefix%i_definitions
 -- /*@ELSE*/
 -- 	$$;
 -- /*@ENDIF	%_shell% */
-drop trigger if exists %DB_tbl_prefix%remove_definition
-	on %DB_tbl_prefix%definitions;
 create trigger %DB_tbl_prefix%remove_definition
 	after delete on %DB_tbl_prefix%definitions
 	for each row
 	execute procedure %DB_tbl_prefix%decdecl();
 
 /* Usages */
-create table %DB_tbl_prefix%usages
+create table if not exists %DB_tbl_prefix%usages
 	( symid		int not null
 	, fileid	int not null
 	, line		int not null
@@ -488,9 +537,16 @@ create table %DB_tbl_prefix%usages
 		foreign key (fileid)
 		references %DB_tbl_prefix%files(fileid)
 	);
-create index %DB_tbl_prefix%i_usages
+/*- CAUTION! CAUTION! -*/
+/*- "if not exists" is valid only from PostgreSQL version 9.5 onwards.
+-*/
+create index
+/*@	IF 0 */
+	if not exists
+/*@	ENDIF */
+	%DB_tbl_prefix%i_usages
 	on %DB_tbl_prefix%usages
-	using btree (symid);
+	using btree (symid, fileid);
 
 /* The following trigger maintains correct symbol reference count
  * after usage deletion.
@@ -512,12 +568,26 @@ create index %DB_tbl_prefix%i_usages
 -- /*@ELSE*/
 -- 	$$;
 -- /*@ENDIF	%_shell% */
-drop trigger if exists %DB_tbl_prefix%remove_usage
-	on %DB_tbl_prefix%usages;
 create trigger %DB_tbl_prefix%remove_usage
 	after delete on %DB_tbl_prefix%usages
 	for each row
 	execute procedure %DB_tbl_prefix%decusage();
+
+/* Statistics */
+/*	releaseid:	"public" release tag
+ *	reindex  :	reindex-all flag
+ *	stepname :	step name
+ *	starttime:	step start time
+ *	endtime  :	step end time
+ */
+drop table if exists %DB_tbl_prefix%times;
+create table %DB_tbl_prefix%times
+	( releaseid bytea
+	, reindex   int
+	, stepname  char(1)
+	, starttime int
+	, endtime   int
+	);
 
 /*
  *
@@ -529,5 +599,6 @@ grant select on %DB_tbl_prefix%releases    to public;
 grant select on %DB_tbl_prefix%usages      to public;
 grant select on %DB_tbl_prefix%status      to public;
 grant select on %DB_tbl_prefix%langtypes   to public;
-/*@XQT END_OF_TABLES*/
+grant select on %DB_tbl_prefix%times       to public;
+/*@XQT END_OF_SQL*/
 

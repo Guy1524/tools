@@ -1,3 +1,7 @@
+NOTE (Jan. 2016): This procedure is out-of-date as the main repository is
+                  now managed by Git. Script releasefromgit is a replacement
+                  for makerelease.pl.
+
 Instructions for releasing LXR
 
 The easiest way to make a release is to use the makerelease.pl script

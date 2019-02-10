@@ -1,8 +1,6 @@
 # -*- tab-width: 4 -*-
 ###############################################
 #
-# $Id: QuestionAnswer.pm,v 1.4 2013/11/07 16:35:52 ajlittoz Exp $
-#
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 2 of the License, or
@@ -18,8 +16,6 @@
 # Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 #
 ###############################################
-
-# $Id: QuestionAnswer.pm,v 1.4 2013/11/07 16:35:52 ajlittoz Exp $
 
 package QuestionAnswer;
 
@@ -115,9 +111,17 @@ sub get_user_choice {
 	#	Get answer from user and return a normalised one
 QLOOP:
 	while (1) {
+		my $multiline = "\n" eq substr($question, -1, 1);
+		if ($multiline) {
+			$question = substr($question, 0, -1);
+		}
 		print $question;
 		if (@choices) {
-			print " [${VTyellow}", join("${VTnorm}/${VTyellow}", @choices), "${VTnorm}]";
+			if ($multiline) {
+				print ":\n   ${VTyellow}", join("${VTnorm}\n   ${VTyellow}", @choices), "${VTnorm}\n";
+			} else {
+				print " [${VTyellow}", join("${VTnorm}/${VTyellow}", @choices), "${VTnorm}]";
+			}
 		}
 		print " ${VTslow}${VTyellow}>${VTnorm} ";
 		my $userentry = <STDIN>;

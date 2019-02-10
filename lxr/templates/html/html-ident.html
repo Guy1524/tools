@@ -1,5 +1,3 @@
-<!--$Id: html-ident.html,v 1.5 2013/09/04 15:22:42 ajlittoz Exp $ -->
-
 <!--				html-ident.html
 		A template to search for identifiers and
 		display the results of the search	-->
@@ -21,6 +19,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 -->
+$indexstate
 <h1>Identifier search</h1>
 <p>
 Type the full name of an identifier to look for 
@@ -38,8 +37,8 @@ extra <span class="identline identapprox">999</span> line numbers denote
 
 <form method="get" action="$varbtnaction">
 	<p>
-  $variables
-	<label>
+$variables{		<input type=hidden name="$varid" value="$varvalue">
+}	<label>
   <b>Identifier: </b>
 		<input	id="focus"
 				type="text"
@@ -58,10 +57,10 @@ extra <span class="identline identapprox">999</span> line numbers denote
 	<input type="hidden" name="_remember" value="1">
 	&nbsp;&nbsp;<input type="submit" value="Find">
 	</p>
-</form>  
-   
-<h2>Results for <span class="identident">$identifier</span></h2>
-$defs{	<h3>Definitions</h3>
+</form>
+<div $noquery>
+	<hr>
+$defs{	<h2>Definitions for <span class="identident">$identifier</span></h2>
 	<table class="identdef"> 
 		<tr>
 			<th class="identtype">Type</th>
@@ -83,7 +82,7 @@ $indexwarning{	<p class="error">
 One or more files may contain inaccurate references.
 	</p>
 }}
-$uses{	<h3>References:</h3>
+$uses{	<h2>References to <span class="identident">$identifier</span></h2>
 	<table class="identref">
 		<tr>
 			<th class="identfile">File</th>
@@ -102,3 +101,4 @@ $indexwarning{	<p class="error">
 One or more files may contain inaccurate references.
 	</p>
 }}
+</div>

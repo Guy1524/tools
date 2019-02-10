@@ -1,8 +1,6 @@
 # -*- tab-width: 4 -*-
 ###############################################
 #
-# $Id: Plain.pm,v 1.35 2013/11/07 17:58:48 ajlittoz Exp $
-
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 2 of the License, or
@@ -16,7 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
-
+#
 ###############################################
 
 =head1 Plain module
@@ -31,8 +29,6 @@ Methods are sorted in the same order as in the super-class.
 =cut
 
 package LXR::Files::Plain;
-
-$CVSID = '$Id: Plain.pm,v 1.35 2013/11/07 17:58:48 ajlittoz Exp $ ';
 
 use strict;
 use FileHandle;
@@ -74,7 +70,7 @@ sub getdir {
 	}
 	closedir(DIR);
 
-	return sort(@dirs), sort(@files);
+	return sort({lc($a) cmp lc($b)} @dirs), sort {lc($a) cmp lc($b)} @files;
 }
 
 #	There are no annotations in real files,
@@ -142,11 +138,15 @@ C<realfilename> returns the true original name of the file.
 
 =over
 
-=item 1 C<$pathname>
+=item 1
+
+C<$pathname>
 
 a I<string> containing the path relative to C<'sourceroot'>
 
-=item 1 C<$releaseid>
+=item 2
+
+C<$releaseid>
 
 the release (or version) in which C<$pathname> is expected to
 be found
@@ -164,8 +164,8 @@ B<Note:>
 
 =item
 
-If "standard" file copy is desired, comment out the method
-B<AND> C<releaserealfilename>.
+I<If "standard" file copy is desired, comment out the method
+B<AND> C<releaserealfilename>.>
 
 =back
 
@@ -184,7 +184,9 @@ C<releaserealfilename> protects againt file erasure.
 
 =over
 
-=item 1 C<$filename>
+=item 1
+
+C<$filename>
 
 a I<string> containing the filename
 
@@ -208,11 +210,15 @@ real full OS-absolute path.
 
 =over
 
-=item 1 C<$pathname>
+=item 1
+
+C<$pathname>
 
 a I<string> containing the path relative to C<'sourceroot'>
 
-=item 1 C<$releaseid>
+=item 2
+
+C<$releaseid>
 
 the release (or version) in which C<$pathname> is expected to
 be found
@@ -230,7 +236,7 @@ B<Note:>
 
 =item
 
-This function should not be used outside this module.
+I<This function should not be used outside this module.>
 
 =back
 
