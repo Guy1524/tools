@@ -495,11 +495,16 @@ sub Validate($)
   {
     if ($Item->GetIsNew() || $Item->GetIsModified())
     {
-      (my $ErrProperty, my $ErrMessage) = $Item->Validate();
-      if (defined($ErrMessage))
+      my ($ErrProperty, $ErrMessage) = $Item->Validate();
+      if (defined $ErrMessage)
       {
-        return ($Item->GetKey(), $ErrProperty, "$ErrMessage for " .
-                $self->GetItemName() . " " . $Item->GetFullKey());
+        my $Key = $Item->GetKey();
+        my $FullKey = $Item->GetFullKey();
+        if (defined $FullKey)
+        {
+          return ($Key, $ErrProperty, "$ErrMessage for ". $self->GetItemName() ." $FullKey");
+        }
+        return ($Key, $ErrProperty, "$ErrMessage for new ". $self->GetItemName() ." $Key");
       }
       if ($Item->GetIsNew())
       {
