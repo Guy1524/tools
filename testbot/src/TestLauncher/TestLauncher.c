@@ -1,3 +1,4 @@
+/* -*- Mode: C; c-basic-offset: 3; indent-tabs-mode: nil -*- */
 /*
  * Verifies that the dlls needed for the test are present.
  *
@@ -34,8 +35,8 @@ static const char *LocationFile;
 static unsigned LocationLine;
 static void _SetErrorLocation(const char* file, int line)
 {
-    LocationFile = file;
-    LocationLine = line;
+   LocationFile = file;
+   LocationLine = line;
 }
 
 #ifdef __GNUC__
