@@ -649,7 +649,7 @@ if ($OptRefresh)
     $VM->IdleSnapshot($BaseVM->IdleSnapshot ."_$VMLocale");
     $VM->Hostname($BaseVM->Hostname);
 
-    my $Description = $BaseVM->Description ." ". LocaleName($Suffix);
+    my $Description = $BaseVM->Description ." ". LocaleName($VMLocale);
     my $PropertyDescriptor = $VMs->GetPropertyDescriptorByName("Description");
     if ($PropertyDescriptor->GetMaxLength() < length($Description))
     {
