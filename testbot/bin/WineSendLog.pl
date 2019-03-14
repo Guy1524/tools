@@ -342,7 +342,7 @@ EOF
 
 Hi,
 
-While running your changed tests on Windows, I think I found new failures.
+While running your changed tests, I think I found new failures.
 Being a bot and all I'm not very good at pattern recognition, so I might be
 wrong, but could you please double-check?
 
