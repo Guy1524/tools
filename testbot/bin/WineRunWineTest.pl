@@ -423,7 +423,7 @@ if (defined $FileName)
   my $Dst = $Step->FileType eq "patch" ? "patch.diff" : $FileName;
   if (!$TA->SendFile($Step->GetFullFileName(), "staging/$Dst", 0))
   {
-    FatalTAError($TA, "Could send '$FileName' to the VM");
+    FatalTAError($TA, "Could not send '$FileName' to the VM");
   }
 }
 
