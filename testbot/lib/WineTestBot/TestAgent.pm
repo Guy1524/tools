@@ -3,7 +3,7 @@
 # to run scripts.
 #
 # Copyright 2009 Ge van Geldorp
-# Copyright 2012-2016 Francois Gouget
+# Copyright 2012-2019 Francois Gouget
 #
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
@@ -99,9 +99,7 @@ sub new($$$;$)
 
   my $self = {
     agenthost  => $Hostname,
-    host       => $Hostname,
     agentport  => $Port,
-    port       => $Port,
     connection => "$Hostname:$Port",
     ctimeout   => 20,
     cattempts  => 3,
@@ -112,9 +110,9 @@ sub new($$$;$)
     err        => undef};
   if ($Tunnel)
   {
-    $self->{host} = $Tunnel->{sshhost} || $Hostname;
-    $self->{port} = $Tunnel->{sshport} || 22;
-    $self->{connection} = "$self->{host}:$self->{port}:$self->{connection}";
+    $Tunnel->{sshhost} ||= $Hostname;
+    $Tunnel->{sshport} ||= 22;
+    $self->{connection} = "$Tunnel->{sshhost}:$Tunnel->{sshport}:$self->{connection}";
     $self->{tunnel} = $Tunnel;
   }
 
@@ -132,12 +130,8 @@ sub Disconnect($)
     # which will avoid undue delays.
     $self->{ssh}->disconnect();
     $self->{ssh} = undef;
-    $self->{nc} = undef;
-  }
-  if ($self->{sshfd})
-  {
-    close($self->{sshfd});
-    $self->{sshfd} = undef;
+    waitpid($self->{sshpid}, 0);
+    $self->{sshpid} = undef;
   }
   if ($self->{fd})
   {
@@ -208,39 +202,7 @@ sub _SetError($$$)
     $self->{err} = $Msg;
 
     # And disconnect on fatal errors since the connection is unusable anyway
-    if ($Level == $FATAL)
-    {
-      if ($self->{ssh})
-      {
-        # Try to capture the netcat exit code and error message as
-        # they may provide important clues as to what went wrong
-        my $rc = $self->{fd}->exit_status();
-        if ($rc)
-        {
-          my $ncerr;
-          eval
-          {
-            local $SIG{ALRM} = sub { die "timeout" };
-            alarm(2);
-            $self->{fd}->read($ncerr, 1024, 1);
-            alarm(0);
-          };
-          $ncerr = $rc if (!$ncerr);
-          $ncerr = "the \"$self->{nc}\" command returned $ncerr";
-          if ($self->{agentversion})
-          {
-            $self->{err} .= "\n$ncerr";
-          }
-          else
-          {
-            # The real issue is that we failed to connect so
-            # ignore the _RecvString('AgentVersion') error message
-            $self->{err} = "$ncerr ($self->{rpc})";
-          }
-        }
-      }
-      $self->Disconnect();
-    }
+    $self->Disconnect() if ($Level == $FATAL);
   }
   elsif (!$self->{err})
   {
@@ -886,8 +848,7 @@ if ($@)
 sub _ssherror($)
 {
   my ($self) = @_;
-  my @List = $self->{ssh}->error();
-  return $List[2];
+  return $self->{ssh}->error();
 }
 
 sub _Connect($)
@@ -908,102 +869,45 @@ sub _Connect($)
       $self->{deadline} = $self->{ctimeout} ? time() + $self->{ctimeout} : undef;
       $self->_SetAlarm();
 
-      $Step = "create_socket";
-      $self->{fd} = &$create_socket(PeerHost => $self->{host},
-                                    PeerPort => $self->{port},
-                                    Type => SOCK_STREAM);
-      if (!$self->{fd})
-      {
-        alarm(0);
-        $self->_SetError($FATAL, $!);
-        return; # out of eval
-      }
-
       if ($self->{tunnel})
       {
         # We are in fact connected to the SSH server.
         # Now forward that connection to the TestAgent server.
         $Step = "tunnel_connect";
-        $self->{sshfd} = $self->{fd};
-        $self->{fd} = undef;
 
-        require Net::SSH2;
-        $self->{ssh} = Net::SSH2->new();
-        $self->{ssh}->debug(1) if ($Debug > 1);
-
-        # Set up compression
-        $self->{ssh}->method('COMP_CS', 'zlib', 'none');
-        $self->{ssh}->method('COMP_SC', 'zlib', 'none');
-
-        if (!$self->{ssh}->connect($self->{sshfd}))
+        require Net::OpenSSH;
+        $Net::OpenSSH::debug = ~0 if ($Debug > 1);
+        $self->{ssh} = Net::OpenSSH->new($self->{tunnel}->{sshhost},
+                                         port => $self->{tunnel}->{sshport},
+                                         user => $self->{tunnel}->{username},
+                                         key_path => $self->{tunnel}->{privatekey},
+                                         batch_mode => 1);
+        if ($self->_ssherror())
         {
           alarm(0);
           $self->_SetError($FATAL, "Unable to connect to the SSH server: " . $self->_ssherror());
           return; # out of eval
         }
 
-        # Authenticate ourselves
-        $Step = "tunnel_auth";
-        my $Tunnel = $self->{tunnel};
-        my %AuthOptions=(username => $Tunnel->{username} || $ENV{USER});
-        foreach my $Key ("username", "password", "publickey", "privatekey",
-                         "hostname", "local_username")
-        {
-          $AuthOptions{$Key} = $Tunnel->{$Key} if (defined $Tunnel->{$Key});
-        }
-        # Old versions of Net::SSH2 won't automatically find DSA keys,
-        # and new ones still won't automatically find RSA ones.
-        if (defined $ENV{HOME} and !exists $AuthOptions{"privatekey"} and
-            !exists $AuthOptions{"publickey"})
-        {
-          foreach my $key ("id_dsa", "id_rsa")
-          {
-            if (-f "$ENV{HOME}/.ssh/$key" and -f "$ENV{HOME}/.ssh/$key.pub")
-            {
-              $AuthOptions{"privatekey"} = "$ENV{HOME}/.ssh/$key";
-              $AuthOptions{"publickey"} = "$ENV{HOME}/.ssh/$key.pub";
-              last;
-            }
-          }
-        }
-        # Interactive authentication makes no sense with automatic reconnects
-        $AuthOptions{interact} = 0;
-        if (!$self->{ssh}->auth(%AuthOptions))
-        {
-          alarm(0);
-          # auth() returns no error of any sort :-(
-          $self->_SetError($FATAL, "Unable to authenticate to the SSH server");
-          return; # out of eval
-        }
-
         $Step = "tunnel_channel";
-        $self->{fd} = $self->{ssh}->channel();
+        ($self->{fd}, $self->{sshpid}) = $self->{ssh}->open_tunnel($self->{agenthost}, $self->{agentport});
         if (!$self->{fd})
         {
           alarm(0);
           $self->_SetError($FATAL, "Unable to create the SSH channel: " . $self->_ssherror());
           return; # out of eval
         }
-
-        # Check that the agent hostname and port won't mess with quoting.
-        if ($self->{agenthost} !~ /^[-a-zA-Z0-9.]*$/ or
-            $self->{agentport} !~ /^[a-zA-Z0-9]*$/)
+      }
+      else
+      {
+        $Step = "create_socket";
+        $self->{fd} = &$create_socket(PeerHost => $self->{host},
+                                      PeerPort => $self->{port},
+                                      Type => SOCK_STREAM);
+        if (!$self->{fd})
         {
           alarm(0);
-          $self->_SetError($FATAL, "The agent hostname or port is invalid");
-          return; # out of eval
-        }
-
-        # Use netcat to forward the connection from the SSH server to the
-        # TestAgent server. Note that we won't know about netcat errors at
-        # this point.
-        $Step = "tunnel_netcat";
-        $self->{nc} = "nc -q0 '$self->{agenthost}' '$self->{agentport}'";
-        debug("Tunneling command: $self->{nc}\n");
-        if (!$self->{fd}->exec($self->{nc}))
-        {
-          alarm(0);
-          $self->_SetError($FATAL, "Unable to start netcat ($self->{rpc}): " . $self->_ssherror());
+          $self->_SetError($FATAL, $!);
           return; # out of eval
         }
       }
