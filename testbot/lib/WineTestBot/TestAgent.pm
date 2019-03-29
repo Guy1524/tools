@@ -900,8 +900,8 @@ sub _Connect($)
       else
       {
         $Step = "create_socket";
-        $self->{fd} = &$create_socket(PeerHost => $self->{host},
-                                      PeerPort => $self->{port},
+        $self->{fd} = &$create_socket(PeerHost => $self->{agenthost},
+                                      PeerPort => $self->{agentport},
                                       Type => SOCK_STREAM);
         if (!$self->{fd})
         {
