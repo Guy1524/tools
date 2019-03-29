@@ -413,6 +413,16 @@ elsif (!defined $TAError)
   $TAError = "An error occurred while retrieving the reconfig log: ". $TA->GetLastError();
 }
 
+# Report the reconfig errors even though they may have been caused by
+# TestAgent trouble.
+LogTaskError($ErrMessage) if (defined $ErrMessage);
+FatalTAError(undef, $TAError) if (defined $TAError);
+
+
+#
+# Grab the test executables and reference files
+#
+
 if ($NewStatus eq "completed")
 {
   use File::Copy;
@@ -427,7 +437,7 @@ if ($NewStatus eq "completed")
       }
       elsif (!defined $TAError)
       {
-        $TAError = "An error occurred while retrieving the $Bitness bit TestLauncher: ". $TA->GetLastError();
+        FatalTAError($TA, "An error occurred while retrieving the $Bitness bit TestLauncher");
       }
     }
   }
@@ -441,17 +451,12 @@ if ($NewStatus eq "completed")
     }
     elsif (!defined $TAError)
     {
-      $TAError = "An error occurred while retrieving '$TaskDir/$FileName': ". $TA->GetLastError();
+      FatalTAError($TA, "An error occurred while retrieving '$TaskDir/$FileName'");
     }
   }
 }
 
 $TA->Disconnect();
-
-# Report the reconfig errors even though they may have been caused by
-# TestAgent trouble.
-LogTaskError($ErrMessage) if (defined $ErrMessage);
-FatalTAError(undef, $TAError) if (defined $TAError);
 
 
 #
