@@ -1,0 +1,711 @@
+#!/bin/sh
+#
+# Restores a QEMU/LibVirt VM from backup.
+#
+# Copyright 2013-2019 Francois Gouget
+#
+# This library is free software; you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public
+# License as published by the Free Software Foundation; either
+# version 2.1 of the License, or (at your option) any later version.
+#
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with this library; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
+
+name0=`basename "$0"`
+
+etcdir="etc/libvirt/qemu"
+snapdir="var/lib/libvirt/qemu/snapshot"
+imgdir="var/lib/libvirt/images"
+
+
+#
+# Generic helpers
+#
+
+error()
+{
+    echo "$name0:error:" "$@" >&2
+}
+
+warning()
+{
+    echo "$name0:warning:" "$@" >&2
+}
+
+opt_dry_run=""
+opt_verbose=""
+dry_run()
+{
+    # Redirect to stderr to avoid issues with stdout redirects
+    [ -n "$opt_verbose$opt_dry_run" ] && echo "$@" >&2
+    if [ -z "$opt_dry_run" ]
+    then
+        "$@"
+    fi
+}
+
+
+#
+# Process the command line
+#
+
+check_opt_val()
+{
+    option="$1"
+    var="$2"
+    argc="$3"
+
+    if [ -n "$var" ]
+    then
+        error "$option can only be specified once"
+        usage=2 # but continue processing options
+    fi
+    if [ $argc -eq 0 ]
+    then
+        error "missing value for $option"
+        usage=2
+        return 1
+    fi
+    return 0
+}
+
+opt_borg=""
+opt_tar=""
+opt_src=""
+opt_vm=""
+opt_disk_only=""
+opt_extract_only=""
+opt_dir=""
+usage=""
+while [ $# -gt 0 ]
+do
+    arg="$1"
+    shift
+    case "$arg" in
+    --as)
+        if check_opt_val "$arg" "$opt_vm" $#
+        then
+            opt_vm="$1"
+            shift
+        fi
+        ;;
+    --disk-only)
+        opt_disk_only="1"
+        ;;
+    --extract-only)
+        opt_extract_only="1"
+        ;;
+    --dir)
+        if check_opt_val "$arg" "$opt_dir" $#
+        then
+            opt_dir="$1"
+            shift
+        fi
+        ;;
+    --verbose)
+        opt_verbose="1"
+        ;;
+    --dry-run)
+        opt_dry_run="1"
+        ;;
+    -\?|-h|--help)
+        usage=0
+        ;;
+    -*)
+        error "unknown option '$arg'"
+        usage=2
+        break
+        ;;
+    *::*)
+        if [ -n "$opt_src" ]
+        then
+            error "only one backup can be specified."
+            usage=2
+        fi
+        opt_src="$arg"
+        opt_borg="$opt_src"
+        ;;
+    *.bz2*)
+        if [ -n "$opt_src" ]
+        then
+            error "only one backup can be specified."
+            usage=2
+        fi
+        opt_src="$arg"
+        opt_tar="$opt_src"
+        ;;
+    *)
+        if [ -n "$opt_src" ]
+        then
+            error "only one backup can be specified."
+            usage=2
+        fi
+        opt_src="$arg"
+        [ -f "$opt_src" ] && opt_tar="$opt_src"
+        ;;
+    esac
+done
+
+if [ -z "$usage" ]
+then
+    if [ -z "$opt_extract_only" ]
+    then
+        if [ ! -d "/$etcdir"  -o ! -w "/$etcdir" -o \
+             ! -d "/$snapdir" -o ! -w "/$snapdir" -o \
+             ! -d "/$imgdir"  -o ! -w "/$imgdir" ]
+        then
+            error "one or more libvirt directory is missing or not writable. Use --extract-only to extract the VM in the current directory."
+            usage=2
+        fi
+    fi
+
+    if [ -n "$opt_borg" ]
+    then
+        opt_src=""
+        case "$opt_borg" in
+        *:/*) ;; # Remote repository
+        /*)   ;; # Absolute path
+        *)    opt_borg="`pwd`/$opt_borg" ;;
+        esac
+
+    elif [ -n "$opt_tar" ]
+    then
+        opt_src=""
+        opt_tar=`echo $opt_tar | sed -e 's/\.[0-9]*$//'`
+        if [ -f "$opt_tar.00" ]
+        then
+            opt_tar="$opt_tar.??"
+        elif [ ! -f "$opt_tar" ]
+        then
+            error "could not find the '$opt_tar' files"
+            usage=2
+        fi
+        case "$opt_tar" in
+        *\ *)
+            error "the backup filenames must not contain spaces."
+            usage=2
+            ;;
+        /*) ;;
+        *)  opt_tar="`pwd`/$opt_tar" ;;
+        esac
+
+    elif [ -n "$opt_src" ]
+    then
+        if [ ! -f "$opt_src/$name0.vm" ]
+        then
+            error "'$opt_src' is not a valid $name0 --extract-only directory"
+            usage=2
+        fi
+
+    else
+        error "you must specify a backup to restore."
+        usage=2
+    fi
+    if [ -n "$opt_disk_only" -a -n "$opt_extract_only" ]
+    then
+        error "--disk-only and --extract-only are mutually exclusive"
+        usage=2
+    elif [ -n "$opt_disk_only" -a -n "$opt_vm" ] &&
+       ! virsh --connect "$opt_connect" domstate "$opt_vm" >/dev/null
+    then
+        error "cannot replace the disk of the non-existent '$opt_vm' VM"
+        usage=2
+    fi
+    [ -n "$opt_connect" ] || opt_connect="qemu:///system"
+fi
+
+if [ -n "$usage" ]
+then
+    if [ "$usage" != "0" ]
+    then
+        error "try '$name0 --help' for more information"
+        exit $usage
+    fi
+    cat <<EOF
+Usage: $name0 [--as VMNAME] [--disk-only] [--extract-only] [--dir DIR]
+                 [--connect URI] [--dry-run] [--verbose] [--help]
+                 BORG|TAR|EXTRACTDIR
+
+Restores a VM from the specified backup files.
+This must be run as root on the VM host.
+
+Where:
+  BORG          The borg repository::archive containing the VM backup.
+  TAR           The stem of the files containing the VM backup.
+  EXTRACTDIR    A directory created by $name0 --extract-only.
+  --as VMNAME   Rename the VM when restoring it. Note that this also changes its
+                UUID, MAC address, etc so it can be used side-by-side with the
+                original VM.
+  --disk-only   Only replace the disk images. Note that this will fail if the
+                backup VM settings and snapshots differ from the existing VM.
+  --extract-only Extract the VM and check if it matches the existing VM, but
+                do not replace it. This leaves the files around for further
+                inspection.
+  --dir DIR     Extract the VM files in the specified directory.
+  --connect URI Connect to the specified Libvirt server.
+  --verbose     Show all the commands as they are being run.
+  --dry-run     Show what would happen but do not extract or change anything.
+  --help, -h    Shows this help message.
+EOF
+    exit 0
+fi
+
+
+#
+# Create the temporary directory
+#
+
+tmpdir=""
+
+cleanup()
+{
+    cd /
+    if [ -z "$opt_dry_run" -a -n "$tmpdir" ]
+    then
+        if [ -z "$opt_extract_only" -a -f "$tmpdir/$name0.vm" ]
+        then
+            rm -rf "$tmpdir"
+        elif [ -d "$tmpdir" ] && ! rmdir "$tmpdir" 2>/dev/null
+        then
+            echo "not deleting '$tmpdir'"
+        fi
+    fi
+}
+
+fatal()
+{
+    error "$@"
+    cleanup
+    exit 1
+}
+
+fatal_no_cleanup()
+{
+    [ $# -gt 0 ] && error "$@"
+    echo "the VM files are in '$tmpdir'"
+    exit 1
+}
+
+get_vm_disk_images()
+{
+    _root="$1"
+    _vm="$2"
+    sed -e "s~^ *<source file='\([^']*\)' */> *\$~\\1~" -e t -e d "$_root$etcdir/$_vm.xml" "$_root$snapdir/$_vm"/*.xml | sort | uniq
+}
+
+get_symlink_closure()
+{
+    while read file
+    do
+        echo "$file"
+        while [ -h "$file" ]
+        do
+            target=`readlink "$file"`
+            case "$target" in
+                /*) file="$target" ;;
+                *)  file=`dirname "$file"`"/$target" ;;
+            esac
+            echo "$file"
+        done
+    done
+}
+
+get_file_sizes()
+{
+    while read file
+    do
+        du -k "$file"
+    done
+}
+
+if [ -n "$opt_src" ]
+then
+    tmpdir="$opt_src"
+else
+    if [ -z "$opt_dir" ]
+    then
+        if [ -z "$opt_extract_only" ]
+        then
+            # Extract the temporary files in the same directory as the biggest
+            # disk image to speed up the final move. This also avoids getting
+            # waylaid by the symbolic links.
+            img=`get_vm_disk_images "/" "$vm" 2>/dev/null | get_symlink_closure | sort | uniq | get_file_sizes | sort -n -r | cut -f2 | head -n 1`
+            if [ -n "$img" -a -f "$img" -a -w "$img" ]
+            then
+                opt_dir=`dirname "$img"`
+            else
+                opt_dir="/$imgdir"
+            fi
+        else
+            opt_dir=`pwd`
+        fi
+    fi
+    if [ -n "$opt_borg" ]
+    then
+        tmpdir=`echo "$opt_borg" | sed -e 's/^.*:://'`
+    else
+        tmpdir=`basename "$opt_tar" | sed -e 's~\.tar\.\?[^/]*$~~'`
+    fi
+    tmpdir="$opt_dir/$tmpdir"
+    [ -n "$opt_extract_only" ] || tmpdir="$tmpdir.$$"
+    if [ -d "$tmpdir" ]
+    then
+        fatal_no_cleanup "'$tmpdir' already exists. Please clean up!"
+    fi
+    dry_run mkdir "$tmpdir" || fatal_no_cleanup "could not create the '$tmpdir' directory"
+fi
+
+# $tmpdir must be an absolute path for the cleanup
+case "$tmpdir" in
+/*)   ;; # Absolute path
+*)    tmpdir="`pwd`/$tmpdir" ;;
+esac
+if [ -z "$opt_dry_run" -o -d "$tmpdir" ]
+then
+    cd "$tmpdir" || fatal "could not chdir to '$tmpdir'"
+else
+    dry_run cd "$tmpdir"
+fi
+
+
+#
+# Extract the VM
+#
+
+nice=""
+which ionice >/dev/null && nice="ionice"
+which nice >/dev/null && nice="nice $nice"
+
+vm=""
+if [ -n "$opt_borg" ]
+then
+    borg_opts=""
+    [ -n "$opt_verbose" ] && borg_opts="$borg_opts --verbose"
+    dry_run $nice borg extract --sparse $borg_opts "$opt_borg"
+    rc_borg=$?
+    if [ $rc_borg -ne 0 ]
+    then
+        fatal "an error occurred while extracting the VM (borg=$rc_borg)"
+    fi
+elif [ -n "$opt_tar" ]
+then
+    zipcmd=pbzip2
+    which pbzip2 >/dev/null || zipcmd=bzip2
+    tar_opts=""
+    [ -n "$opt_verbose" ] && tar_opts="-v"
+    if [ -n "$opt_verbose$opt_dry_run" ]
+    then
+        echo "$nice cat $opt_tar | $nice $zipcmd -c -d | $nice tar xf - $tar_opts"
+    fi
+
+    if [ -n "$opt_dry_run" ]
+    then
+        rc_tar=0
+        rc_zip=0
+        rc_cat=0
+    else
+        ($nice cat $opt_tar; echo $? >"$tmpdir/rc_cat") | \
+            ($nice $zipcmd -c -d; echo $? >"$tmpdir/rc_zip") | \
+            $nice tar xf - $tar_opts
+        rc_tar=$?
+        rc_zip=`cat "$tmpdir/rc_zip"`
+        rc_cat=`cat "$tmpdir/rc_cat"`
+    fi
+    if [ "$rc_cat" != "0" -o "$rc_zip" != "0" -o "$rc_tar" != "0" ]
+    then
+        fatal "an error occurred while extracting the VM (cat=$rc_cat zip=$rc_zip tar=$rc_tar)"
+    fi
+else
+    vm=`cat "$tmpdir/$name0.vm"`
+fi
+
+if [ ! -d "$tmpdir" ]
+then
+    vm="dry-run-vm" # dry-run mode
+elif [ -z "$vm" ]
+then
+    for conffile in "$etcdir"/*.xml
+    do
+        conffile=`basename "$conffile" .xml`
+        if [ -z "$vm" ]
+        then
+            vm="$conffile"
+        else
+            fatal_no_cleanup "found more than one VM in the backup: $vm and $conffile"
+        fi
+    done
+    [ -z "$opt_dry_run" ] && echo "$vm" >"$tmpdir/$name0.vm"
+fi
+
+
+#
+# Rename the VM
+#
+
+if [ -z "$opt_vm" -o "$opt_vm" = "$vm" ]
+then
+    opt_vm="$vm"
+elif [ -n "$opt_dry_run" ]
+then
+    warning "skipping the renaming step in dry-run mode"
+    [ -n "$opt_vm" ] || opt_vm="$vm"
+else
+    conffile="$etcdir/$vm.xml"
+    old_uuid=`sed -e 's~^.*<uuid> *\([0-9a-f-]*\) *</uuid>.*$~\1~' -e t -e d "$conffile" | head -n 1`
+    new_uuid=`uuidgen`
+    old_mac=`sed -e "s~^.*<mac  *address='\\([0-9a-f:]*\\)'.*$~\\1~" -e t -e d "$conffile" | head -n 1`
+    new_mac=`echo "$old_mac" | cut -c1-9``uuidgen | sed -e 's~^\([0-9a-f][0-9a-f]\)\([0-9a-f][0-9a-f]\)\([0-9a-f][0-9a-f]\).*$~\1:\2:\3~'`
+
+    update_config()
+    {
+        sed -e "s~<name>$vm</name>~<name>$opt_vm</name>~" \
+            -e "s~$old_uuid~$new_uuid~" \
+            -e "s~$old_mac~$new_mac~" \
+            -e "s~/$imgdir/$vm~/$imgdir/$opt_vm~"
+    }
+
+    # Update the VM configuration
+    failed=""
+    update_config <"$conffile" >"$etcdir/$opt_vm.xml" || failed=1
+
+    # Update the VM snapshots
+    if [ -d "$snapdir/$vm" ]
+    then
+        mkdir "$snapdir/$opt_vm"
+        for conffile in "$snapdir/$vm"/*.xml
+        do
+            if [ -f "$conffile" ]
+            then
+                snapshot=`basename "$conffile"`
+                update_config <"$conffile" >"$snapdir/$opt_vm/$snapshot" || failed=1
+            fi
+        done
+    fi
+
+    # Rename the disk(s)
+    # Note: Remove the leading '/' from the symlink targets
+    for src_disk in `get_vm_disk_images "" "$vm" | get_symlink_closure | sed -e 's~^/~~' | sort | uniq`
+    do
+        dst_disk=`echo "$src_disk" | sed -e "s/$vm/$opt_vm/g"`
+        dst_dir=`dirname "$dst_disk"`
+        mkdir -p "$dst_dir"
+        if [ -h "$src_disk" ]
+        then
+            src_target=`readlink "$src_disk"`
+            dst_target=`echo "$src_target" | sed -e "s/$vm/$opt_vm/g"`
+            rm "$src_disk"
+            ln -s "$dst_target" "$dst_disk" || failed=1
+        else
+            mv "$src_disk" "$dst_disk" || failed=1
+        fi
+    done
+    [ -z "$failed" ] || fatal_no_cleanup
+fi
+[ -z "$opt_dry_run" ] && echo "$opt_vm" >"$tmpdir/$name0.vm"
+
+
+#
+# Verify that the VM exists
+#
+
+wait_for_vm()
+{
+    _vm="$1"
+    _timeout="$2"
+
+    while true
+    do
+        _state=`(virsh --connect "$opt_connect" list --all 2>/dev/null || echo " $_vm error") | sed -e "s/^.* $_vm  *//" -e t -e d`
+        [ -z "$opt_dry_run" ] || _state="shut off"
+        case "$_state" in
+        "error")
+            echo "nolibvirt"
+            return
+            ;;
+        "")
+            echo "novm"
+            return
+            ;;
+        "shut off")
+            echo "off"
+            return
+            ;;
+        esac
+
+        echo "$_vm is not powered off ($_state). Waiting for up to ${_timeout}s..." >&2
+        _timeout=`expr $_timeout - 10`
+        if [ $_timeout -le 0 ]
+        then
+            echo "running"
+            return
+        fi
+        sleep 10
+    done
+}
+
+has_vm=1
+if [ -z "$opt_extract_only" ]
+then
+    error=""
+    case `wait_for_vm "$opt_vm" 120` in
+    running)   error "$opt_vm did not power off"; error=1 ;;
+    nolibvirt) error "Could not connect to libvirt"; error=1 ;;
+    novm)
+        if [ -n "$opt_disk_only" ]
+        then
+            error "$opt_vm does not exist"
+            error=1
+        fi
+        has_vm=""
+        ;;
+    esac
+    if [ -n "$error" ]
+    then
+        warning "Continuing in --extract-only mode"
+        opt_extract_only=1
+    fi
+fi
+
+
+#
+# Check that the backup matches the current VM
+#
+
+if [ -z "$opt_disk_only" -o -n "$opt_extract_only" ]
+then
+    true # nothing to do
+elif [ -n "$opt_dry_run" ]
+then
+    warning "not checking that the '$opt_vm' VM matches the backup in dry-run mode"
+else
+    failed=""
+    for vmconf in "/$etcdir/$opt_vm.xml" "/$snapdir/$opt_vm"/*.xml
+    do
+        [ -f "$vmconf" ] || continue
+
+        bakconf=`echo "$vmconf" | sed -e 's~^/~~' -e 's~/$opt_vm~/$vm~'`
+        if [ ! -f "$bakconf" ]
+        then
+            error "the backup is missing '$vmconf'"
+            failed=1
+        elif ! diff -u "$vmconf" "$bakconf"
+        then
+            error "the backup's copy of '$vmconf' does not match"
+            failed=1
+        fi
+    done
+    for bakconf in "$etcdir/$opt_vm.xml" "$snapdir/$opt_vm"/*.xml
+    do
+        [ -f "$backconf" ] || continue
+
+        vmconf=`echo "/$bakconf" | sed -e 's~/$vm~/$opt_vm~'`
+        if [ ! -f "$vmconf" ]
+        then
+            error "the backup has an extra file: $bakconf"
+            failed=1
+        fi
+    done
+    [ -z "$failed" ] || fatal_no_cleanup
+fi
+
+if [ -n "$opt_extract_only" ]
+then
+    [ -n "$opt_verbose" ] && echo
+    echo "The $opt_vm files are in '$tmpdir'"
+    echo "To install it run the following commands:"
+    echo
+    echo "cd '$tmpdir'"
+
+    # Run the replacement commands as if in --dry-run mode
+    # so the user sees how to put the files in place.
+    opt_dry_run="1"
+fi
+
+
+#
+# Delete the existing VM
+#
+
+if [ -z "$opt_disk_only" -a -n "$has_vm" ]
+then
+    olddisks=`get_vm_disk_images "/" "$opt_vm" 2>/dev/null | get_symlink_closure | sort | uniq`
+    if ! dry_run virsh --connect "$opt_connect" undefine "$opt_vm" \
+         --snapshots-metadata --remove-all-storage
+    then
+        fatal_no_cleanup "could not remove the existing '$opt_vm' VM"
+    fi
+    [ -z "$olddisks" ] || dry_run rm $olddisks
+fi
+
+
+#
+# Create the new VM ($opt_dry_run takes care of $opt_extract_only)
+#
+
+# Replace the disk images
+if [ -f "$tmpdir/$etcdir/$opt_vm.xml" ]
+then
+    # Note: Remove the leading '/' for both the symlink paths and their targets
+    disks=`get_vm_disk_images "" "$opt_vm" 2>/dev/null | sed -e 's~^/~~' | get_symlink_closure | sed -e 's~^/~~' | sort | uniq`
+else
+    disks="$imgdir/dry-run-disk.qcow2"
+fi
+
+failed=""
+for disk in $disks
+do
+    dir=`dirname "$disk"`
+    [ -d "/$dir" ] || dry_run mkdir -p "/$dir"
+    dry_run mv "$disk" "/$disk" || failed=1
+done
+
+if [ -z "$opt_disk_only" ]
+then
+    # Create the VM
+    dry_run virsh --connect "$opt_connect" define "$etcdir/$opt_vm.xml" || failed=1
+
+    # Get the snapshots in their dependency order (or creation order)
+    get_snapshot_creationtime()
+    {
+        _dir="$1"
+        for snapxml in "$_dir"/*.xml
+        do
+            name=`basename "$snapxml" .xml`
+            ctime=`sed -e 's~^.*<creationTime>\([0-9][0-9]*\)</creationTime>.*$~\1~' -e t -e d "$snapxml"`
+            echo "$ctime $name"
+        done
+    }
+
+    # Create the snapshots
+    if [ -d "$tmpdir" -a \( -z "$opt_dry_run" -o "$opt_vm" = "$vm" \) ]
+    then
+        snapshots=`get_snapshot_creationtime "$snapdir/$opt_vm" | sort -n | cut -d' ' -f2`
+    else
+        snapshots="dry-run-snapshot" # dry-run mode
+    fi
+    for snapshot in $snapshots
+    do
+        dry_run virsh --connect "$opt_connect" snapshot-create "$opt_vm" \
+                "$snapdir/$opt_vm/$snapshot.xml" --redefine || failed=1
+    done
+fi
+
+[ -z "$failed" ] || fatal_no_cleanup
+
+
+#
+# Clean up
+#
+
+[ -z "$opt_extract_only" ] || tmpdir=""
+
+cleanup
+
+exit 0
