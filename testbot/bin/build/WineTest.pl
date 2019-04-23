@@ -99,7 +99,7 @@ sub DailyWineTest($$$$)
   # Run WineTest. Ignore the exit code since it returns non-zero whenever
   # there are test failures.
   my $Tag = SanitizeTag("$BaseTag-$BaseName");
-  RunWine($Mission, "programs/winetest/winetest.exe.so",
+  RunWine($Mission, "winetest.exe",
           "-c -o '$DataDir/$BaseName.report' -t $Tag ". ShArgv2Cmd(@$Args));
   if (!-f "$DataDir/$BaseName.report")
   {
@@ -109,7 +109,7 @@ sub DailyWineTest($$$$)
 
   # Send the report to the website
   if ((!$NoSubmit and !$Mission->{nosubmit}) and
-      RunWine($Mission, "programs/winetest/winetest.exe.so",
+      RunWine($Mission, "winetest.exe",
               "-c -s '$DataDir/$BaseName.report'"))
   {
     LogMsg "WineTest failed to send the $BaseName report\n";
@@ -168,7 +168,7 @@ sub TestPatch($$)
 
   # Run WineTest. Ignore the exit code since it returns non-zero whenever
   # there are test failures.
-  RunWine($Mission, "programs/winetest/winetest.exe.so",
+  RunWine($Mission, "winetest.exe",
           "-c -o '$DataDir/$BaseName.report' -t do.not.submit ".
           join(" ", @TestList));
   if (!-f "$DataDir/$BaseName.report")

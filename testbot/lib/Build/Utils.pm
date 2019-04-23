@@ -383,7 +383,7 @@ sub CreateWinePrefix($;$)
   rmtree($ENV{WINEPREFIX});
 
   # Crash dialogs cause delays so disable them
-  if (RunWine($Mission, "programs/reg/reg.exe.so", "ADD HKCU\\\\Software\\\\Wine\\\\WineDbg /v ShowCrashDialog /t REG_DWORD /d 0"))
+  if (RunWine($Mission, "reg.exe", "ADD HKCU\\\\Software\\\\Wine\\\\WineDbg /v ShowCrashDialog /t REG_DWORD /d 0"))
   {
     return "Failed to disable the crash dialogs: $!";
   }
