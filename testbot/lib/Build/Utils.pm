@@ -125,6 +125,16 @@ sub ApplyPatch($$)
       return undef;
     }
   }
+  if ($Impacts->{MakeVulkan})
+  {
+    InfoMsg "\nRunning make_vulkan\n";
+    system("cd '$DataDir/$Dir' && set -x && ./dlls/winevulkan/make_vulkan");
+    if ($? != 0)
+    {
+      LogMsg "make_vulkan failed\n";
+      return undef;
+    }
+  }
 
   if ($Impacts->{MakeMakefiles})
   {

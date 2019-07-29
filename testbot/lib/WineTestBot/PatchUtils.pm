@@ -325,6 +325,11 @@ sub GetPatchImpacts($)
       $Impacts->{PatchedRoot} = $Impacts->{MakeRequests} = 1;
       $Impacts->{IsWinePatch} = 1;
     }
+    elsif ($Line =~ m=^--- \w+/dlls/winevulkan/make_vulkan$=)
+    {
+      $Impacts->{PatchedRoot} = $Impacts->{MakeVulkan} = 1;
+      $Impacts->{IsWinePatch} = 1;
+    }
     elsif ($Line =~ m=^--- /dev/null$=)
     {
       $Change = "new";
@@ -370,7 +375,8 @@ sub GetPatchImpacts($)
 
       # Also backup the build-related fields.
       foreach my $Field ("Autoconf", "MakeMakefiles", "MakeRequests",
-                         "PatchedRoot", "PatchedModules", "PatchedTests")
+                         "MakeVulkan", "PatchedRoot", "PatchedModules",
+                         "PatchedTests")
       {
         $PastImpacts->{$Field} = $Impacts->{$Field};
         $Impacts->{$Field} = undef;
@@ -464,6 +470,7 @@ sub GetPatchImpacts($)
       $Impacts->{Autoconf} ||= $PastImpacts->{Autoconf};
       $Impacts->{MakeMakefiles} ||= $PastImpacts->{MakeMakefiles};
       $Impacts->{MakeRequests} ||= $PastImpacts->{MakeRequests};
+      $Impacts->{MakeVulkan} ||= $PastImpacts->{MakeVulkan};
       $Impacts->{RebuildRoot} ||= $PastImpacts->{PatchedRoot};
       $Impacts->{RebuildModules} ||= $PastImpacts->{PatchedModules};
       map { $Impacts->{BuildModules}->{$_} = 1 } keys %{$PastImpacts->{BuildModules}};
