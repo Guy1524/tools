@@ -351,16 +351,14 @@ sub ParseWineTestReport($$$)
       _CheckUnit($Parser, $Cur, $1, "todo");
       $Cur->{LineTodos}++;
     }
-    # TestLauncher's skip message is quite broken
-    elsif ($Line =~ /^([_a-z0-9]+)(?:\.c)?:\d+:? Tests? skipped: / or
+    elsif ($Line =~ /^([_a-z0-9]+)\.c:\d+: Tests skipped: / or
            ($Cur->{Unit} ne "" and
-            $Line =~ /($Cur->{Unit})(?:\.c)?:\d+:? Tests? skipped: /))
+            $Line =~ /($Cur->{Unit})\.c:\d+: Tests skipped: /))
     {
       my $Unit = $1;
       # Don't complain and don't count misplaced skips. Only complain if they
-      # are misreported (see _CloseTestUnit). Also TestLauncher uses the wrong
-      # name in its skip message when skipping tests.
-      if ($Unit eq $Cur->{Unit} or $Cur->{Unit} eq "" or $Unit eq $Cur->{Dll})
+      # are misreported (see _CloseTestUnit).
+      if ($Unit eq $Cur->{Unit} or $Cur->{Unit} eq "")
       {
         $Cur->{LineSkips}++;
       }
@@ -396,9 +394,8 @@ sub ParseWineTestReport($$$)
       my ($Pid, $Unit, $Todos, $Failures, $Skips) = ($1, $2, $3, $4, $5);
 
       # Dlls that have only one test unit will run it even if there is
-      # no argument. Also TestLauncher uses the wrong name in its test
-      # summary line when skipping tests.
-      if ($Unit eq $Cur->{Unit} or $Cur->{Unit} eq "" or $Unit eq $Cur->{Dll})
+      # no argument.
+      if ($Unit eq $Cur->{Unit} or $Cur->{Unit} eq "")
       {
         # There may be more than one summary line due to child processes
         $Cur->{Pids}->{$Pid || 0} = 1;
