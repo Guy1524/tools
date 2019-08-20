@@ -609,21 +609,6 @@ while ($line = <IN>) {
             $rc = 0;
         }
     }
-    elsif ($line =~ /^(?:([0-9a-f]+):)?([_.a-z0-9]+): unhandled exception [0-9a-fA-F]{8} at / or
-           ($unit ne "" and
-            $line =~ /(?:([0-9a-f]+):)?($unit): unhandled exception [0-9a-fA-F]{8} at /))
-    {
-        my ($l_pid, $l_unit) = ($1, $2);
-        if ($l_unit eq $unit)
-        {
-          # This also replaces a test summary line.
-          $pids{$l_pid || 0} = 1;
-          $s_failures++;
-        }
-        add_test_line("failed", escapeHTML($line));
-        check_unit($l_unit, "unhandled exception");
-        $failures++;
-    }
     elsif ($line =~ /^()([_a-z0-9]+)\.c:(\d+): (Test (?:failed|succeeded inside todo block): .*)$/ or
            ($unit ne "" and
             $line =~ /^(.*?)($unit)\.c:(\d+): (Test (?:failed|succeeded inside todo block): .*)$/))
@@ -663,6 +648,21 @@ while ($line = <IN>) {
         add_test_line("trace", escapeHTML($pollution) .
                                get_source_link($l_unit, $l_num) .": ".
                                escapeHTML($l_text));
+    }
+    elsif ($line =~ /^(?:([0-9a-f]+):)?([_.a-z0-9]+): unhandled exception [0-9a-fA-F]{8} at / or
+           ($unit ne "" and
+            $line =~ /(?:([0-9a-f]+):)?($unit): unhandled exception [0-9a-fA-F]{8} at /))
+    {
+        my ($l_pid, $l_unit) = ($1, $2);
+        if ($l_unit eq $unit)
+        {
+          # This also replaces a test summary line.
+          $pids{$l_pid || 0} = 1;
+          $s_failures++;
+        }
+        add_test_line("failed", escapeHTML($line));
+        check_unit($l_unit, "unhandled exception");
+        $failures++;
     }
     elsif ($line =~ /^(?:([0-9a-f]+):)?([_a-z0-9]+): (\d+) tests? executed \((\d+) marked as todo, (\d+) failures?\), (\d+) skipped\./ or
            ($unit ne "" and
