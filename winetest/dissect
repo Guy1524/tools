@@ -26,6 +26,12 @@
 # where DIGIT is for resolving name clashes and data/BUILD/outdated is
 # created to signal the change in the given build.
 #
+# To test this script:
+# - Make sure $workdir is not set in winetest.conf
+# - Put a test report in queue/rep1/report
+# - Run ./dissect
+# - Examine the result in data/
+#
 # Exit: 0 - successfully processed a report, call again
 #       1 - failed to process a report, call again
 #       2 - there was nothing to do

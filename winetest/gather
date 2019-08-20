@@ -25,6 +25,11 @@
 # script. Races and concurrency problems must be dealt with on that higher
 # level.
 #
+# To test this script:
+# - Make sure $workdir is not set in winetest.conf
+# - After running dissect, run ./gather
+# - Examine the result in data/
+#
 # Exit: 0 - successfully processed a build, call again
 #       1 - should not happen
 #       2 - there was nothing to do
