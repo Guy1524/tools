@@ -209,10 +209,14 @@ then
 fi
 
 snapshots=`echo "/$snapdir/$opt_vm"/*.xml`
-if [ -n "$opt_snapshot" -a "$snapshots" = "/$snapdir/$opt_vm/*.xml" ]
+if [ "$snapshots" = "/$snapdir/$opt_vm/*.xml" ]
 then
-    error "the '$opt_vm' VM does not seem to have snapshots! Use --no-snapshot if this is expected."
-    exit 2
+    if [ -n "$opt_snapshot" ]
+    then
+        error "the '$opt_vm' VM does not seem to have snapshots! Use --no-snapshot if this is expected."
+        exit 2
+    fi
+    snapshots=""
 fi
 
 # Backup the symbolic links but also their targets!
