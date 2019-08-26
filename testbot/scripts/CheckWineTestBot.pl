@@ -38,17 +38,17 @@ sub BEGIN
 use WineTestBot::Config;
 use WineTestBot::Engine::Notify;
 
-$ENV{PATH} = "/sbin:/usr/sbin:/usr/bin:/bin";
+$ENV{PATH} = "/usr/bin:/bin";
 
 my $rc = 0;
 if (! PingEngine())
 {
   if ($> == 0)
   {
-    system "service winetestbot restart > /dev/null";
+    system "/usr/sbin/service winetestbot restart > /dev/null";
     sleep 5;
   }
-  
+
   open (SENDMAIL, "|/usr/sbin/sendmail -oi -t -odq");
   print SENDMAIL <<"EOF";
 From: $RobotEMail
