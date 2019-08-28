@@ -263,7 +263,7 @@ sub _GetStateName($)
 {
   my ($State) = @_;
 
-  my %StateNames = {
+  my %StateNames = (
     Sys::Virt::Domain::STATE_NOSTATE => "no state",
     Sys::Virt::Domain::STATE_RUNNING => "running",
     Sys::Virt::Domain::STATE_BLOCKED => "blocked",
@@ -272,7 +272,7 @@ sub _GetStateName($)
     Sys::Virt::Domain::STATE_SHUTOFF => "shutoff",
     Sys::Virt::Domain::STATE_CRASHED => "crashed",
     Sys::Virt::Domain::STATE_PMSUSPENDED => "pmsuspended",
-  };
+  );
   return $StateNames{$State} || "unknown";
 }
 
