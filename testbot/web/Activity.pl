@@ -51,6 +51,13 @@ sub _initialize($$$)
   $self->{Method} = "get";
 }
 
+sub GetPageTitle($$)
+{
+  my ($self, $Page) = @_;
+
+  return "Activity - ${ProjectName} Test Bot";
+}
+
 sub GeneratePage($)
 {
   my ($self) = @_;

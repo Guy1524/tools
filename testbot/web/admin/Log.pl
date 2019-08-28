@@ -25,6 +25,7 @@ use ObjectModel::CGI::FreeFormPage;
 our @ISA = qw(ObjectModel::CGI::FreeFormPage);
 
 use ObjectModel::BasicPropertyDescriptor;
+use WineTestBot::Config;
 use WineTestBot::Log;
 
 
@@ -36,6 +37,13 @@ sub _initialize($$$)
     CreateBasicPropertyDescriptor("Hours", "Hours", !1, !1, "N", 2),
   );
   $self->SUPER::_initialize($Request, $RequiredRole, \@PropertyDescriptors);
+}
+
+sub GetPageTitle($$)
+{
+  my ($self, $Page) = @_;
+
+  return "Engine Log - ${ProjectName} Test Bot";
 }
 
 sub GetPropertyValue($$)

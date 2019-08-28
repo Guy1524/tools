@@ -40,6 +40,13 @@ sub _initialize($$$)
   $self->SUPER::_initialize($Request, $RequiredRole);
 }
 
+sub GetPageTitle($$)
+{
+  my ($self, $Page) = @_;
+
+  return "Statistics - ${ProjectName} Test Bot";
+}
+
 sub _CompareVMs()
 {
   my ($aHost, $bHost) = ($a->GetHost(), $b->GetHost());
