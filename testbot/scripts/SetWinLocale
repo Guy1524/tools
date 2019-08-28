@@ -545,6 +545,8 @@ if (defined $Usage)
   print "  --keyboard KBD Specifies the keyboard layout (see --defaults).\n";
   print "  --country CTY  Specifies the location using only the country part of the\n";
   print "                 Windows locale (see --defaults).\n";
+  print "  --no-reboot    Do not reboot Windows. Some locale changes will only take\n";
+  print "                 effect after the next reboot.\n";
   print "  --debug        Show more detailed information about progress.\n";
   print "  --dry-run      Show what would happen but do nothing.\n";
   print "  --help         Shows this usage message.\n";
