@@ -9,7 +9,7 @@ windows: TestAgentd.exe
 
 
 $(builddir)/testagentd: testagentd.o platform_unix.o
-	$(CC) -o $@ $^
+	$(CC) -o $@ testagentd.o platform_unix.o
 	strip $@
 
 .c.o:
@@ -17,7 +17,7 @@ $(builddir)/testagentd: testagentd.o platform_unix.o
 
 
 TestAgentd.exe: testagentd.obj platform_windows.obj
-	$(CROSSCC32) -o $@ $^ -lws2_32
+	$(CROSSCC32) -o $@ testagentd.obj platform_windows.obj -lws2_32
 	$(CROSSSTRIP32) $@
 
 .SUFFIXES: .obj
