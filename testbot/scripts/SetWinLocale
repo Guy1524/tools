@@ -805,8 +805,15 @@ if (!$DryRun)
     FatalError("could not run intl.cpl: ", $TA->GetLastError(), "\n");
   }
 
-  $TA->Rm("script.bat");
-  $TA->Rm("locales.xml");
+  if ($Debug)
+  {
+    print STDERR "Not deleting script.bat and locales.xml\n";
+  }
+  else
+  {
+    $TA->Rm("script.bat");
+    $TA->Rm("locales.xml");
+  }
 }
 
 if ($OptReboot)
