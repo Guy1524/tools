@@ -9,7 +9,7 @@ CROSSZIPEXE  = upx-ucl
 all: TestLauncher32.exe TestLauncher64.exe
 
 TestLauncher32.exe: TestLauncher.c
-	$(CROSSCC32) -Wall -o $@ $<
+	$(CROSSCC32) -Wall -o $@ TestLauncher.c
 	$(CROSSSTRIP32) $@
 	if which $(CROSSZIPEXE); \
 	then \
@@ -17,7 +17,7 @@ TestLauncher32.exe: TestLauncher.c
 	fi
 
 TestLauncher64.exe: TestLauncher.c
-	$(CROSSCC64) -Wall -o $@ $<
+	$(CROSSCC64) -Wall -o $@ TestLauncher.c
 	$(CROSSSTRIP64) $@
 	if which $(CROSSZIPEXE); \
 	then \
