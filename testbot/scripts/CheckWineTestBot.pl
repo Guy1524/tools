@@ -38,8 +38,6 @@ sub BEGIN
 use WineTestBot::Config;
 use WineTestBot::Engine::Notify;
 
-$ENV{PATH} = "/usr/bin:/bin";
-
 my $rc = 0;
 if (! PingEngine())
 {

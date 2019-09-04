@@ -71,6 +71,8 @@ $BinDir = "$::RootDir/bin";
 
 # Sanitize the environment for system() & co
 delete @ENV{qw(IFS CDPATH ENV BASH_ENV)}; # from perlsec
+$ENV{PATH} = "/usr/bin:/bin";
+
 
 # See the ScheduleOnHost() documentation in lib/WineTestBot/Jobs.pm
 $MaxRevertingVMs = 1;

@@ -72,8 +72,6 @@ sub Error(@)
 # Setup and command line processing
 #
 
-$ENV{PATH} = "/usr/bin:/bin";
-
 my $Usage;
 sub ValidateNumber($$)
 {

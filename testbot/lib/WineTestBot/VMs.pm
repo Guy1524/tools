@@ -447,7 +447,6 @@ sub Run($$$$$$)
   WineTestBot::Log::LogMsg("Starting child: @$Args\n");
   $ChildSetup->($VM, $SetupData);
 
-  $ENV{PATH} = "/usr/bin:/bin";
   exec(@$Args) or
       WineTestBot::Log::LogMsg("Unable to exec $Tool: $!\n");
 

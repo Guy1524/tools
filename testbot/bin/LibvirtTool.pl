@@ -87,8 +87,6 @@ EOF
 # Setup and command line processing
 #
 
-$ENV{PATH} = "/usr/bin:/bin";
-
 # Grab the command line options
 my ($Usage, $Action, $VMKey);
 while (@ARGV)
