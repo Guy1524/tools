@@ -40,6 +40,8 @@ use WineTestBot::Missions;
 use WineTestBot::PatchUtils;
 use WineTestBot::Utils;
 
+WineTestBot::Config::PrependPaths("/usr/lib/ccache");
+
 
 #
 # Logging and error handling

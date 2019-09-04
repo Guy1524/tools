@@ -110,8 +110,6 @@ sub UpdateWineBuilds($$)
 # Setup and command line processing
 #
 
-$ENV{PATH} = "/usr/lib/ccache:/usr/bin:/bin";
-
 my ($Usage, $OptUpdate, $OptBuild, $OptNoRm, $MissionStatement);
 while (@ARGV)
 {

@@ -142,8 +142,6 @@ sub UpdateWinePrefixes($)
 # Setup and command line processing
 #
 
-$ENV{PATH} = "/usr/lib/ccache:/usr/bin:/bin";
-
 my ($Usage, $OptUpdate, $OptBuild, $OptNoRm, $OptAddOns, $OptWinePrefix, $MissionStatement);
 while (@ARGV)
 {

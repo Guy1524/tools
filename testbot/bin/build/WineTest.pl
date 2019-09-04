@@ -209,8 +209,6 @@ sub TestExe($$$)
 # Setup and command line processing
 #
 
-$ENV{PATH} = "/usr/lib/ccache:/usr/bin:/bin";
-
 my $Action = "";
 my ($Usage, $OptNoSubmit, $MissionStatement, $FileName, $BaseTag);
 while (@ARGV)

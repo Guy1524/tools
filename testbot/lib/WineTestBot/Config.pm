@@ -73,6 +73,11 @@ $BinDir = "$::RootDir/bin";
 delete @ENV{qw(IFS CDPATH ENV BASH_ENV)}; # from perlsec
 $ENV{PATH} = "/usr/bin:/bin";
 
+sub PrependPaths(@)
+{
+  map { $ENV{PATH} = "$_:$ENV{PATH}" if (-d $_) } reverse @_;
+}
+
 
 # See the ScheduleOnHost() documentation in lib/WineTestBot/Jobs.pm
 $MaxRevertingVMs = 1;

@@ -114,8 +114,6 @@ sub BuildTestExecutables($$$)
 # Setup and command line processing
 #
 
-$ENV{PATH} = "/usr/lib/ccache:/usr/bin:/bin";
-
 my ($Usage, $PatchFile, $MissionStatement);
 while (@ARGV)
 {
