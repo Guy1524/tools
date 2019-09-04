@@ -318,7 +318,7 @@ if [ -n "$opt_borg" ]
 then
     borg_opts=""
     [ -n "$opt_verbose" ] && borg_opts="$borg_opts --verbose"
-    dry_run $nice borg create --progress --stats -C lzma,9 \
+    dry_run $nice borg create --progress --stats -C zstd,22 \
             "$opt_borg::$backup" $all_paths
     rc_borg=$?
     if [ $rc_borg -ne 0 ]
