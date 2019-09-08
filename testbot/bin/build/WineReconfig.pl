@@ -71,18 +71,6 @@ sub BuildWine($$$$;$)
     return !1;
   }
 
-  # Compile TestLauncher
-  my $Bits = ($Build =~ /64/) ? "64" : "32";
-  $WithWine ||= ".";
-  system("cd '$DataDir/wine-$Build' && set -x && ".
-         "gcc -m$Bits -c -o TestLauncher.o ../../src/TestLauncher/TestLauncher.c -fPIC -Iinclude -I../wine/include && ".
-         "'$WithWine/tools/winegcc/winegcc' -B'$WithWine/tools/winebuild' --sysroot=. -m$Bits -o TestLauncher.exe.so TestLauncher.o");
-  if ($? != 0)
-  {
-    LogMsg "The $Build TestLauncher build failed\n";
-    return !1;
-  }
-
   return 1;
 }
 
@@ -266,6 +254,7 @@ if ($DataDir =~ /'/)
 #
 
 exit(1) if (!BuildNativeTestAgentd());
+exit(1) if (!BuildTestLauncher());
 exit(1) if ($OptUpdate and !GitPull("wine"));
 exit(1) if ($OptAddOns and !UpdateAddOns());
 exit(1) if ($OptBuild and !UpdateWineBuilds($TaskMissions, $OptNoRm));

@@ -197,7 +197,7 @@ sub TestExe($$$)
   }
 
   # Run the test executable
-  RunWine($Mission, "TestLauncher.exe.so",
+  RunWine($Mission, GetTestLauncher($Mission),
           "-t 120 ". ShArgv2Cmd($FileName, @$Args)
           ." >'$DataDir/$BaseName.report'");
 

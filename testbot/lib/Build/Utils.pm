@@ -29,7 +29,7 @@ use Exporter 'import';
 our @EXPORT = qw(GetToolName InfoMsg LogMsg Error
                  GitPull ApplyPatch
                  GetCPUCount BuildNativeTestAgentd BuildWindowsTestAgentd
-                 BuildTestLauncher UpdateAddOns
+                 GetTestLauncher BuildTestLauncher UpdateAddOns
                  SetupWineEnvironment RunWine CreateWinePrefix);
 
 use Digest::SHA;
@@ -217,6 +217,14 @@ sub BuildWindowsTestAgentd()
   }
 
   return 1;
+}
+
+sub GetTestLauncher($)
+{
+  my ($Mission) = @_;
+
+  my $Bits = ($Mission->{Build} =~ /64/) ? "64" : "32";
+  return "$::RootDir/src/TestLauncher/TestLauncher$Bits.exe";
 }
 
 sub BuildTestLauncher()
