@@ -857,7 +857,6 @@ sub _Connect($)
   my $OldRPC = $self->{rpc};
   $self->{rpc} = ($self->{rpc} ? "$self->{rpc}/" : "") ."connect";
 
-  my $Step;
   my $Start = time();
   foreach my $Attempt (1..$self->{cattempts})
   {
