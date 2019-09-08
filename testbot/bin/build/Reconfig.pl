@@ -219,8 +219,9 @@ if (! -d "$DataDir/staging" and ! mkdir "$DataDir/staging")
 # Run the builds
 #
 
-exit(1) if (!BuildNativeTestAgentd() or !BuildWindowsTestAgentd());
-exit(1) if (!BuildTestLauncher());
+exit(1) if ($OptBuild and !BuildNativeTestAgentd());
+exit(1) if ($OptBuild and !BuildWindowsTestAgentd());
+exit(1) if ($OptBuild and !BuildTestLauncher());
 exit(1) if ($OptUpdate and !GitPull("wine"));
 exit(1) if ($OptBuild and !UpdateWineBuilds($TaskMissions, $OptNoRm));
 

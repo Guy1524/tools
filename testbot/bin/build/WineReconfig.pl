@@ -253,8 +253,8 @@ if ($DataDir =~ /'/)
 # Run the builds and/or tests
 #
 
-exit(1) if (!BuildNativeTestAgentd());
-exit(1) if (!BuildTestLauncher());
+exit(1) if ($OptBuild and !BuildNativeTestAgentd());
+exit(1) if ($OptBuild and !BuildTestLauncher());
 exit(1) if ($OptUpdate and !GitPull("wine"));
 exit(1) if ($OptAddOns and !UpdateAddOns());
 exit(1) if ($OptBuild and !UpdateWineBuilds($TaskMissions, $OptNoRm));
