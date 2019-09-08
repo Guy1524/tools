@@ -129,7 +129,7 @@ sub Disconnect($)
     # This may close the SSH channel ($self->{fd}) as a side-effect,
     # which will avoid undue delays.
     $self->{ssh} = undef;
-    waitpid($self->{sshpid}, 0);
+    waitpid($self->{sshpid}, 0) if ($self->{sshpid});
     $self->{sshpid} = undef;
   }
   if ($self->{fd})
