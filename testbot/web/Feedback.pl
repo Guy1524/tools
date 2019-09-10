@@ -26,6 +26,7 @@ our @ISA = qw(ObjectModel::CGI::FreeFormPage);
 
 use ObjectModel::BasicPropertyDescriptor;
 use WineTestBot::Config;
+use WineTestBot::Utils;
 
 
 sub _initialize($$$)
@@ -83,17 +84,11 @@ sub OnSend($)
     return !1;
   }
 
-  open (SENDMAIL, "|/usr/sbin/sendmail -oi -t -odq");
-  print SENDMAIL <<"EOF";
-From: $RobotEMail
-To: $AdminEMail
-Subject: winetestbot feedback
-
-EOF
-  print SENDMAIL "Name: ", $self->GetParam("Name"), "\n";
-  print SENDMAIL "EMail: ", $self->GetParam("EMail"), "\n\n";
-  print SENDMAIL "Remarks:\n", $self->GetParam("Remarks"), "\n";
-  close(SENDMAIL);
+  NotifyAdministrator("winetestbot feedback",
+                      "Name: ". $self->GetParam("Name") ."\n".
+                      "EMail: ". $self->GetParam("EMail") ."\n\n".
+                      "Remarks:\n".
+                      $self->GetParam("Remarks"));
 
   return 1;
 }

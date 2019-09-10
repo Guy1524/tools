@@ -142,16 +142,7 @@ sub OnSendRequest($)
   my $URL = ($UseSSL ? "https://" : "http://") . $WebHostName .
             "/admin/UserDetails.pl?Key=" . uri_escape($self->GetParam("Name"));
   $Msg .= "\nTo approve or deny the request, please go to " . $URL;
-
-  open (SENDMAIL, "|/usr/sbin/sendmail -oi -t -odq");
-  print SENDMAIL <<"EOF";
-From: $RobotEMail
-To: $AdminEMail
-Subject: winetestbot account request
-
-$Msg
-EOF
-  close(SENDMAIL);
+  NotifyAdministrator("winetestbot account request", $Msg);
 
   return 1;
 }
