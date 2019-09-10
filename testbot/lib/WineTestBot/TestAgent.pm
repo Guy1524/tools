@@ -905,6 +905,11 @@ sub _Connect($)
         if (!$self->{fd})
         {
           alarm(0);
+          if ($!{EINVAL})
+          {
+            $self->_SetError($FATAL, "The '$self->{agenthost}' hostname or the '$self->{agentport}' port is invalid.");
+            die "socket";
+          }
           $self->_SetError($FATAL, $!);
           return; # out of eval
         }
@@ -930,12 +935,16 @@ sub _Connect($)
       $self->{rpc} = $OldRPC;
       return 1;
     }
+
     if ($@)
     {
-      $self->_SetError($FATAL, "Timed out in $Step while connecting to $self->{connection}");
+      if ($@ eq "timeout")
+      {
+        $self->_SetError($FATAL, "Timed out in $Step while connecting to $self->{connection}");
+      }
+      last;
     }
-    # Ideally we should probably check the error and not retry if it is likely
-    # permanent, like a hostname that does not resolve.
+
     my $Remaining = $Attempt * $self->{cinterval} - (time() - $Start);
     sleep($Remaining) if ($Remaining > 0);
   }
