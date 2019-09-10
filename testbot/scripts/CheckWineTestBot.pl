@@ -36,6 +36,7 @@ sub BEGIN
 }
 
 use WineTestBot::Config;
+use WineTestBot::Utils;
 use WineTestBot::Engine::Notify;
 
 my $rc = 0;
@@ -47,27 +48,21 @@ if (! PingEngine())
     sleep 5;
   }
 
-  open (SENDMAIL, "|/usr/sbin/sendmail -oi -t -odq");
-  print SENDMAIL <<"EOF";
-From: $RobotEMail
-To: $AdminEMail
-Subject: WineTestBot engine died
-
-EOF
+  my $Body;
   if ($> != 0)
   {
-    print SENDMAIL "Insufficient permissions to restart the engine\n";
+    $Body = "Insufficient permissions to restart the engine\n";
     $rc = 1;
   }
   elsif (PingEngine())
   {
-    print SENDMAIL "The engine was restarted successfully\n";
+    $Body = "The engine was restarted successfully\n";
   }
   else
   {
-    print SENDMAIL "Unable to restart the engine\n";
+    $Body = "Unable to restart the engine\n";
     $rc = 1;
   }
-  close(SENDMAIL);
+  NotifyAdministrator("WineTestBot engine died", $Body);
 }
 exit($rc);
