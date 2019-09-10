@@ -452,6 +452,11 @@ sub Run($$$$$$)
 
   # Reset the Status and ChildPid since the exec failed
   $self->Status("offline");
+  NotifyAdministrator("Putting the ". $self->Name ." VM offline",
+                      "Could not run $Tool on the ". $self->Name ." VM. The failed command is:\n\n".
+                      ShArgv2Cmd(@$Args) ."\n\n".
+                      "An administrator should investigate why the command failed but the\n".
+                      "TestBot will still try to continue using the VM.\n");
   $self->ChildDeadline(undef);
   $self->ChildPid(undef);
   my ($ErrProperty, $ErrMessage) = $self->Save();

@@ -30,7 +30,8 @@ use Exporter 'import';
 our @EXPORT = qw(MakeSecureURL SecureConnection GenerateRandomString
                  OpenNewFile CreateNewFile CreateNewLink CreateNewDir
                  DurationToString BuildEMailRecipient IsValidFileName
-                 BuildTag SanitizeTag LocaleName ShQuote ShArgv2Cmd);
+                 BuildTag SanitizeTag LocaleName NotifyAdministrator
+                 ShQuote ShArgv2Cmd);
 
 use Fcntl;
 
@@ -273,6 +274,37 @@ sub BuildTag($;$)
   $Tag = $Tag ? "$VMName-$Tag" : $VMName;
   $Tag =~ s/^$TagPrefix//;
   return SanitizeTag("$TagPrefix-$Tag");
+}
+
+
+#
+# EMail helper
+#
+
+sub NotifyAdministrator($$)
+{
+  my ($Subject, $Body) = @_;
+
+  if (open(my $fh, "|/usr/sbin/sendmail -oi -t -odq"))
+  {
+    require WineTestBot::Log;
+    WineTestBot::Log::LogMsg("Notifying administrator: $Subject\n");
+    print $fh <<"EOF";
+From: $RobotEMail
+To: $AdminEMail
+Subject: $Subject
+
+$Body
+EOF
+    close($fh);
+  }
+  else
+  {
+    require WineTestBot::Log;
+    WineTestBot::Log::LogMsg("Could not send administrator notification: $!\n");
+    WineTestBot::Log::LogMsg("  Subject: $Subject\n");
+    WineTestBot::Log::LogMsg("  Body: $Body\n");
+  }
 }
 
 

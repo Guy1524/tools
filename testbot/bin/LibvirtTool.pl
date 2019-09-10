@@ -43,6 +43,7 @@ $Name0 =~ s+^.*/++;
 
 use WineTestBot::Config;
 use WineTestBot::Log;
+use WineTestBot::Utils;
 use WineTestBot::VMs;
 
 my $Debug;
@@ -56,30 +57,6 @@ sub Error(@)
 {
   print STDERR "$Name0:error: ", @_ if (!$LogOnly);
   LogMsg @_;
-}
-
-sub NotifyAdministrator($$)
-{
-  my ($Subject, $Body) = @_;
-
-  if (open(my $fh, "|/usr/sbin/sendmail -oi -t -odq"))
-  {
-    LogMsg "Notifying administrator: $Subject\n";
-    print $fh <<"EOF";
-From: $RobotEMail
-To: $AdminEMail
-Subject: $Subject
-
-$Body
-EOF
-    close($fh);
-  }
-  else
-  {
-    LogMsg "Could not send administrator notification: $!\n";
-    LogMsg "  Subject: $Subject\n";
-    LogMsg "  Body: $Body\n";
-  }
 }
 
 

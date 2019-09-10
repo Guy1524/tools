@@ -37,6 +37,7 @@ use WineTestBot::Engine::Events;
 use WineTestBot::Jobs;
 use WineTestBot::Log;
 use WineTestBot::RecordGroups;
+use WineTestBot::Utils;
 use WineTestBot::VMs;
 
 
@@ -277,6 +278,10 @@ sub _CheckAndClassifyVMs()
           if ($Errors >= $MaxVMErrors)
           {
             $NewStatus = "maintenance";
+            NotifyAdministrator("Putting the $VMKey VM in maintenance mode",
+                                "The last $Errors revert operations timed out.\n\n".
+                                "No further operation will be attempted until an administrator has put\n".
+                                "the VM back online.");
             $Sched->{busyvms}->{$VMKey} = 1;
           }
         }
