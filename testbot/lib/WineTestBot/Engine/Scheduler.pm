@@ -274,15 +274,22 @@ sub _CheckAndClassifyVMs()
         {
           my $Errors = ($VM->Errors || 0) + 1;
           $VM->Errors($Errors);
-          $NewStatus = "maintenance" if ($Errors >= $MaxVMErrors);
+          if ($Errors >= $MaxVMErrors)
+          {
+            $NewStatus = "maintenance";
+            $Sched->{busyvms}->{$VMKey} = 1;
+          }
         }
         $VM->Status($NewStatus);
         $VM->KillChild();
         $VM->Save();
         $VM->RecordResult($Sched->{records}, "boterror stuck process");
-        $Sched->{lambvms}->{$VMKey} = 1;
-        $Host->{dirty}++;
-        $Host->{active}++;
+        if ($NewStatus eq "dirty")
+        {
+          $Sched->{lambvms}->{$VMKey} = 1;
+          $Host->{dirty}++;
+          $Host->{active}++;
+        }
       }
       elsif ($VM->Status =~ /^(?:dirty|running|reverting)$/)
       {
