@@ -154,6 +154,7 @@ use WineTestBot::LibvirtDomain;
 use WineTestBot::Missions;
 use WineTestBot::RecordGroups;
 use WineTestBot::TestAgent;
+use WineTestBot::Utils;
 
 
 sub _initialize($$)
@@ -374,8 +375,15 @@ sub OnSaved($)
 sub Run($$$$$$)
 {
   my ($self, $NewStatus, $Args, $ChildTimeout, $ChildSetup, $SetupData) = @_;
-
   my $Tool = basename($Args->[0]);
+
+  if (defined $self->ChildPid)
+  {
+    my $ErrMessage = "Cannot run ". ShArgv2Cmd(@$Args) ." because the ". $self->ChildPid ." process is already using the ". $self->Name ." VM";
+    require WineTestBot::Log;
+    WineTestBot::Log::LogMsg("$ErrMessage\n");
+    return $ErrMessage;
+  }
 
   # There are two $VM->ChildPid race conditions to avoid:
   # - Between the child process and new calls to ScheduleJobs().
