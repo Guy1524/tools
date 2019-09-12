@@ -557,7 +557,17 @@ comctl32:tooltips start dlls/comctl32/tests/toolbar.c -
 ----- Expected assessement: crashed
 comctl32:tooltips done (3221225477) in 0s
 
-stub comctl32:trackbar
+comctl32:trackbar start dlls/comctl32/tests/trackbar.c -
+----- A unit test with a subtest
+trackbar.c:496: Subtest driver
+driver.c:40: Test failed: Something wrong
+driver.c:41: Test succeeded inside todo block: Something right!
+driver.c:42: Test marked todo: Hello Wine!
+driver.c:43: Tests skipped: Another time
+----- Expected assessement: 2 failures, 1 todo, 1 skip
+07b1:trackbar: 3 tests executed (1 marked as todo, 2 failures), 1 skipped.
+comctl32:trackbar:07b1 done (2) in 0s
+
 stub comctl32:treeview
 stub comctl32:updown
 stub comdlg32:filedlg
