@@ -42,6 +42,110 @@ use Image::Magick;
 my %_Hypervisors;
 my %_Domains;
 
+
+#
+# Domain state description
+#
+
+my %_StateNameReasons = (
+  Sys::Virt::Domain::STATE_NOSTATE => ["no state",
+    {
+      Sys::Virt::Domain::STATE_NOSTATE_UNKNOWN => "unknown",
+    }],
+  Sys::Virt::Domain::STATE_RUNNING => ["running",
+    {
+      Sys::Virt::Domain::STATE_RUNNING_BOOTED => "booted",
+      Sys::Virt::Domain::STATE_RUNNING_FROM_SNAPSHOT => "snapshot",
+      Sys::Virt::Domain::STATE_RUNNING_MIGRATED => "migrated",
+      Sys::Virt::Domain::STATE_RUNNING_MIGRATION_CANCELED => "migration canceled",
+      Sys::Virt::Domain::STATE_RUNNING_RESTORED => "restored",
+      Sys::Virt::Domain::STATE_RUNNING_SAVE_CANCELED => "save canceled",
+      Sys::Virt::Domain::STATE_RUNNING_UNKNOWN => "unknown",
+      Sys::Virt::Domain::STATE_RUNNING_UNPAUSED => "unpaused",
+      Sys::Virt::Domain::STATE_RUNNING_WAKEUP => "wakeup",
+      Sys::Virt::Domain::STATE_RUNNING_CRASHED => "crashed",
+      Sys::Virt::Domain::STATE_RUNNING_POSTCOPY => "postcopy",
+    }],
+  Sys::Virt::Domain::STATE_BLOCKED => ["blocked",
+    {
+      Sys::Virt::Domain::STATE_BLOCKED_UNKNOWN => "unknown",
+    }],
+  Sys::Virt::Domain::STATE_PAUSED => ["paused",
+    {
+      Sys::Virt::Domain::STATE_PAUSED_DUMP => "dump",
+      Sys::Virt::Domain::STATE_PAUSED_FROM_SNAPSHOT => "from snapshot",
+      Sys::Virt::Domain::STATE_PAUSED_IOERROR => "ioerror",
+      Sys::Virt::Domain::STATE_PAUSED_MIGRATION => "migration",
+      Sys::Virt::Domain::STATE_PAUSED_SAVE => "save",
+      Sys::Virt::Domain::STATE_PAUSED_UNKNOWN => "unknown",
+      Sys::Virt::Domain::STATE_PAUSED_USER => "user",
+      Sys::Virt::Domain::STATE_PAUSED_WATCHDOG => "watchdog",
+      Sys::Virt::Domain::STATE_PAUSED_SHUTTING_DOWN => "shutting down",
+      Sys::Virt::Domain::STATE_PAUSED_SNAPSHOT => "snapshot",
+      Sys::Virt::Domain::STATE_PAUSED_CRASHED => "crashed",
+      Sys::Virt::Domain::STATE_PAUSED_STARTING_UP => "starting up",
+      Sys::Virt::Domain::STATE_PAUSED_POSTCOPY => "postcopy",
+      Sys::Virt::Domain::STATE_PAUSED_POSTCOPY_FAILED => "postcopy failed",
+    }],
+  Sys::Virt::Domain::STATE_SHUTDOWN => ["shutdown",
+    {
+      Sys::Virt::Domain::STATE_SHUTDOWN_UNKNOWN => "unknown",
+    }],
+  Sys::Virt::Domain::STATE_SHUTOFF => ["shutoff",
+    {
+      Sys::Virt::Domain::STATE_SHUTOFF_CRASHED => "crashed",
+      Sys::Virt::Domain::STATE_SHUTOFF_DESTROYED => "destroyed",
+      Sys::Virt::Domain::STATE_SHUTOFF_FAILED => "failed",
+      Sys::Virt::Domain::STATE_SHUTOFF_FROM_SNAPSHOT => "from snapshot",
+      Sys::Virt::Domain::STATE_SHUTOFF_MIGRATED => "migrated",
+      Sys::Virt::Domain::STATE_SHUTOFF_SAVED => "saved",
+      Sys::Virt::Domain::STATE_SHUTOFF_SHUTDOWN => "shutdown",
+      Sys::Virt::Domain::STATE_SHUTOFF_UNKNOWN => "unknown",
+      Sys::Virt::Domain::STATE_SHUTOFF_DAEMON => "daemon",
+    }],
+  Sys::Virt::Domain::STATE_CRASHED => ["crashed",
+    {
+      Sys::Virt::Domain::STATE_CRASHED_UNKNOWN => "unknown",
+      Sys::Virt::Domain::STATE_CRASHED_PANICKED => "panicked",
+    }],
+  Sys::Virt::Domain::STATE_PMSUSPENDED => ["pmsuspended",
+    {
+      Sys::Virt::Domain::STATE_PMSUSPENDED_UNKNOWN => "unknown",
+      Sys::Virt::Domain::STATE_PMSUSPENDED_DISK_UNKNOWN => "disk unknown",
+    }],
+);
+
+=pod
+=over 12
+
+=item C<_GetStateDescription()>
+
+Provides a description of the domain state for diagnostics.
+
+=back
+=cut
+
+sub _GetStateDescription($$)
+{
+  my ($State, $Reason) = @_;
+
+  my $StateInfo = $_StateNameReasons{$State};
+  my ($StateName, $ReasonName);
+  if ($StateInfo)
+  {
+    $StateName = $StateInfo->[0];
+    $ReasonName = $StateInfo->[1]->{$Reason};
+  }
+
+  return join(":", $StateName || sprintf("%d", $State),
+                   $ReasonName || sprintf("%d", $Reason));
+}
+
+
+#
+# LibvirtDomain class
+#
+
 sub new($$)
 {
   my ($class, $VM) = @_;
@@ -290,8 +394,8 @@ sub PowerOff($)
   # destroy() sets $@->code to Sys::Virt::Error::ERR_OPERATION_INVALID (55)
   # if the domain was already off. But this could happen for other reasons so
   # just check the domain state.
-  my ($State, $_Reason);
-  eval { ($State, $_Reason) = $Domain->get_state() };
+  my ($State, $Reason);
+  eval { ($State, $Reason) = $Domain->get_state() };
   if ($@)
   {
     # Only return the initial error
@@ -302,7 +406,7 @@ sub PowerOff($)
     # This is what we wanted so ignore past errors
     return undef;
   }
-  return $self->_Reset($self->{VM}->Name ." is not off (". _GetStateName($State)  ."): $ErrMessage");
+  return $self->_Reset($self->{VM}->Name ." is not off (". _GetStateDescription($State, $Reason)  ."): $ErrMessage");
 }
 
 my %_StreamData;
