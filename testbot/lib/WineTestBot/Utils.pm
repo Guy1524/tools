@@ -333,6 +333,31 @@ sub IsValidFileName($)
 =pod
 =over 12
 
+=item C<BatchQuote()>
+
+Quotes strings so they can be used in Windows batch files.
+
+Note that escaping is subtly different between the command line, batch files
+and inside for loops in batch files! This function ignores the latter case.
+
+=back
+=cut
+sub BatchQuote($)
+{
+  my ($Str)=@_;
+
+  $Str =~ s/"/\\"/g;
+  # Backslashes don't need to be doubled, they only take on a special meaning
+  # when followed by a double quote. Single quotes and backquotes don't have
+  # a special meaning either.
+  $Str =~ s/%/%%/g;
+  $Str =~ s/\^/^^/g;
+  return "\"$Str\"";
+}
+
+=pod
+=over 12
+
 =item C<ShQuote()>
 
 Quotes strings so they can be used in shell commands.

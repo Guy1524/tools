@@ -479,14 +479,7 @@ elsif ($Step->Type eq "suite")
       $Info .=  $VM->Details;
   }
   # Escape the arguments for cmd's command interpreter
-  my $EMail = $AdminEMail;
-  $EMail =~ s/"/\\"/g;
-  $EMail =~ s/%/%%/g;
-  $EMail =~ s/%/%%/g;
-  $Info =~ s/"/\\"/g;
-  $Info =~ s/%/%%/g;
-  $Info =~ s/%/%%/g;
-  $Script .= "-q -o $RptFileName -t $Tag -m \"$EMail\" -i \"$Info\"\r\n";
+  $Script .= "-q -o $RptFileName -t $Tag -m ". BatchQuote($AdminEMail) ." -i ". BatchQuote($Info) ."\r\n";
   $Script .= "$FileName -q -s $RptFileName\r\n" if (!$Mission->{nosubmit});
 }
 Debug(Elapsed($Start), " Sending the script: [$Script]\n");
