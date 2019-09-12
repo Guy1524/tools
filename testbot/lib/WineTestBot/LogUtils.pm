@@ -183,6 +183,8 @@ sub _NewCurrentUnit($$)
     # complain about misplaced skips.
     Dll => $Dll,
     Unit => $Unit,
+    Units => {$Unit => 1},
+    UnitsRE => $Unit,
     UnitSize => 0,
     LineFailures => 0,
     LineTodos => 0,
@@ -209,7 +211,7 @@ sub _CheckUnit($$$$)
 {
   my ($Parser, $Cur, $Unit, $Type) = @_;
 
-  if ($Unit eq $Cur->{Unit} or $Cur->{Unit} eq "")
+  if ($Cur->{Units}->{$Unit} or $Cur->{Unit} eq "")
   {
     $Parser->{IsWineTest} = 1;
   }
@@ -337,28 +339,41 @@ sub ParseWineTestReport($$$)
       # Recognize skipped messages in case we need to skip tests in the VMs
       $Cur->{Rc} = 0 if ($Type eq "skipped");
     }
+    elsif ($Line =~ /^([_.a-z0-9-]+)\.c:\d+: Subtest ([_.a-z0-9-]+)\r?$/)
+    {
+      my ($Unit, $SubUnit) = ($1, $2);
+      if ($Cur->{Units}->{$Unit})
+      {
+        $Cur->{Units}->{$SubUnit} = 1;
+        $Cur->{UnitsRE} = join("|", keys %{$Cur->{Units}});
+      }
+      else
+      {
+        _AddError($Parser, "Misplaced $SubUnit subtest\n");
+      }
+    }
     elsif ($Line =~ /^([_a-z0-9]+)\.c:\d+: Test (?:failed|succeeded inside todo block): / or
            ($Cur->{Unit} ne "" and
-            $Line =~ /($Cur->{Unit})\.c:\d+: Test (?:failed|succeeded inside todo block): /))
+            $Line =~ /($Cur->{UnitsRE})\.c:\d+: Test (?:failed|succeeded inside todo block): /))
     {
       _CheckUnit($Parser, $Cur, $1, "failure");
       $Cur->{LineFailures}++;
     }
     elsif ($Line =~ /^([_a-z0-9]+)\.c:\d+: Test marked todo: / or
            ($Cur->{Unit} ne "" and
-            $Line =~ /($Cur->{Unit})\.c:\d+: Test marked todo: /))
+            $Line =~ /($Cur->{UnitsRE})\.c:\d+: Test marked todo: /))
     {
       _CheckUnit($Parser, $Cur, $1, "todo");
       $Cur->{LineTodos}++;
     }
     elsif ($Line =~ /^([_a-z0-9]+)\.c:\d+: Tests skipped: / or
            ($Cur->{Unit} ne "" and
-            $Line =~ /($Cur->{Unit})\.c:\d+: Tests skipped: /))
+            $Line =~ /($Cur->{UnitsRE})\.c:\d+: Tests skipped: /))
     {
       my $Unit = $1;
       # Don't complain and don't count misplaced skips. Only complain if they
       # are misreported (see _CloseTestUnit).
-      if ($Unit eq $Cur->{Unit} or $Cur->{Unit} eq "")
+      if ($Cur->{Units}->{$Unit} or $Cur->{Unit} eq "")
       {
         $Cur->{LineSkips}++;
       }
@@ -374,11 +389,11 @@ sub ParseWineTestReport($$$)
     }
     elsif ($Line =~ /^(?:([0-9a-f]+):)?([_.a-z0-9]+): unhandled exception [0-9a-fA-F]{8} at / or
            ($Cur->{Unit} ne "" and
-            $Line =~ /(?:([0-9a-f]+):)?($Cur->{Unit}): unhandled exception [0-9a-fA-F]{8} at /))
+            $Line =~ /(?:([0-9a-f]+):)?($Cur->{UnitsRE}): unhandled exception [0-9a-fA-F]{8} at /))
     {
       my ($Pid, $Unit) = ($1, $2);
 
-      if ($Unit eq $Cur->{Unit})
+      if ($Cur->{Units}->{$Unit})
       {
         # This also replaces a test summary line.
         $Cur->{Pids}->{$Pid || 0} = 1;
