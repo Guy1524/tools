@@ -2,6 +2,7 @@
 #
 # Copyright (C) 2004 Ferenc Wagner
 # Copyright (C) 2008 Alexandre Julliard
+# Copyright (C) 2017, 2019 Francois Gouget
 #
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
@@ -442,8 +443,9 @@ while ($line = <IN> || "")
 # Parse the tests output
 #
 
-my ($dll, $unit, $source, $rev, $result) = ("", "", "");
+my ($dll, $unit, $units_re, $source, $rev, $result) = ("", "", "", "");
 my $unitsize = 0;
+my %units;
 my ($failures, $todo, $skipped) = (0, 0, 0);
 my ($s_failures, $s_todo, $s_skipped, $s_total) = (0, 0, 0, 0);
 my (%pids, $rc, $summary, $broken);
@@ -455,9 +457,9 @@ sub get_source_link($$)
 
     my $source_link = defined $_unit ? "$_unit.c" : $source ne "-" ? $source : "$dll:$unit";
     $source_link .= ":$_lnum" if (defined $_lnum);
-    if (defined $_unit and $_unit ne $unit)
+    if (defined $_unit and !$units{$_unit})
     {
-        # If the line is not for the current test unit we'll let its
+        # If the line is not for a current test unit we'll let its
         # developer hash it out with the polluter ;-)
         $broken = 1;
     }
@@ -481,7 +483,7 @@ sub add_test_line($$)
 sub check_unit($$)
 {
     my ($l_unit, $l_type) = @_;
-    if ($l_unit ne $unit)
+    if (!$units{$l_unit})
     {
         add_test_line("end", "Misplaced $l_type message\n");
         $extra_failures++;
@@ -576,7 +578,8 @@ sub close_test_unit($)
         mydie "too many failed test units (>$maxfailedtests at $dll:$unit)";
     }
 
-    $dll = $unit = "";
+    $dll = $unit = $units_re = "";
+    %units = ();
     $unitsize = 0;
     $failures = $todo = $skipped = 0;
     $s_failures = $s_todo = $s_skipped = $s_total = 0;
@@ -599,6 +602,8 @@ while ($line = <IN>) {
         close_test_unit(0) if ($dll ne "");
 
         ($dll, $unit, $source, $rev) = ($l_dll, $l_unit, $l_source, $l_rev);
+        %units = ($unit => 1);
+        $units_re = join("|", keys %units);
 
         $testbox = create_test_unit_box();
         if ($l_type eq "skipped")
@@ -609,40 +614,56 @@ while ($line = <IN>) {
             $rc = 0;
         }
     }
+    elsif ($line =~ /^([_.a-z0-9-]+)\.c:\d+: Subtest ([_.a-z0-9-]+)\r?$/)
+    {
+        my ($l_unit, $l_subunit) = ($1, $2);
+        if ($units{$l_unit})
+        {
+            $units{$l_subunit} = 1;
+            $units_re = join("|", keys %units);
+        }
+        else
+        {
+            add_test_line("end", "Misplaced $l_subunit subtest\n");
+            $extra_failures++;
+        }
+    }
     elsif ($line =~ /^()([_a-z0-9]+)\.c:(\d+): (Test (?:failed|succeeded inside todo block): .*)$/ or
            ($unit ne "" and
-            $line =~ /^(.*?)($unit)\.c:(\d+): (Test (?:failed|succeeded inside todo block): .*)$/))
+            $line =~ /^(.*?)($units_re)\.c:(\d+): (Test (?:failed|succeeded inside todo block): .*)$/))
     {
         my ($pollution, $l_unit, $l_num, $l_text) = ($1, $2, $3, $4);
         add_test_line("failed", escapeHTML($pollution) .
                                 get_source_link($l_unit, $l_num) .": ".
                                 escapeHTML($l_text));
+        check_unit($l_unit, "failure");
         $failures++;
     }
     elsif ($line =~ /^()([_a-z0-9]+)\.c:(\d+): (Test marked todo: .*)$/ or
            ($unit ne "" and
-            $line =~ /^(.*?)($unit)\.c:(\d+): (Test marked todo: .*)$/))
+            $line =~ /^(.*?)($units_re)\.c:(\d+): (Test marked todo: .*)$/))
     {
         my ($pollution, $l_unit, $l_num, $l_text) = ($1, $2, $3, $4);
         add_test_line("todo", escapeHTML($pollution) .
                               get_source_link($l_unit, $l_num) .": ".
                               escapeHTML($l_text));
+        check_unit($l_unit, "todo");
         $todo++;
     }
     elsif ($line =~ /^()([_a-z0-9]+)\.c:(\d+): (Tests skipped: .*)$/ or
            ($unit ne "" and
-            $line =~ /^(.*?)($unit)\.c:(\d+): (Tests skipped: .*)$/))
+            $line =~ /^(.*?)($units_re)\.c:(\d+): (Tests skipped: .*)$/))
     {
         my ($pollution, $l_unit, $l_num, $l_text) = ($1, $2, $3, $4);
         add_test_line("skipped", escapeHTML($pollution) .
                                  get_source_link($l_unit, $l_num) .": ".
                                  escapeHTML($l_text));
         # Don't complain and don't count misplaced skips
-        $skipped++ if ($l_unit eq $unit);
+        $skipped++ if ($units{$l_unit});
     }
     elsif ($line =~ /^()([_a-z0-9]+)\.c:(\d+): (.*)$/ or
            ($unit ne "" and
-            $line =~ /^(.*?)($unit)\.c:(\d+): (.*)$/))
+            $line =~ /^(.*?)($units_re)\.c:(\d+): (.*)$/))
     {
         my ($pollution, $l_unit, $l_num, $l_text) = ($1, $2, $3, $4);
         add_test_line("trace", escapeHTML($pollution) .
@@ -651,10 +672,10 @@ while ($line = <IN>) {
     }
     elsif ($line =~ /^(?:([0-9a-f]+):)?([_.a-z0-9]+): unhandled exception [0-9a-fA-F]{8} at / or
            ($unit ne "" and
-            $line =~ /(?:([0-9a-f]+):)?($unit): unhandled exception [0-9a-fA-F]{8} at /))
+            $line =~ /(?:([0-9a-f]+):)?($units_re): unhandled exception [0-9a-fA-F]{8} at /))
     {
         my ($l_pid, $l_unit) = ($1, $2);
-        if ($l_unit eq $unit)
+        if ($units{$l_unit})
         {
           # This also replaces a test summary line.
           $pids{$l_pid || 0} = 1;
@@ -706,6 +727,9 @@ while ($line = <IN>) {
             # Then switch to the new one, warning it's missing a start line,
             # and that its results may be inconsistent.
             ($dll, $unit, $source, $rev) = ($l_dll, $l_unit, "-", "-");
+            %units = ($unit => 1);
+            $units_re = join("|", keys %units);
+
             $testbox = create_test_unit_box();
             add_test_line("end", "The $l_dll:$l_unit start line is missing (or it is garbled)");
             $extra_failures++;
