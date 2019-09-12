@@ -65,8 +65,11 @@ my %WineTestUrls = (
     "exe64" => "http://test.winehq.org/builds/winetest64-latest.exe"
 );
 
-my %TaskTypes = (build => 1, base32 => 1, winetest32 => 1, all64 => 1,
-                 wine => 1);
+my %TaskTypes = (build => "Update and rebuild Wine on the build VMs.",
+                 base32 => "Run WineTest on the 32 bit Windows VMs with the 'base' role.",
+                 winetest32 => "Run WineTest on the 32 bit Windows VMs with the 'winetest' role.",
+                 all64 => "Run WineTest on the all the 64 bit Windows VMs.",
+                 wine => "Update, rebuild and run WineTest on the Wine VMs.");
 
 
 my $Debug;
@@ -441,7 +444,11 @@ if (defined $Usage)
 {
   print "Usage: $Name0 [--debug] [--log-only] [--help] [--create] [TASKTYPE] ...\n";
   print "\n";
-  print "Where TASKTYPE is one of: ", join(" ", sort keys %TaskTypes), "\n";
+  print "Where TASKTYPE is one of:\n";
+  foreach my $TaskType (sort keys %TaskTypes)
+  {
+    printf(" %-15s %s\n", $TaskType, $TaskTypes{$TaskType});
+  }
   exit $Usage;
 }
 
