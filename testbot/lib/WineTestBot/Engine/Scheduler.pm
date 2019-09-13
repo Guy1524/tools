@@ -350,7 +350,7 @@ sub _CheckAndClassifyVMs()
     }
     else
     {
-      if (defined $VM->ChildPid or
+      if (defined $VM->ChildPid or defined $VM->ChildDeadline or
           $VM->Status =~ /^(?:running|reverting|sleeping)$/)
       {
         # The VM is missing its child process or it died unexpectedly. Mark
