@@ -104,7 +104,7 @@ while (@ARGV)
   }
 }
 
-# Check parameters
+# Check and untaint parameters
 my $VM;
 if (!defined $Usage)
 {
@@ -120,7 +120,7 @@ if (!defined $Usage)
   }
   elsif ($VMKey =~ /^([a-zA-Z0-9_]+)$/)
   {
-    $VMKey = $1;
+    $VMKey = $1; # untaint
     $VM = CreateVMs()->GetItem($VMKey);
     if (!defined $VM)
     {

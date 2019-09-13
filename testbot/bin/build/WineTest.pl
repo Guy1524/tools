@@ -329,7 +329,7 @@ if (!defined $Usage)
     }
     elsif ($BaseTag =~ m/^([\w_.\-]+)$/)
     {
-      $BaseTag = $1;
+      $BaseTag = $1; # untaint
     }
     else
     {
