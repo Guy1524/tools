@@ -31,7 +31,7 @@ our @EXPORT = qw(MakeSecureURL SecureConnection GenerateRandomString
                  OpenNewFile CreateNewFile CreateNewLink CreateNewDir
                  DurationToString BuildEMailRecipient IsValidFileName
                  BuildTag SanitizeTag LocaleName NotifyAdministrator
-                 ShQuote ShArgv2Cmd);
+                 BatchQuote ShQuote ShArgv2Cmd);
 
 use Fcntl;
 
