@@ -26,7 +26,7 @@ WineTestBot::Config - Site-independent configuration settings
 =cut
 
 use vars qw (@ISA @EXPORT @EXPORT_OK $UseSSL $LogDir $DataDir $BinDir
-             $DbDataSource $DbUsername $DbPassword $MaxRevertingVMs
+             %RepoURLs $DbDataSource $DbUsername $DbPassword $MaxRevertingVMs
              $MaxRevertsWhileRunningVMs $MaxActiveVMs $MaxRunningVMs
              $MaxVMsWhenIdle $SleepAfterRevert $WaitForToolsInVM
              $VMToolTimeout $MaxVMErrors $MaxTaskTries $AdminEMail $RobotEMail
@@ -42,7 +42,7 @@ use vars qw (@ISA @EXPORT @EXPORT_OK $UseSSL $LogDir $DataDir $BinDir
 
 require Exporter;
 @ISA = qw(Exporter);
-@EXPORT = qw($UseSSL $LogDir $DataDir $BinDir
+@EXPORT = qw($UseSSL $LogDir $DataDir $BinDir %RepoURLs
              $MaxRevertingVMs $MaxRevertsWhileRunningVMs $MaxActiveVMs
              $MaxRunningVMs $MaxVMsWhenIdle $SleepAfterRevert $WaitForToolsInVM
              $VMToolTimeout $MaxVMErrors $MaxTaskTries $AdminEMail
@@ -78,6 +78,10 @@ sub PrependPaths(@)
   map { $ENV{PATH} = "$_:$ENV{PATH}" if (-d $_) } reverse @_;
 }
 
+
+%RepoURLs = (
+  "wine" => "git://source.winehq.org/git/wine.git",
+);
 
 # See the ScheduleOnHost() documentation in lib/WineTestBot/Jobs.pm
 $MaxRevertingVMs = 1;

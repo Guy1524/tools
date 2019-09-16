@@ -79,11 +79,19 @@ sub GitPull($)
 {
   my ($Dir) = @_;
 
-  InfoMsg "\nUpdating the $Dir source\n";
-  system("cd '$DataDir/$Dir' && git pull");
+  if (!-d "$DataDir/$Dir")
+  {
+    InfoMsg "\nRetrieving the $Dir source\n";
+    system("set -x && git clone $RepoURLs{$Dir}");
+  }
+  else
+  {
+    InfoMsg "\nUpdating the $Dir source\n";
+    system("cd '$DataDir/$Dir' && set -x && git pull");
+  }
   if ($? != 0)
   {
-    LogMsg "Git pull failed\n";
+    LogMsg "Git clone/pull failed\n";
     return !1;
   }
 
