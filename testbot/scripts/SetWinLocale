@@ -251,7 +251,7 @@ my %Keyboards = (
 #
 
 my $Usage;
-sub check_opt_val($$)
+sub CheckValue($$)
 {
   my ($Option, $Value) = @_;
 
@@ -269,10 +269,10 @@ sub check_opt_val($$)
   return shift @ARGV;
 }
 
-sub check_opt_locale($$)
+sub CheckLocale($$)
 {
   my ($Option, $Value) = @_;
-  $Value = check_opt_val($Option, $Value);
+  $Value = CheckValue($Option, $Value);
   if ($Value !~ /^(?:[a-z]{2})-(?:Latn-)?(?:[A-Z]{2})$/)
   {
     Error("'$Value' is not a valid $Option locale\n");
@@ -294,7 +294,7 @@ while (@ARGV)
   }
   elsif ($Arg eq "--vm")
   {
-    $OptVM = check_opt_val($Arg, $OptVM);
+    $OptVM = CheckValue($Arg, $OptVM);
   }
   elsif ($Arg eq "--refresh")
   {
@@ -310,7 +310,7 @@ while (@ARGV)
   }
   elsif ($Arg eq "--add-locales")
   {
-    $OptAddLocales = check_opt_val($Arg, $OptAddLocales);
+    $OptAddLocales = CheckValue($Arg, $OptAddLocales);
   }
   elsif ($Arg eq "--reboot")
   {
@@ -332,27 +332,27 @@ while (@ARGV)
   }
   elsif ($Arg eq "--default")
   {
-    $OptDefault = check_opt_locale($Arg, $OptDefault);
+    $OptDefault = CheckLocale($Arg, $OptDefault);
   }
   elsif ($Arg eq "--locale")
   {
-    $OptLocale = check_opt_locale($Arg, $OptLocale);
+    $OptLocale = CheckLocale($Arg, $OptLocale);
   }
   elsif ($Arg eq "--system")
   {
-    $OptSystem = check_opt_locale($Arg, $OptSystem);
+    $OptSystem = CheckLocale($Arg, $OptSystem);
   }
   elsif ($Arg eq "--mui")
   {
-    $OptMUI = check_opt_locale($Arg, $OptMUI);
+    $OptMUI = CheckLocale($Arg, $OptMUI);
   }
   elsif ($Arg eq "--keyboard")
   {
-    $OptKeyboard = check_opt_locale($Arg, $OptKeyboard);
+    $OptKeyboard = CheckLocale($Arg, $OptKeyboard);
   }
   elsif ($Arg eq "--country")
   {
-    $OptCountry = check_opt_val($Arg, $OptCountry);
+    $OptCountry = CheckValue($Arg, $OptCountry);
   }
   elsif ($Arg eq "--debug")
   {
