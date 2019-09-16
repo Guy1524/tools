@@ -166,23 +166,31 @@ sub FatalError($)
   my ($ErrMessage) = @_;
   Error $ErrMessage;
 
+  # Get the up-to-date VM status
+  $VM = CreateVMs()->GetItem($VMKey);
+
   # Put the VM offline or mark it for maintenance
   my $Errors = ($VM->Errors || 0) + 1;
   my $NewStatus = $Errors < $MaxVMErrors ? "offline" : "maintenance";
 
-  $VM = CreateVMs()->GetItem($VMKey);
-  # Put the VM offline if nobody else modified its status before us
-  if ($VM->Status eq $CurrentStatus)
+  if ($VM->Status eq "maintenance")
   {
-    $VM->Status($NewStatus);
-    $VM->ChildDeadline(undef);
-    $VM->ChildPid(undef);
-    $VM->Errors($Errors);
+    # Still proceed with changing the non-Status fields and notifying the
+    # administrator to allow for error handling debugging.
+  }
+  elsif ($VM->Status ne $CurrentStatus)
+  {
+    LogMsg "Not updating the VM because its status changed: ". $VM->Status ." != $CurrentStatus\n";
+    exit 1;
   }
   else
   {
-    $NewStatus = "";
+    $VM->Status($NewStatus);
   }
+  $VM->ChildDeadline(undef);
+  $VM->ChildPid(undef);
+  $VM->Errors($Errors);
+
   my ($ErrProperty, $SaveErrMessage) = $VM->Save();
   if (defined $SaveErrMessage)
   {
@@ -198,7 +206,7 @@ sub FatalError($)
   elsif ($NewStatus eq "maintenance")
   {
     NotifyAdministrator("The $VMKey VM needs maintenance",
-                        "Got ". $VM->Errors ." consecutive errors working on the $VMKey VM:\n".
+                        "Got $Errors consecutive errors working on the $VMKey VM:\n".
                         "\n$ErrMessage\n".
                         "An administrator needs to look at it and to put it back online.");
   }
