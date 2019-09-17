@@ -350,8 +350,13 @@ sub _CheckAndClassifyVMs()
     }
     else
     {
-      if (defined $VM->ChildPid or defined $VM->ChildDeadline or
-          $VM->Status =~ /^(?:running|reverting|sleeping)$/)
+      if ($VM->Status eq "maintenance")
+      {
+        # Don't touch the VM while the administrator is working on it
+        $Sched->{busyvms}->{$VMKey} = 1;
+      }
+      elsif (defined $VM->ChildPid or defined $VM->ChildDeadline or
+             $VM->Status =~ /^(?:running|reverting|sleeping)$/)
       {
         # The VM is missing its child process or it died unexpectedly. Mark
         # the VM dirty so a revert or shutdown brings it back to a known state.
@@ -379,11 +384,6 @@ sub _CheckAndClassifyVMs()
           LogMsg "$ErrMessage\n" if (defined $ErrMessage);
         }
         # Ignore the VM for this round since we cannot use it
-        $Sched->{busyvms}->{$VMKey} = 1;
-      }
-      elsif ($VM->Status eq "maintenance")
-      {
-        # Don't touch the VM while the administrator is working on it
         $Sched->{busyvms}->{$VMKey} = 1;
       }
       elsif ($VM->Status ne "off")
@@ -1025,7 +1025,7 @@ sub ScheduleJobs()
   $VMs->FilterEnabledRole();
   foreach my $VM (@{$VMs->GetItems()})
   {
-    if (defined $VM->ChildDeadline and
+    if ($VM->Status ne "maintenance" and defined $VM->ChildDeadline and
         (!defined $FirstDeadline or $VM->ChildDeadline < $FirstDeadline))
     {
       $FirstDeadline = $VM->ChildDeadline;
