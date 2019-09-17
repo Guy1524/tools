@@ -67,7 +67,7 @@ my %WineTestUrls = (
 
 my %TaskTypes = (build => "Update and rebuild Wine on the build VMs.",
                  base32 => "Run WineTest on the 32 bit Windows VMs with the 'base' role.",
-                 winetest32 => "Run WineTest on the 32 bit Windows VMs with the 'winetest' role.",
+                 other32 => "Run WineTest on the 32 bit Windows VMs with the 'winetest' role.",
                  all64 => "Run WineTest on the all the 64 bit Windows VMs.",
                  wine => "Update, rebuild and run WineTest on the Wine VMs.");
 
@@ -171,7 +171,7 @@ sub AddJob($$$)
 {
   my ($BaseJob, $LatestBaseName, $Build) = @_;
 
-  my $Remarks = ($Build eq "exe64" ? "64-bit" : $BaseJob ? "base" : "other");
+  my $Remarks = $Build eq "exe64" ? "64-bit" : $BaseJob;
   $Remarks = "WineTest: $Remarks VMs";
   Debug("Creating the '$Remarks' job\n");
 
@@ -181,7 +181,7 @@ sub AddJob($$$)
     $VMs->AddFilter("Type", ["win64"]);
     $VMs->AddFilter("Role", ["base", "winetest"]);
   }
-  elsif ($BaseJob)
+  elsif ($BaseJob eq "base")
   {
     $VMs->AddFilter("Type", ["win32", "win64"]);
     $VMs->AddFilter("Role", ["base"]);
@@ -202,7 +202,7 @@ sub AddJob($$$)
   my $Jobs = CreateJobs();
   my $NewJob = $Jobs->Add();
   $NewJob->User(GetBatchUser());
-  $NewJob->Priority($BaseJob && $Build eq "exe32" ? 8 : 9);
+  $NewJob->Priority($BaseJob eq "base" and $Build eq "exe32" ? 8 : 9);
   $NewJob->Remarks($Remarks);
 
   # Add a task for each VM
@@ -458,7 +458,7 @@ if (defined $Usage)
 #
 
 my $Rc = 0;
-if ($OptTypes{build} or $OptTypes{base32} or $OptTypes{winetest32} or
+if ($OptTypes{build} or $OptTypes{base32} or $OptTypes{other32} or
     $OptTypes{wine})
 {
   my ($Create, $LatestBaseName) = UpdateWineTest($OptCreate, "exe32");
@@ -473,7 +473,7 @@ if ($OptTypes{build} or $OptTypes{base32} or $OptTypes{winetest32} or
     # arbitrarily do it only for 32-bit executables to avoid redundant updates.
     $Rc = 1 if ($OptTypes{build} and !AddReconfigJob("build"));
     $Rc = 1 if ($OptTypes{base32} and !AddJob("base", $LatestBaseName, "exe32"));
-    $Rc = 1 if ($OptTypes{winetest32} and !AddJob("", $LatestBaseName, "exe32"));
+    $Rc = 1 if ($OptTypes{other32} and !AddJob("other", $LatestBaseName, "exe32"));
 
     $Rc = 1 if ($OptTypes{wine} and !AddReconfigJob("wine"));
   }
