@@ -411,7 +411,7 @@ if (!$TA->SetTime())
 {
   # Not a fatal error. Try the next port in case the VM runs a privileged
   # TestAgentd daemon there.
-  my $PrivilegedTA = $VM->GetAgent(1);
+  my $PrivilegedTA = $VM->GetAgent("privileged");
   if (!$PrivilegedTA->SetTime())
   {
     LogTaskError("Unable to set the VM system time: ". $PrivilegedTA->GetLastError() .". Maybe the TestAgentd process is missing the required privileges.\n");
