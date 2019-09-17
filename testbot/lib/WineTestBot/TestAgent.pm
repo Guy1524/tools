@@ -938,7 +938,7 @@ sub _Connect($)
 
     if ($@)
     {
-      if ($@ eq "timeout")
+      if ($@ =~ /^timeout /)
       {
         $self->_SetError($FATAL, "Timed out in $Step while connecting to $self->{connection}");
       }
