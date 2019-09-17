@@ -40,6 +40,7 @@ sub BEGIN
 my $Name0 = $0;
 $Name0 =~ s+^.*/++;
 
+use File::Basename;
 
 use WineTestBot::Config;
 use WineTestBot::Jobs;
@@ -428,32 +429,20 @@ FatalTAError(undef, $TAError) if (defined $TAError);
 if ($NewStatus eq "completed")
 {
   use File::Copy;
-  if ($VM->Type eq "build")
+  foreach my $FileName ("../src/TestLauncher/TestLauncher32.exe",
+                        "../src/TestLauncher/TestLauncher64.exe",
+                        "latest/winefiles.txt",
+                        "latest/wine-parentsrc.txt")
   {
-    for my $Bitness ("32", "64")
+    my $BaseName = basename($FileName);
+    Debug(Elapsed($Start), " Retrieving '$TaskDir/$BaseName'\n");
+    if ($TA->GetFile($FileName, "$TaskDir/$BaseName"))
     {
-      Debug(Elapsed($Start), " Retrieving the $Bitness bit TestLauncher to '$TaskDir/TestLauncher$Bitness.exe'\n");
-      if ($TA->GetFile("../src/TestLauncher/TestLauncher$Bitness.exe", "$TaskDir/TestLauncher$Bitness.exe"))
-      {
-        copy "$TaskDir/TestLauncher$Bitness.exe", "$DataDir/latest/TestLauncher$Bitness.exe";
-      }
-      elsif (!defined $TAError)
-      {
-        FatalTAError($TA, "An error occurred while retrieving the $Bitness bit TestLauncher");
-      }
-    }
-  }
-
-  foreach my $FileName ("winefiles.txt", "wine-parentsrc.txt")
-  {
-    Debug(Elapsed($Start), " Retrieving '$TaskDir/$FileName'\n");
-    if ($TA->GetFile("latest/$FileName", "$TaskDir/$FileName"))
-    {
-      copy "$TaskDir/$FileName", "$DataDir/latest/$FileName";
+      copy "$TaskDir/$BaseName", "$DataDir/latest/$BaseName";
     }
     elsif (!defined $TAError)
     {
-      FatalTAError($TA, "An error occurred while retrieving '$TaskDir/$FileName'");
+      FatalTAError($TA, "An error occurred while retrieving '$TaskDir/$BaseName'");
     }
   }
 }
