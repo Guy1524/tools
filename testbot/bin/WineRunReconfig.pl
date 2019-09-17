@@ -391,17 +391,17 @@ if (!defined $TA->Wait($Pid, $Task->Timeout, 60))
 Debug(Elapsed($Start), " Retrieving 'Reconfig.log'\n");
 if ($TA->GetFile("Reconfig.log", "$TaskDir/log"))
 {
-  my ($Result, $_Type) = ParseTaskLog("$TaskDir/log");
-  if ($Result eq "ok")
+  my $Summary = ParseTaskLog("$TaskDir/log");
+  if ($Summary->{Task} eq "ok")
   {
     # We must have gotten the full log and the build did succeed.
     # So forget any prior error.
     $NewStatus = "completed";
     $TAError = $ErrMessage = undef;
   }
-  elsif ($Result =~ s/^nolog://)
+  elsif ($Summary->{NoLog})
   {
-    FatalError("$Result\n", "retry");
+    FatalError("$Summary->{NoLog}\n", "retry");
   }
   else
   {

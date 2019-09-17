@@ -391,23 +391,23 @@ if (!defined $TA->Wait($Pid, $Task->Timeout, 60))
 Debug(Elapsed($Start), " Retrieving 'Build.log'\n");
 if ($TA->GetFile("Build.log", "$TaskDir/log"))
 {
-  my ($Result, $_Type) = ParseTaskLog("$TaskDir/log");
-  if ($Result eq "ok")
+  my $Summary = ParseTaskLog("$TaskDir/log");
+  if ($Summary->{Task} eq "ok")
   {
     # We must have gotten the full log and the build did succeed.
     # So forget any prior error.
     $NewStatus = "completed";
     $TAError = $ErrMessage = undef;
   }
-  elsif ($Result eq "badpatch")
+  elsif ($Summary->{Task} eq "badpatch")
   {
     # This too is conclusive enough to ignore other errors.
     $NewStatus = "badpatch";
     $TAError = $ErrMessage = undef;
   }
-  elsif ($Result =~ s/^nolog://)
+  elsif ($Summary->{NoLog})
   {
-    FatalError("$Result\n", "retry");
+    FatalError("$Summary->{NoLog}\n", "retry");
   }
   else
   {

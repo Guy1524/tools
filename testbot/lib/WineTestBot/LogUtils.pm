@@ -69,7 +69,17 @@ sub _IsPerlError($)
 
 =item C<ParseTaskLog()>
 
-Returns ok if the task was successful and an error code otherwise.
+Returns a hashtable containing a summary of the task log:
+=over
+
+=item Type
+'tests' if the task ran Wine tests and 'build' otherwise.
+
+=item Task
+Either 'ok' if the task was successful or a code indicating why it failed.
+
+=item NoLog
+Contains an error message if the task log could not be read.
 
 =back
 =cut
@@ -80,33 +90,33 @@ sub ParseTaskLog($)
 
   if (open(my $LogFile, "<", $FileName))
   {
-    my $Result;
-    my $Type = "build";
+    my $Summary = {Type => "build"};
     foreach my $Line (<$LogFile>)
     {
       chomp $Line;
       if ($Line eq "Task: tests")
       {
-        $Type = "tests";
+        $Summary->{Type} = "tests";
       }
       elsif ($Line eq "Task: ok")
       {
-        $Result ||= "ok";
+        $Summary->{Task} ||= "ok";
       }
       elsif ($Line eq "Task: Patch failed to apply")
       {
-        $Result = "badpatch";
+        $Summary->{Task} = "badpatch";
         last; # Should be the last and most specific message
       }
       elsif ($Line =~ /^Task: / or _IsPerlError($Line))
       {
-        $Result = "failed";
+        $Summary->{Task} = "failed";
       }
     }
     close($LogFile);
-    return ($Result || "missing", $Type);
+    $Summary->{Task} ||= "missing";
+    return $Summary;
   }
-  return ("nolog:Unable to open the task log for reading: $!", undef);
+  return {NoLog => "Unable to open the task log for reading: $!"};
 }
 
 

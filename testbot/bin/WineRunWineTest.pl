@@ -512,8 +512,8 @@ if (!defined $TA->Wait($Pid, $Task->Timeout, 60))
 Debug(Elapsed($Start), " Retrieving 'Task.log'\n");
 if ($TA->GetFile("Task.log", "$TaskDir/log"))
 {
-  my ($Result, $Type) = ParseTaskLog("$TaskDir/log");
-  if ($Result eq "ok")
+  my $Summary = ParseTaskLog("$TaskDir/log");
+  if ($Summary->{Task} eq "ok")
   {
     # We must have gotten the full log and the task completed successfully
     # (with or without test failures). So clear any previous errors, including
@@ -521,17 +521,17 @@ if ($TA->GetFile("Task.log", "$TaskDir/log"))
     $NewStatus = "completed";
     $TaskFailures = $TAError = $ErrMessage = $PossibleCrash = undef;
   }
-  elsif ($Result eq "badpatch")
+  elsif ($Summary->{Task} eq "badpatch")
   {
     # This too is conclusive enough to ignore other errors.
     $NewStatus = "badpatch";
     $TaskFailures = $TAError = $ErrMessage = $PossibleCrash = undef;
   }
-  elsif ($Result =~ s/^nolog://)
+  elsif ($Summary->{NoLog})
   {
-    FatalError("$Result\n", "retry");
+    FatalError("$Summary->{NoLog}\n", "retry");
   }
-  elsif ($Type eq "build")
+  elsif ($Summary->{Type} eq "build")
   {
     # The error happened before the tests started so blame the build.
     $NewStatus = "badbuild";
