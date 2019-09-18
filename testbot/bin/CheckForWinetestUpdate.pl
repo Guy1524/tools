@@ -118,7 +118,7 @@ sub UpdateWineTest($$)
   my $Request = HTTP::Request->new(GET => $WineTestUrls{$Build});
   if (-r $LatestFileName)
   {
-    my $Since = gmtime((stat $LatestFileName)[9]);
+    my $Since = gmtime(GetMTime($LatestFileName));
     $Request->header("If-Modified-Since" => "$Since GMT");
   }
   Debug("Checking $WineTestUrls{$Build}\n");

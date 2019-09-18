@@ -28,7 +28,7 @@ WineTestBot::Utils - Utility functions
 
 use Exporter 'import';
 our @EXPORT = qw(MakeSecureURL SecureConnection GenerateRandomString
-                 OpenNewFile CreateNewFile CreateNewLink CreateNewDir
+                 OpenNewFile CreateNewFile CreateNewLink CreateNewDir GetMTime
                  DurationToString BuildEMailRecipient IsValidFileName
                  BuildTag SanitizeTag LocaleName NotifyAdministrator
                  BatchQuote ShQuote ShArgv2Cmd);
@@ -253,6 +253,12 @@ sub CreateNewDir($$)
     # This is not an error that will be fixed by trying a different path
     return undef if (!$!{EEXIST});
   }
+}
+
+sub GetMTime($)
+{
+  my ($Filename) = @_;
+  return (stat($Filename))[9] || 0;
 }
 
 

@@ -37,6 +37,7 @@ our @EXPORT = qw(GetPatchImpacts LastPartSeparator UpdateWineData
 use List::Util qw(min max);
 
 use WineTestBot::Config;
+use WineTestBot::Utils;
 
 
 #
@@ -83,7 +84,7 @@ files and a hashtable of all the Wine files.
 sub _LoadWineFiles()
 {
   my $FileName = "$DataDir/latest/winefiles.txt";
-  my $MTime = (stat($FileName))[9] || 0;
+  my $MTime = GetMTime($FileName);
 
   if ($_TestList and $_TimeStamp == $MTime)
   {
