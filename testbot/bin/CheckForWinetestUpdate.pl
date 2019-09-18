@@ -6,7 +6,7 @@
 # runs the full test suite on the standard Windows test VMs.
 #
 # Copyright 2009 Ge van Geldorp
-# Copyright 2018 Francois Gouget
+# Copyright 2018-2019 Francois Gouget
 #
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
@@ -167,32 +167,40 @@ sub UpdateWineTest($$)
   return (1, $LatestBaseName);
 }
 
-sub AddJob($$$)
+sub AddJob($$$$)
 {
-  my ($BaseJob, $LatestBaseName, $Build) = @_;
+  my ($VMKey, $BaseJob, $LatestBaseName, $Build) = @_;
 
-  my $Remarks = $Build eq "exe64" ? "64-bit" : $BaseJob;
-  $Remarks = "WineTest: $Remarks VMs";
+  my $Remarks = defined $VMKey ? "$VMKey VM" :
+                $Build eq "exe64" ? "64 bit VMs" :
+                "$BaseJob VMs";
+  $Remarks = "WineTest: $Remarks";
   Debug("Creating the '$Remarks' job\n");
 
   my $VMs = CreateVMs();
+  $VMs->AddFilter("Name", [$VMKey]) if (defined $VMKey);
   if ($Build eq "exe64")
   {
     $VMs->AddFilter("Type", ["win64"]);
-    $VMs->AddFilter("Role", ["base", "winetest"]);
+    $VMs->AddFilter("Role", ["base", "winetest"]) if (!defined $VMKey);
   }
   elsif ($BaseJob eq "base")
   {
     $VMs->AddFilter("Type", ["win32", "win64"]);
-    $VMs->AddFilter("Role", ["base"]);
+    $VMs->AddFilter("Role", ["base"]) if (!defined $VMKey);
   }
   else
   {
     $VMs->AddFilter("Type", ["win32", "win64"]);
-    $VMs->AddFilter("Role", ["winetest"]);
+    $VMs->AddFilter("Role", ["winetest"]) if (!defined $VMKey);
   }
   if ($VMs->GetItemsCount() == 0)
   {
+    if (defined $VMKey)
+    {
+      Error "The $VMKey VM is not suitable for $Build WineTest jobs\n";
+      return 0;
+    }
     # There is nothing to do
     Debug("  Found no VM\n");
     return 1;
@@ -267,18 +275,25 @@ sub AddJob($$$)
   return 1;
 }
 
-sub AddReconfigJob($)
+sub AddReconfigJob($$)
 {
-  my ($VMType) = @_;
+  my ($VMKey, $VMType) = @_;
 
-  my $Remarks = "Update the $VMType VMs";
+  my $Remarks = defined $VMKey ? "$VMKey $VMType VM" : "$VMType VMs";
+  $Remarks = "Update the $Remarks";
   Debug("Creating the '$Remarks' job\n");
 
   my $VMs = CreateVMs();
+  $VMs->AddFilter("Name", [$VMKey]) if (defined $VMKey);
   $VMs->AddFilter("Type", [$VMType]);
   $VMs->FilterEnabledRole();
   if ($VMs->GetItemsCount() == 0)
   {
+    if (defined $VMKey)
+    {
+      Error "The $VMKey VM is not a $VMType VM\n";
+      return 0;
+    }
     # There is nothing to do
     Debug("  Found no VM\n");
     return 1;
@@ -396,13 +411,36 @@ sub AddReconfigJob($)
 # Command line processing
 #
 
-my ($OptCreate, %OptTypes, $Usage);
+my $Usage;
+sub CheckValue($$)
+{
+    my ($Option, $Value)=@_;
+
+    if (defined $Value)
+    {
+        Error "$Option can only be specified once\n";
+        $Usage = 2; # but continue processing this option
+    }
+    if (!@ARGV)
+    {
+        Error "missing value for $Option\n";
+        $Usage = 2;
+        return undef;
+    }
+    return shift @ARGV;
+}
+
+my ($OptCreate, %OptTypes, $OptVMKey);
 while (@ARGV)
 {
   my $Arg = shift @ARGV;
   if ($Arg eq "--create")
   {
     $OptCreate = 1;
+  }
+  elsif ($Arg eq "--vm")
+  {
+    $OptVMKey = CheckValue($Arg, $OptVMKey);
   }
   elsif ($TaskTypes{$Arg})
   {
@@ -435,14 +473,39 @@ while (@ARGV)
   }
 }
 
-# Check parameters
+# Check and untaint parameters
 if (!defined $Usage)
 {
-  %OptTypes = %TaskTypes if (!%OptTypes);
+  if (!defined $OptVMKey)
+  {
+    %OptTypes = %TaskTypes if (!%OptTypes);
+  }
+  elsif ($OptVMKey =~ /^([a-zA-Z0-9_]+)$/)
+  {
+    $OptVMKey = $1; # untaint
+    my $VM = CreateVMs()->GetItem($OptVMKey);
+    if (!defined $VM)
+    {
+      Error "The $OptVMKey VM does not exist\n";
+      $Usage = 2;
+    }
+    elsif (!%OptTypes)
+    {
+      %OptTypes = $VM->Type eq "build" ? ("build" => 1) :
+                  $VM->Type eq "wine" ?  ("wine" => 1) :
+                  $VM->Type eq "win32" ? ("base32" => 1) :
+                  ("base32" => 1, "all64" => 1);
+    }
+  }
+  else
+  {
+    Error "'$OptVMKey' is not a valid VM name\n";
+    $Usage = 2;
+  }
 }
 if (defined $Usage)
 {
-  print "Usage: $Name0 [--debug] [--log-only] [--help] [--create] [TASKTYPE] ...\n";
+  print "Usage: $Name0 [--debug] [--log-only] [--help] [--create] [--vm VM] [TASKTYPE] ...\n";
   print "\n";
   print "Where TASKTYPE is one of:\n";
   foreach my $TaskType (sort keys %TaskTypes)
@@ -471,11 +534,11 @@ if ($OptTypes{build} or $OptTypes{base32} or $OptTypes{other32} or
     # A new executable means there have been commits so update Wine. Create
     # this job first purely to make the WineTestBot job queue look nice, and
     # arbitrarily do it only for 32-bit executables to avoid redundant updates.
-    $Rc = 1 if ($OptTypes{build} and !AddReconfigJob("build"));
-    $Rc = 1 if ($OptTypes{base32} and !AddJob("base", $LatestBaseName, "exe32"));
-    $Rc = 1 if ($OptTypes{other32} and !AddJob("other", $LatestBaseName, "exe32"));
+    $Rc = 1 if ($OptTypes{build} and !AddReconfigJob($OptVMKey, "build"));
+    $Rc = 1 if ($OptTypes{base32} and !AddJob($OptVMKey, "base", $LatestBaseName, "exe32"));
+    $Rc = 1 if ($OptTypes{other32} and !AddJob($OptVMKey, "other", $LatestBaseName, "exe32"));
 
-    $Rc = 1 if ($OptTypes{wine} and !AddReconfigJob("wine"));
+    $Rc = 1 if ($OptTypes{wine} and !AddReconfigJob($OptVMKey, "wine"));
   }
 }
 
@@ -493,7 +556,7 @@ if ($OptTypes{all64})
   }
   elsif ($Create == 1)
   {
-    $Rc = 1 if ($OptTypes{all64} and !AddJob("", $LatestBaseName, "exe64"));
+    $Rc = 1 if ($OptTypes{all64} and !AddJob($OptVMKey, "", $LatestBaseName, "exe64"));
   }
 }
 
