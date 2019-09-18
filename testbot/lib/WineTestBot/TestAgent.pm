@@ -1261,7 +1261,7 @@ sub GetProperties($;$)
       my $Property = $self->_RecvRawString("Prop$i.s", $Size);
       return undef if (!defined $Property);
       debug("  RecvProperty() -> '$Property'\n");
-      if ($Property =~ s/^([a-zA-Z0-9.]+)=//)
+      if ($Property =~ s/^([a-zA-Z0-9.]+(?:\[[0-9]+\])?)=//)
       {
         $Properties->{$1} = $Property;
       }

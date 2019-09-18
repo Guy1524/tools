@@ -44,6 +44,7 @@
 
 #define BLOCK_SIZE       65536
 
+static int server_argc;
 static char** server_argv;
 static const char *name0;
 static int opt_debug = 0;
@@ -1006,17 +1007,25 @@ static void do_getproperties(SOCKET client)
 {
     const char* arch;
     char* buf = NULL;
-    int size = 0;
+    int i, size = 0;
 
     if (!expect_list_size(client, 0))
     {
         send_error(client);
         return;
     }
-    send_list_size(client, 3);
+    send_list_size(client, server_argc + 4);
 
     format_msg(&buf, &size, "protocol.version=%s", PROTOCOL_VERSION);
     send_string(client, buf);
+
+    format_msg(&buf, &size, "server.argc=%d", server_argc);
+    send_string(client, buf);
+    for (i = 0; i < server_argc; i++)
+    {
+        format_msg(&buf, &size, "server.argv[%d]=%s", i, server_argv[i]);
+        send_string(client, buf);
+    }
 
 #ifdef WIN32
     arch = "win32";
@@ -1342,6 +1351,7 @@ int main(int argc, char** argv)
     SOCKET master;
     int on = 1;
 
+    server_argc = argc;
     server_argv = argv;
     name0 = p = argv[0];
     while (*p != '\0')
