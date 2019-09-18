@@ -28,7 +28,7 @@ WineTestBot::Config - Site-independent configuration settings
 use vars qw (@ISA @EXPORT @EXPORT_OK $UseSSL $LogDir $DataDir $BinDir
              %RepoURLs $DbDataSource $DbUsername $DbPassword $MaxRevertingVMs
              $MaxRevertsWhileRunningVMs $MaxActiveVMs $MaxRunningVMs
-             $MaxVMsWhenIdle $SleepAfterRevert $WaitForToolsInVM
+             $MaxVMsWhenIdle $SleepAfterRevert $WaitForBoot
              $VMToolTimeout $MaxVMErrors $MaxTaskTries $AdminEMail $RobotEMail
              $WinePatchToOverride $WinePatchCc
              $ExeBuildNativeTimeout $ExeBuildTestTimeout $ExeModuleTimeout
@@ -44,7 +44,7 @@ require Exporter;
 @ISA = qw(Exporter);
 @EXPORT = qw($UseSSL $LogDir $DataDir $BinDir %RepoURLs
              $MaxRevertingVMs $MaxRevertsWhileRunningVMs $MaxActiveVMs
-             $MaxRunningVMs $MaxVMsWhenIdle $SleepAfterRevert $WaitForToolsInVM
+             $MaxRunningVMs $MaxVMsWhenIdle $SleepAfterRevert $WaitForBoot
              $VMToolTimeout $MaxVMErrors $MaxTaskTries $AdminEMail
              $RobotEMail $WinePatchToOverride $WinePatchCc $SuiteTimeout
              $ExeBuildNativeTimeout $ExeBuildTestTimeout $ExeModuleTimeout
@@ -90,14 +90,13 @@ $MaxActiveVMs = 2;
 $MaxRunningVMs = 1;
 $MaxVMsWhenIdle = undef;
 
-# How long to wait for each of the 3 connection attempts to the VM's TestAgent
-# server after a revert (in seconds). If there are powered off snapshots this
-# must be long enough for the VM to boot up first.
-$WaitForToolsInVM = 30;
-# How long to let the VM settle down after the revert before starting a task on
+# How long to attempt to connect to the TestAgent while the VM is booting.
+$WaitForBoot = 90;
+# How long to let the VM settle down after a revert before starting a task on
 # it (in seconds).
 $SleepAfterRevert = 0;
-# Take into account $WaitForToolsInVM and $SleepAfterRevert
+# How long to wait before considering a VM operation is stuck. In particular
+# for reverts this should take into account the time it may need to boot.
 $VMToolTimeout = 6 * 60;
 
 # After three consecutive failures to revert a VM, put it in maintenance mode.

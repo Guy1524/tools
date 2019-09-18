@@ -408,12 +408,11 @@ sub Revert()
   # The VM is now sleeping which may allow some tasks to run
   return 1 if (ChangeStatus("reverting", "sleeping"));
 
-  # Check the TestAgent connection. Note that this may take some time
-  # if the VM needs to boot first.
-  Debug(Elapsed($Start), " Trying the TestAgent connection\n");
-  LogMsg "Waiting for ". $VM->Name ." (up to ${WaitForToolsInVM}s per attempt)\n";
+  # Verify that the TestAgent server accepts connections
+  Debug(Elapsed($Start), " Verifying the TestAgent server\n");
+  LogMsg "Verifying the $VMKey TestAgent server\n";
   my $TA = $VM->GetAgent();
-  $TA->SetConnectTimeout($WaitForToolsInVM, undef, $WaitForToolsInVM);
+  $TA->SetConnectTimeout(undef, undef, $WaitForBoot);
   my $Success = $TA->Ping();
   $TA->Disconnect();
   if (!$Success)

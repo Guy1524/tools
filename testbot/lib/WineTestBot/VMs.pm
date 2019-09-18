@@ -584,10 +584,10 @@ sub RunPowerOff($)
 
 Reverts the VM so that it is ready to run jobs.
 
-Note that in addition to the hypervisor revert operation this implies checking
-that it responds to our commands ($WaitForToolsInVM) and possibly letting the
-VM settle down ($SleepAfterRevert). If this operation fails the administrator
-is notified and the VM is marked as offline.
+Note that in addition to the hypervisor revert operation this may imply waiting
+for the VM to boot, checking that the TestAgent server is accessible, and
+possibly letting the VM settle down ($SleepAfterRevert). If this operation
+fails the administrator is notified and the VM is put offline.
 
 This operation can take a long time so it is performed in a separate process.
 

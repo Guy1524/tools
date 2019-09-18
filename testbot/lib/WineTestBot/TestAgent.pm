@@ -101,9 +101,9 @@ sub new($$$;$)
     agenthost  => $Hostname,
     agentport  => $Port,
     connection => "$Hostname:$Port",
-    ctimeout   => 20,
-    cattempts  => 3,
-    cinterval  => 0,
+    conetimeout  => 20,
+    cminattempts => 2,
+    cmintimeout  => 10,
     timeout    => 0,
     fd         => undef,
     deadline   => undef,
@@ -140,27 +140,102 @@ sub Disconnect($)
   $self->{agentversion} = undef;
 }
 
+=pod
+=over 12
+
+=item C<SetConnectTimeout()>
+
+Configures how many times and for how long to attempt to connect to the server.
+
+=item OneTimeout
+
+OneTimeout specifies the timeout for one connection attempt in seconds.
+Zero means there will be no timeout. Undef means the value is not changed.
+
+=item MinAttempts
+
+MinAttempts specifies the minimum number of connection attempts. It must be a
+non-zero positive integer. Undef means the value is not changed.
+
+=item MinTimeout
+
+MinTimeout specifies the minimum period during which connection attempts should
+be made in seconds. Zero means there will be no minimum timeout. Undef means
+the value is not changed.
+
+This means connection attempts will be made until either one succeeds or
+MinTimeout seconds have elapsed, even if each attempt fails quickly such that
+more than $MinAttempts attempts are performed. Conversely, if each attempt
+takes a long time such that more MinTimeout is reached before MinAttempt
+connection attempts have been made, then attempts will continue until the
+minimum number of attempts is reached.
+
+Thus the worst case connection timeout is:
+
+   max($MinAttempts * $OneTimeout, $MinTimeout + $OneTimeout)
+
+=item Return value
+
+For each modified value (i.e. not undef), the old value is returned.
+
+=item Usage
+
+To perform a single connection attempt with a 20 second timeout:
+
+    $TA->SetConnectionTimeout(20, 1, 0);
+
+For a bit more robustness in case one expects short network disruptions:
+
+    $TA->SetConnectionTimeout(20, 2, 10);
+
+But if the server needs time to boot before accepting connections, then
+MinTimeout should be set to the amount of time this is expected to take. It
+would make sense to reset MinTimeout after the first RPC has completed since
+then a reconnection would not have to wait for the server to boot again:
+
+    my $OldMinTimeout = $TA->SetConnectionTimeout(undef, undef, 90);
+
+    ... first RPC ...
+
+    $TA->SetConnectionTimeout(undef, undef, $OldMinTimeout);
+
+=back
+=cut
+
 sub SetConnectTimeout($$;$$)
 {
-  my ($self, $Timeout, $Attempts, $Interval) = @_;
+  my ($self, $OneTimeout, $MinAttempts, $MinTimeout) = @_;
   my @Ret;
-  if (defined $Timeout)
+  if (defined $OneTimeout)
   {
-    push @Ret, $self->{ctimeout};
-    $self->{ctimeout} = $Timeout;
+    push @Ret, $self->{conetimeout};
+    $self->{conetimeout} = $OneTimeout;
   }
-  if (defined $Attempts)
+  if (defined $MinAttempts)
   {
-    push @Ret, $self->{cattempts};
-    $self->{cattempts} = $Attempts;
+    push @Ret, $self->{cminattempts};
+    $self->{cminattempts} = $MinAttempts;
   }
-  if (defined $Interval)
+  if (defined $MinTimeout)
   {
-    push @Ret, $self->{cinterval};
-    $self->{cinterval} = $Interval;
+    push @Ret, $self->{cmintimeout};
+    $self->{cmintimeout} = $MinTimeout;
   }
   return @Ret;
 }
+
+=pod
+=over 12
+
+=item C<SetTimeout()>
+
+Configures how long an individual RPC can take to complete (in seconds).
+
+Note that some operations like Wait() and Wait2() involve multiple RPCs. These
+have their own timeouts.
+
+=back
+=cut
 
 sub SetTimeout($$)
 {
@@ -857,14 +932,16 @@ sub _Connect($)
   my $OldRPC = $self->{rpc};
   $self->{rpc} = ($self->{rpc} ? "$self->{rpc}/" : "") ."connect";
 
-  my $Start = time();
-  foreach my $Attempt (1..$self->{cattempts})
+  my $Attempt = 1;
+  my $MinDeadline = $self->{cmintimeout} ? time() + $self->{cmintimeout} : 0;
+  while (1)
   {
     my $Step = "initializing";
     eval
     {
       local $SIG{ALRM} = sub { die "timeout" };
-      $self->{deadline} = $self->{ctimeout} ? time() + $self->{ctimeout} : undef;
+      my $OneDeadline = $self->{conetimeout} ? time() + $self->{conetimeout} : 0;
+      $self->{deadline} = ($OneDeadline < $MinDeadline) ? $MinDeadline : $OneDeadline;
       $self->_SetAlarm();
 
       if ($self->{tunnel})
@@ -945,8 +1022,13 @@ sub _Connect($)
       last;
     }
 
-    my $Remaining = $Attempt * $self->{cinterval} - (time() - $Start);
-    sleep($Remaining) if ($Remaining > 0);
+    $Attempt++;
+    last if ($Attempt > $self->{cminattempts} and $MinDeadline <= time() + 1);
+
+    # Wait at least 1 second between attempts so that if the error happens on
+    #the client-side (e.g. in case of an invalid ssh argument) we don't busy
+    # loop for $MinTimeout seconds.
+    sleep(1);
   }
   $self->{rpc} = $OldRPC;
   return undef;
@@ -1023,6 +1105,19 @@ sub _SendStringOrFile($$$$$$)
          $self->_RecvList('');
 }
 
+=pod
+=over 12
+
+=item C<SendFile()>
+
+Sends the $LocalPathName file and saves it as the $ServerPathName file on the
+server. If $Flags is set to $SENDFILE_EXE the file will be made executable.
+
+Note that the transfer must complete within the SetTimeout() limit.
+
+=back
+=cut
+
 sub SendFile($$$;$)
 {
   my ($self, $LocalPathName, $ServerPathName, $Flags) = @_;
@@ -1038,6 +1133,19 @@ sub SendFile($$$;$)
   $self->_SetError($ERROR, "Unable to open '$LocalPathName' for reading: $!");
   return undef;
 }
+
+=pod
+=over 12
+
+=item C<SendFileFromString()>
+
+Sends the $Data string and saves it as the $ServerPathName file on the
+server. If $Flags is set to $SENDFILE_EXE the file will be made executable.
+
+Note that the transfer must complete within the SetTimeout() limit.
+
+=back
+=cut
 
 sub SendFileFromString($$$;$)
 {
@@ -1059,6 +1167,19 @@ sub _GetStringOrFile($$$)
                 $self->_RecvString('String', 'd'));
 }
 
+=pod
+=over 12
+
+=item C<GetFile()>
+
+Retrieves the $ServerPathName file from the server and saves it as
+$LocalPathName.
+
+Note that the transfer must complete within the SetTimeout() limit.
+
+=back
+=cut
+
 sub GetFile($$$)
 {
   my ($self, $ServerPathName, $LocalPathName) = @_;
@@ -1074,6 +1195,18 @@ sub GetFile($$$)
   $self->_SetError($ERROR, "Unable to open '$LocalPathName' for writing: $!");
   return undef;
 }
+
+=pod
+=over 12
+
+=item C<GetFileToString()>
+
+Retrieves the $ServerPathName file from the server returns it as a string.
+
+Note that the transfer must complete within the SetTimeout() limit.
+
+=back
+=cut
 
 sub GetFileToString($$)
 {

@@ -843,7 +843,7 @@ if ($OptRefresh)
 
   # Allow up to 10 minutes for the shutdown plus reboot.
   Debug(Elapsed($Start), " Waiting for Windows to boot\n");
-  $TA->SetConnectTimeout(20, 30);
+  $TA->SetConnectTimeout(undef, undef, $WaitForBoot);
   if (!$DryRun and !$TA->Ping())
   {
     FatalError("could not reconnect to $OptHostName after the reboot: ", $TA->GetLastError(), "\n");
