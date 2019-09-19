@@ -363,6 +363,27 @@ sub IsPoweredOn($)
   return ($State == Sys::Virt::Domain::STATE_RUNNING);
 }
 
+sub IsReady($)
+{
+  my ($self) = @_;
+
+  my ($ErrMessage, $Domain) = $self->_GetDomain();
+  if (defined $ErrMessage)
+  {
+    $@ = $ErrMessage;
+    return undef;
+  }
+
+  my ($State, $_Reason);
+  eval { ($State, $_Reason) = $Domain->get_state() };
+  return $self->_Reset(undef) if ($@);
+  return ($State == Sys::Virt::Domain::STATE_RUNNING or
+          $State == Sys::Virt::Domain::STATE_SHUTOFF or
+          $State == Sys::Virt::Domain::STATE_CRASHED or
+          $State == Sys::Virt::Domain::STATE_PMSUSPENDED
+      );
+}
+
 sub _GetStateName($)
 {
   my ($State) = @_;

@@ -282,41 +282,23 @@ sub Monitor()
       return 0;
     }
 
-    my ($ErrMessage, $SnapshotName) = $VM->GetDomain()->GetSnapshotName();
-    if (defined $ErrMessage)
+    my $IsReady = $VM->GetDomain()->IsReady();
+    if ($IsReady and $VM->GetDomain()->IsPoweredOn())
     {
-      Error "$ErrMessage\n";
+      my $ErrMessage = $VM->GetDomain()->PowerOff();
+      if (defined $ErrMessage)
+      {
+        Error "$ErrMessage\n";
+        $IsReady = undef;
+      }
     }
-    else
+    if ($IsReady)
     {
-      my $IsPoweredOn;
-      if (!defined $SnapshotName)
-      {
-        Debug("$VMKey has no snapshot (reverting?)\n");
-        $IsPoweredOn = undef;
-      }
-      elsif (!defined $SnapshotName or $SnapshotName ne $VM->IdleSnapshot)
-      {
-        $IsPoweredOn = 0;
-      }
-      else
-      {
-        $IsPoweredOn = $VM->GetDomain()->IsPoweredOn();
-        if ($IsPoweredOn)
-        {
-          $ErrMessage = $VM->GetDomain()->PowerOff();
-          Error "$ErrMessage\n" if (defined $ErrMessage);
-          $IsPoweredOn = undef;
-        }
-      }
-      if (defined $IsPoweredOn)
-      {
-        return 1 if (ChangeStatus("offline", "off", "done"));
-        NotifyAdministrator("The $VMKey VM is working again",
-                            "The $VMKey VM started working again after ".
-                            PrettyElapsed($Start) .".");
-        return 0;
-      }
+      return 1 if (ChangeStatus("offline", "off", "done"));
+      NotifyAdministrator("The $VMKey VM is working again",
+                          "The $VMKey VM started working again after ".
+                          PrettyElapsed($Start) .".");
+      return 0;
     }
 
     Debug(Elapsed($Start), " $VMKey is still unreachable\n");
