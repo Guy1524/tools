@@ -479,6 +479,12 @@ if ($NewStatus eq 'completed')
     # problem will be noticed and that it will be taken offline.
     FatalError("Could not recreate the $IdleSnapshot snapshot: $ErrMessage\n");
   }
+
+  if ($VM->Type eq "wine" and
+      system("$BinDir/CheckForWinetestUpdate.pl", "--vm", $VM->Name, "--create", "winetest"))
+  {
+    Error("Could not create a job to run WineTest on the ". $VM->Name ." VM\n");
+  }
 }
 
 

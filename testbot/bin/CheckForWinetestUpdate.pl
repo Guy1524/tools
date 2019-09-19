@@ -69,7 +69,8 @@ my %TaskTypes = (build => "Update and rebuild Wine on the build VMs.",
                  base32 => "Run WineTest on the 32 bit Windows VMs with the 'base' role.",
                  other32 => "Run WineTest on the 32 bit Windows VMs with the 'winetest' role.",
                  all64 => "Run WineTest on the all the 64 bit Windows VMs.",
-                 wine => "Update, rebuild and run WineTest on the Wine VMs.");
+                 winebuild => "Update and rebuild Wine on the Wine VMs.",
+                 winetest => "Run WineTest on the Wine VMs.");
 
 
 my $Debug;
@@ -275,6 +276,86 @@ sub AddJob($$$$)
   return 1;
 }
 
+sub AddWineTestJob($)
+{
+  my ($VMKey) = @_;
+
+  my $Remarks = defined $VMKey ? "$VMKey VM" : "Wine VMs";
+  $Remarks = "WineTest: $Remarks";
+  Debug("Creating the '$Remarks' job\n");
+
+  my $VMs = CreateVMs();
+  $VMs->AddFilter("Name", [$VMKey]) if (defined $VMKey);
+  $VMs->AddFilter("Type", ["wine"]);
+  $VMs->FilterEnabledRole();
+  if ($VMs->GetItemsCount() == 0)
+  {
+    if (defined $VMKey)
+    {
+      Error "The $VMKey VM is not a wine VM\n";
+      return 0;
+    }
+    # There is nothing to do
+    Debug("  Found no VM\n");
+    return 1;
+  }
+
+  # First create a new job
+  my $Jobs = CreateJobs();
+  my $NewJob = $Jobs->Add();
+  $NewJob->User(GetBatchUser());
+  $NewJob->Priority(7);
+  $NewJob->Remarks($Remarks);
+  my $Steps = $NewJob->Steps;
+
+  # Add a step for each VM
+  my $SortedKeys = $VMs->SortKeysBySortOrder($VMs->GetKeys());
+  foreach my $VMKey (@$SortedKeys)
+  {
+    my $VM = $VMs->GetItem($VMKey);
+    # Move all the missions into separate tasks so we don't have one very
+    # long task hogging the VM forever. Note that this is also ok because
+    # the WineTest tasks don't have to recompile Wine.
+    my $MissionStatement = SplitMissionStatementTasks($VM->Missions);
+    my ($ErrMessage, $Missions) = ParseMissionStatement($MissionStatement);
+    if (defined $ErrMessage)
+    {
+      Debug("$VMKey has an invalid mission statement: $!\n");
+      next;
+    }
+
+    my $Tasks;
+    foreach my $TaskMissions (@$Missions)
+    {
+      if (!$Tasks)
+      {
+        # Add a step to the job
+        my $TestStep = $Steps->Add();
+        $TestStep->Type("suite");
+        $TestStep->FileType("none");
+        $Tasks = $TestStep->Tasks;
+      }
+
+      Debug("  $VMKey $TaskMissions->{Statement}\n");
+      my $Task = $Tasks->Add();
+      $Task->VM($VM);
+      $Task->Timeout(GetTestTimeout(undef, $TaskMissions));
+      $Task->Missions($TaskMissions->{Statement});
+    }
+  }
+
+  # Save it all
+  $NewJob->Status("staging");
+  my ($ErrKey, $ErrProperty, $ErrMessage) = $Jobs->Save();
+  if (defined $ErrMessage)
+  {
+    Error "Failed to save the WineTest job: $ErrMessage\n";
+    return 0;
+  }
+
+  return 1;
+}
+
 sub AddReconfigJob($$)
 {
   my ($VMKey, $VMType) = @_;
@@ -312,7 +393,7 @@ sub AddReconfigJob($$)
   $BuildStep->Type("reconfig");
   $BuildStep->FileType("none");
 
-  # And a task for each VM
+  # Add a task for each VM
   my $SortedKeys = $VMs->SortKeysBySortOrder($VMs->GetKeys());
   foreach my $VMKey (@$SortedKeys)
   {
@@ -339,67 +420,12 @@ sub AddReconfigJob($$)
     $Task->Missions($Missions->[0]->{Statement});
   }
 
-  # Save the build step so the others can reference it.
+  # Save it all
+  $NewJob->Status("staging");
   my ($ErrKey, $ErrProperty, $ErrMessage) = $Jobs->Save();
   if (defined $ErrMessage)
   {
-    Error "Failed to save the build step: $ErrMessage\n";
-    return 0;
-  }
-
-  if ($VMType eq "wine")
-  {
-    # Add steps to run WineTest on Wine
-    my $Tasks;
-    foreach my $VMKey (@$SortedKeys)
-    {
-      my $VM = $VMs->GetItem($VMKey);
-      # Move all the missions into separate tasks so we don't have one very
-      # long task hogging the VM forever. Note that this also ok because the
-      # WineTest tasks don't have to recompile Wine.
-      my $MissionStatement = SplitMissionStatementTasks($VM->Missions);
-      my ($ErrMessage, $Missions) = ParseMissionStatement($MissionStatement);
-      if (defined $ErrMessage)
-      {
-        Debug("$VMKey has an invalid mission statement: $!\n");
-        next;
-      }
-
-      foreach my $TaskMissions (@$Missions)
-      {
-        if (!$Tasks)
-        {
-          # Add a step to the job
-          my $TestStep = $Steps->Add();
-          $TestStep->PreviousNo($BuildStep->No);
-          $TestStep->Type("suite");
-          $TestStep->FileType("none");
-          $Tasks = $TestStep->Tasks;
-        }
-
-        Debug("  $VMKey $TaskMissions->{Statement}\n");
-        my $Task = $Tasks->Add();
-        $Task->VM($VM);
-        $Task->Timeout(GetTestTimeout(undef, $TaskMissions));
-        $Task->Missions($TaskMissions->{Statement});
-      }
-    }
-  }
-
-  # Save it all
-  ($ErrKey, $ErrProperty, $ErrMessage) = $Jobs->Save();
-  if (defined $ErrMessage)
-  {
     Error "Failed to save the Reconfig job: $ErrMessage\n";
-    return 0;
-  }
-
-  # Switch Status to staging to indicate we are done setting up the job
-  $NewJob->Status("staging");
-  ($ErrKey, $ErrProperty, $ErrMessage) = $Jobs->Save();
-  if (defined $ErrMessage)
-  {
-    Error "Failed to save the Reconfig job (staging): $ErrMessage\n";
     return 0;
   }
 
@@ -478,7 +504,13 @@ if (!defined $Usage)
 {
   if (!defined $OptVMKey)
   {
-    %OptTypes = %TaskTypes if (!%OptTypes);
+    # By default create all types of jobs except the winetest ones which will
+    # be created for each Wine VM by the corresponding winebuild task.
+    if (!%OptTypes)
+    {
+      %OptTypes = %TaskTypes;
+      delete $OptTypes{winetest};
+    }
   }
   elsif ($OptVMKey =~ /^([a-zA-Z0-9_]+)$/)
   {
@@ -492,7 +524,7 @@ if (!defined $Usage)
     elsif (!%OptTypes)
     {
       %OptTypes = $VM->Type eq "build" ? ("build" => 1) :
-                  $VM->Type eq "wine" ?  ("wine" => 1) :
+                  $VM->Type eq "wine" ?  ("winebuild" => 1) :
                   $VM->Type eq "win32" ? ("base32" => 1) :
                   ("base32" => 1, "all64" => 1);
     }
@@ -522,7 +554,7 @@ if (defined $Usage)
 
 my $Rc = 0;
 if ($OptTypes{build} or $OptTypes{base32} or $OptTypes{other32} or
-    $OptTypes{wine})
+    $OptTypes{winebuild} or $OptTypes{winetest})
 {
   my ($Create, $LatestBaseName) = UpdateWineTest($OptCreate, "exe32");
   if ($Create < 0)
@@ -538,7 +570,8 @@ if ($OptTypes{build} or $OptTypes{base32} or $OptTypes{other32} or
     $Rc = 1 if ($OptTypes{base32} and !AddJob($OptVMKey, "base", $LatestBaseName, "exe32"));
     $Rc = 1 if ($OptTypes{other32} and !AddJob($OptVMKey, "other", $LatestBaseName, "exe32"));
 
-    $Rc = 1 if ($OptTypes{wine} and !AddReconfigJob($OptVMKey, "wine"));
+    $Rc = 1 if ($OptTypes{winebuild} and !AddReconfigJob($OptVMKey, "wine"));
+    $Rc = 1 if ($OptTypes{winetest} and !AddWineTestJob($OptVMKey));
   }
 }
 
