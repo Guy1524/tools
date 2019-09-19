@@ -107,6 +107,10 @@ sub ParseTaskLog($)
         $Summary->{Task} = "badpatch";
         last; # Should be the last and most specific message
       }
+      elsif ($Line =~ /^Task: Updated ([a-zA-Z0-9.]+)$/)
+      {
+        $Summary->{$1} = "updated";
+      }
       elsif ($Line =~ /^Task: / or _IsPerlError($Line))
       {
         $Summary->{Task} = "failed";

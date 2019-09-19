@@ -33,6 +33,7 @@ our @EXPORT = qw(GetToolName InfoMsg LogMsg Error
                  SetupWineEnvironment RunWine CreateWinePrefix);
 
 use Digest::SHA;
+use File::Basename;
 use File::Path;
 
 use WineTestBot::Config;
@@ -237,6 +238,13 @@ sub GetTestLauncher($)
 
 sub BuildTestLauncher()
 {
+  my %Files;
+  foreach my $Bits ("32", "64")
+  {
+    $Files{"Path$Bits"} = GetTestLauncher({Build => "win$Bits"});
+    $Files{"Before$Bits"} = GetMTime($Files{"Path$Bits"});
+  }
+
   InfoMsg "\nRebuilding TestLauncher\n";
   my $CPUCount = GetCPUCount();
   system("cd '$::RootDir/src/TestLauncher' && set -x && ".
@@ -247,6 +255,13 @@ sub BuildTestLauncher()
     return !1;
   }
 
+  foreach my $Bits ("32", "64")
+  {
+    if ($Files{"Before$Bits"} != GetMTime($Files{"Path$Bits"}))
+    {
+      LogMsg "Updated ". basename($Files{"Path$Bits"}) ."\n";
+    }
+  }
   return 1;
 }
 

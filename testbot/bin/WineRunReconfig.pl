@@ -389,10 +389,11 @@ if (!defined $TA->Wait($Pid, $Task->Timeout, 60))
   }
 }
 
+my $Summary;
 Debug(Elapsed($Start), " Retrieving 'Reconfig.log'\n");
 if ($TA->GetFile("Reconfig.log", "$TaskDir/log"))
 {
-  my $Summary = ParseTaskLog("$TaskDir/log");
+  $Summary = ParseTaskLog("$TaskDir/log");
   if ($Summary->{Task} eq "ok")
   {
     # We must have gotten the full log and the build did succeed.
@@ -435,6 +436,12 @@ if ($NewStatus eq "completed")
                         "latest/wine-parentsrc.txt")
   {
     my $BaseName = basename($FileName);
+    if ($FileName !~ m~^latest/~ and !$Summary->{$BaseName} and
+        -f "$DataDir/latest/$BaseName")
+    {
+      # This file was not updated to there is no point redownloading it.
+      next;
+    }
     Debug(Elapsed($Start), " Retrieving '$TaskDir/$BaseName'\n");
     if ($TA->GetFile($FileName, "$TaskDir/$BaseName"))
     {
