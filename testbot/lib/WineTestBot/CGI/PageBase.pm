@@ -408,7 +408,6 @@ sub Redirect($$$)
       $URI =~ s=^(.*)/[^/]*$=$1/=;
       $Location = $URI . $Location;
     }
-    my $Server = $self->{Request}->server;
     $Location = $Protocol . "://" . $ENV{"HTTP_HOST"} . $Location;
   }
   $self->{Request}->headers_out->set("Location", $Location);
