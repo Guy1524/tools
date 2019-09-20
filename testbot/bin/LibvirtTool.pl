@@ -366,7 +366,7 @@ sub Revert()
   # Revert the VM (and power it on if necessary)
   my $Domain = $VM->GetDomain();
   Debug(Elapsed($Start), " Reverting $VMKey to ", $VM->IdleSnapshot, "\n");
-  my $ErrMessage = $Domain->RevertToSnapshot();
+  my ($ErrMessage, $Booting) = $Domain->RevertToSnapshot();
   if (defined $ErrMessage)
   {
     # Libvirt/QEmu is buggy and cannot revert a running VM from one hardware
@@ -380,7 +380,7 @@ sub Revert()
     }
 
     Debug(Elapsed($Start), " Reverting $VMKey to ", $VM->IdleSnapshot, "... again\n");
-    $ErrMessage = $Domain->RevertToSnapshot();
+    ($ErrMessage, $Booting) = $Domain->RevertToSnapshot();
   }
   if (defined $ErrMessage)
   {
@@ -394,7 +394,7 @@ sub Revert()
   Debug(Elapsed($Start), " Verifying the TestAgent server\n");
   LogMsg "Verifying the $VMKey TestAgent server\n";
   my $TA = $VM->GetAgent();
-  $TA->SetConnectTimeout(undef, undef, $WaitForBoot);
+  $TA->SetConnectTimeout(undef, undef, $WaitForBoot) if ($Booting);
   my $Success = $TA->Ping();
   $TA->Disconnect();
   if (!$Success)
