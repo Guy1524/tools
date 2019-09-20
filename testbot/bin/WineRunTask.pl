@@ -467,8 +467,8 @@ elsif ($Step->Type eq "suite")
   $Script .= "$FileName ";
   if (defined($WebHostName))
   {
-    my $StepTask = 100 * $StepNo + $TaskNo;
-    $Script .= "-u \"http://$WebHostName/JobDetails.pl?Key=$JobId&s$StepTask=1#k$StepTask\" ";
+    my $URL = GetTaskURL($JobId, $StepNo, $TaskNo, 1);
+    $Script .= "-u ". BatchQuote(MakeSecureURL($URL)) ." ";
   }
   my $Tag = $VM->Type ne "win64" ? "" : $Step->FileType eq "exe64" ? "64" : "32";
   $Tag = BuildTag($VM->Name, $Tag);

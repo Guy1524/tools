@@ -443,8 +443,8 @@ if ($Step->Type eq "suite")
   $Script .= "--winetest ". ShQuote($Task->Missions) ." $BaseTag ";
   if (defined $WebHostName)
   {
-    my $StepTask = 100 * $StepNo + $TaskNo;
-    $Script .= "-u \"http://$WebHostName/JobDetails.pl?Key=$JobId&s$StepTask=1#k$StepTask\" ";
+    my $URL = GetTaskURL($JobId, $StepNo, $TaskNo, 1);
+    $Script .= "-u ". ShQuote(MakeSecureURL($URL)) ." ";
   }
   my $Info = $VM->Description ? $VM->Description : "";
   if ($VM->Details)

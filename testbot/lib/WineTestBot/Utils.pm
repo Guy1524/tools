@@ -27,7 +27,7 @@ WineTestBot::Utils - Utility functions
 =cut
 
 use Exporter 'import';
-our @EXPORT = qw(SecureConnection MakeSecureURL GenerateRandomString
+our @EXPORT = qw(SecureConnection MakeSecureURL GetTaskURL GenerateRandomString
                  OpenNewFile CreateNewFile CreateNewLink CreateNewDir GetMTime
                  DurationToString BuildEMailRecipient IsValidFileName
                  BuildTag SanitizeTag LocaleName NotifyAdministrator
@@ -53,6 +53,16 @@ sub MakeSecureURL($)
 
   my $Protocol = ($UseSSL || SecureConnection()) ? "https://" : "http://";
   return $Protocol . ($ENV{"HTTP_HOST"} || $WebHostName) . $URL;
+}
+
+sub GetTaskURL($$$;$$)
+{
+  my ($JobId, $StepNo, $TaskNo, $ShowScreenshot, $ShowLog) = @_;
+  my $StepTask = 100 * $StepNo + $TaskNo;
+  my $URL = "/JobDetails.pl?Key=$JobId";
+  $URL .= "&s$StepTask=1" if ($ShowScreenshot);
+  $URL .= "&f$StepTask=$ShowLog" if ($ShowLog);
+  return "$URL#k$StepTask";
 }
 
 sub DurationToString($;$)
