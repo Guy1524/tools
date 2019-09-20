@@ -27,7 +27,7 @@ WineTestBot::Utils - Utility functions
 =cut
 
 use Exporter 'import';
-our @EXPORT = qw(MakeSecureURL SecureConnection GenerateRandomString
+our @EXPORT = qw(SecureConnection MakeSecureURL GenerateRandomString
                  OpenNewFile CreateNewFile CreateNewLink CreateNewDir GetMTime
                  DurationToString BuildEMailRecipient IsValidFileName
                  BuildTag SanitizeTag LocaleName NotifyAdministrator
@@ -42,6 +42,11 @@ use WineTestBot::Config;
 # Web helpers
 #
 
+sub SecureConnection()
+{
+  return defined($ENV{"HTTPS"}) && $ENV{"HTTPS"} eq "on";
+}
+
 sub MakeSecureURL($)
 {
   my ($URL) = @_;
@@ -53,11 +58,6 @@ sub MakeSecureURL($)
   }
 
   return $Protocol . "://" . $ENV{"HTTP_HOST"} . $URL;
-}
-
-sub SecureConnection()
-{
-  return defined($ENV{"HTTPS"}) && $ENV{"HTTPS"} eq "on";
 }
 
 sub DurationToString($;$)
