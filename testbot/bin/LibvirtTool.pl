@@ -169,10 +169,6 @@ sub FatalError($)
   # Get the up-to-date VM status
   $VM = CreateVMs()->GetItem($VMKey);
 
-  # Put the VM offline or mark it for maintenance
-  my $Errors = ($VM->Errors || 0) + 1;
-  my $NewStatus = $Errors < $MaxVMErrors ? "offline" : "maintenance";
-
   if ($VM->Status eq "maintenance")
   {
     # Still proceed with changing the non-Status fields and notifying the
@@ -185,10 +181,11 @@ sub FatalError($)
   }
   else
   {
-    $VM->Status($NewStatus);
+    $VM->Status("offline");
   }
   $VM->ChildDeadline(undef);
   $VM->ChildPid(undef);
+  my $Errors = ($VM->Errors || 0) + 1;
   $VM->Errors($Errors);
 
   my ($ErrProperty, $SaveErrMessage) = $VM->Save();
@@ -196,19 +193,19 @@ sub FatalError($)
   {
     LogMsg "Could not put the $VMKey VM offline: $SaveErrMessage ($ErrProperty)\n";
   }
-  elsif ($NewStatus eq "offline")
+  elsif ($Errors >= $MaxVMErrors)
+  {
+    NotifyAdministrator("The $VMKey VM needs maintenance",
+                        "Got $Errors consecutive errors working on the $VMKey VM:\n".
+                        "\n$ErrMessage\n".
+                        "It probably needs fixing to get back online.");
+  }
+  else
   {
     NotifyAdministrator("Putting the $VMKey VM offline",
                         "Could not perform the $Action operation on the $VMKey VM:\n".
                         "\n$ErrMessage\n".
                         "The VM has been put offline and the TestBot will try to regain access to it.");
-  }
-  elsif ($NewStatus eq "maintenance")
-  {
-    NotifyAdministrator("The $VMKey VM needs maintenance",
-                        "Got $Errors consecutive errors working on the $VMKey VM:\n".
-                        "\n$ErrMessage\n".
-                        "An administrator needs to look at it and to put it back online.");
   }
   exit 1;
 }
@@ -259,6 +256,14 @@ sub ChangeStatus($$;$)
 
 sub Monitor()
 {
+  # Still try recovering the VM in case of repeated errors, but space out
+  # attempts to not keep the host busy with a broken VM. Note that after
+  # 1 hour the monitor process gets killed and replaced (to deal with stuck
+  # monitor processes) but even so the VM will be checked once per hour.
+  my $Interval = ($VM->Errors || 0) >= $MaxVMErrors ? 1860 : 60;
+  my $NextTry = time() + $Interval;
+  Debug(Elapsed($Start), " Checking $VMKey in ${Interval}s\n");
+
   $CurrentStatus = "offline";
   while (1)
   {
@@ -281,6 +286,14 @@ sub Monitor()
                           "to ". $VM->Status ." after ". PrettyElapsed($Start) .".");
       return 0;
     }
+    my $Sleep = $NextTry - time();
+    if ($Sleep > 0)
+    {
+      # Check that the VM still needs monitoring at least once per minute.
+      $Sleep = 60 if ($Sleep > 60);
+      sleep($Sleep);
+      next;
+    }
 
     my $IsReady = $VM->GetDomain()->IsReady();
     if ($IsReady and $VM->GetDomain()->IsPoweredOn())
@@ -301,8 +314,8 @@ sub Monitor()
       return 0;
     }
 
-    Debug(Elapsed($Start), " $VMKey is still unreachable\n");
-    sleep(60);
+    Debug(Elapsed($Start), " $VMKey is still busy / unreachable, trying again in ${Interval}s\n");
+    $NextTry = time() + $Interval;
   }
 }
 
