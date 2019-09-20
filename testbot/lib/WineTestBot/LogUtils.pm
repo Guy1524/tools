@@ -146,7 +146,7 @@ sub GetLogLineCategory($)
       $Line =~ /^\+ \S/ or
       $Line =~ /^LANG=/ or
       $Line =~ /^Running (?:the tests|WineTest) / or
-      $Line =~ /^Task: (?:ok|tests)/)
+      $Line =~ /^Task: (?:ok|tests|Updated)/)
   {
     return "info";
   }
