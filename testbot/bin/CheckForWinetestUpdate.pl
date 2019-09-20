@@ -211,7 +211,7 @@ sub AddJob($$$$)
   my $Jobs = CreateJobs();
   my $NewJob = $Jobs->Add();
   $NewJob->User(GetBatchUser());
-  $NewJob->Priority($BaseJob eq "base" and $Build eq "exe32" ? 8 : 9);
+  $NewJob->Priority(($BaseJob eq "base" and $Build eq "exe32") ? 8 : 9);
   $NewJob->Remarks($Remarks);
 
   # Add a task for each VM
