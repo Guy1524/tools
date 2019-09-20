@@ -51,13 +51,8 @@ sub MakeSecureURL($)
 {
   my ($URL) = @_;
 
-  my $Protocol = "http";
-  if ($UseSSL || SecureConnection())
-  {
-    $Protocol .= "s";
-  }
-
-  return $Protocol . "://" . $ENV{"HTTP_HOST"} . $URL;
+  my $Protocol = ($UseSSL || SecureConnection()) ? "https://" : "http://";
+  return $Protocol . ($ENV{"HTTP_HOST"} || $WebHostName) . $URL;
 }
 
 sub DurationToString($;$)
