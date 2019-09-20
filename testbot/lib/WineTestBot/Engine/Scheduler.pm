@@ -270,31 +270,28 @@ sub _CheckAndClassifyVMs()
       {
         # The child process got stuck!
         $FoundVMErrors = 1;
-        my $NewStatus = "dirty";
         if ($VM->Status eq "reverting" or $VM->Status eq "sleeping")
         {
           my $Errors = ($VM->Errors || 0) + 1;
           $VM->Errors($Errors);
-          if ($Errors >= $MaxVMErrors)
-          {
-            $NewStatus = "maintenance";
-            NotifyAdministrator("Putting the $VMKey VM in maintenance mode",
-                                "The last $Errors revert operations timed out.\n\n".
-                                "No further operation will be attempted until an administrator has put\n".
-                                "the VM back online.");
-            $Sched->{busyvms}->{$VMKey} = 1;
-          }
+          $VM->Status("offline");
+          NotifyAdministrator("Putting the $VMKey VM offline",
+                              "The last $Errors revert operations timed out.\n\n".
+                              "This may be because of some transient load on the VM host but if not\n".
+                              "an administrator should look into it. In any case the TestBot will try\n".
+                              "to regain access to the VM.");
+          $Sched->{busyvms}->{$VMKey} = 1;
         }
-        $VM->Status($NewStatus);
-        $VM->KillChild();
-        $VM->Save();
-        $VM->RecordResult($Sched->{records}, "boterror stuck process");
-        if ($NewStatus eq "dirty")
+        else
         {
+          $VM->Status("dirty");
           $Sched->{lambvms}->{$VMKey} = 1;
           $Host->{dirty}++;
           $Host->{active}++;
         }
+        $VM->KillChild();
+        $VM->Save();
+        $VM->RecordResult($Sched->{records}, "boterror stuck process");
       }
       elsif ($VM->Status =~ /^(?:dirty|running|reverting)$/)
       {
