@@ -766,7 +766,8 @@ sub _SacrificeVM($$$)
   $Host->{dirty}++;
   $Victim->RecordStatus($Sched->{records}, $Victim->Status eq "dirty" ? "dirty poweroff" : "dirty sacrifice");
   $Victim->KillChild();
-  $Victim->RunPowerOff();
+  my $ErrMessage = $Victim->RunPowerOff();
+  LogMsg "$ErrMessage\n" if (defined $ErrMessage);
   return 1;
 }
 

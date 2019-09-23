@@ -379,10 +379,7 @@ sub Run($$$$$$)
 
   if (defined $self->ChildPid)
   {
-    my $ErrMessage = "Cannot run ". ShArgv2Cmd(@$Args) ." because the ". $self->ChildPid ." process is already using the ". $self->Name ." VM";
-    require WineTestBot::Log;
-    WineTestBot::Log::LogMsg("$ErrMessage\n");
-    return $ErrMessage;
+    return "Cannot run ". ShArgv2Cmd(@$Args) ." because process ". $self->ChildPid ." is already using the ". $self->Name ." VM";
   }
 
   # There are two $VM->ChildPid race conditions to avoid:
