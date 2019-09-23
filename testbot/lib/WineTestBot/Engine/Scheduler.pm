@@ -764,10 +764,10 @@ sub _SacrificeVM($$$)
   $Sched->{busyvms}->{$VictimKey} = 1;
   $Host->{$Victim->Status}--;
   $Host->{dirty}++;
-  $Victim->RecordStatus($Sched->{records}, $Victim->Status eq "dirty" ? "dirty poweroff" : "dirty sacrifice");
   $Victim->KillChild();
   my $ErrMessage = $Victim->RunPowerOff();
   LogMsg "$ErrMessage\n" if (defined $ErrMessage);
+  $Victim->RecordStatus($Sched->{records}, $Victim->Status eq "dirty" ? "dirty poweroff" : $VM->Status ." sacrifice");
   return 1;
 }
 
