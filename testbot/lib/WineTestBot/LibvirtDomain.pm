@@ -393,23 +393,6 @@ sub IsReady($)
       );
 }
 
-sub _GetStateName($)
-{
-  my ($State) = @_;
-
-  my %StateNames = (
-    Sys::Virt::Domain::STATE_NOSTATE => "no state",
-    Sys::Virt::Domain::STATE_RUNNING => "running",
-    Sys::Virt::Domain::STATE_BLOCKED => "blocked",
-    Sys::Virt::Domain::STATE_PAUSED => "paused",
-    Sys::Virt::Domain::STATE_SHUTDOWN => "shutdown",
-    Sys::Virt::Domain::STATE_SHUTOFF => "shutoff",
-    Sys::Virt::Domain::STATE_CRASHED => "crashed",
-    Sys::Virt::Domain::STATE_PMSUSPENDED => "pmsuspended",
-  );
-  return $StateNames{$State} || "unknown";
-}
-
 sub PowerOff($)
 {
   my ($self) = @_;
