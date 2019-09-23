@@ -652,7 +652,7 @@ sub RecordStatus($$;$)
 =pod
 =over 12
 
-=item C<RecordStatus()>
+=item C<RecordResult()>
 
 Adds a Record of the specified VM process result.
 
