@@ -393,6 +393,19 @@ sub IsReady($)
       );
 }
 
+sub GetStateDescription($)
+{
+  my ($self) = @_;
+
+  my ($ErrMessage, $Domain) = $self->_GetDomain();
+  return $ErrMessage if (defined $ErrMessage);
+
+  my ($State, $Reason);
+  eval { ($State, $Reason) = $Domain->get_state() };
+  return $self->_Reset($@) if ($@);
+  return _GetStateDescription($State, $Reason)
+}
+
 sub PowerOff($)
 {
   my ($self) = @_;

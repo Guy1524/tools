@@ -241,7 +241,6 @@ sub ChangeStatus($$;$)
   $VM->Status($To);
   if ($Done)
   {
-    $VM->Errors(undef) if ($To eq "idle");
     $VM->ChildDeadline(undef);
     $VM->ChildPid(undef);
   }

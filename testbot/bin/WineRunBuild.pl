@@ -5,7 +5,7 @@
 # See the bin/build/Build.pl script.
 #
 # Copyright 2009 Ge van Geldorp
-# Copyright 2013-2016 Francois Gouget
+# Copyright 2013-2019 Francois Gouget
 #
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
@@ -250,6 +250,15 @@ sub WrapUpAndExit($;$$)
   if ($VM->Status eq 'running')
   {
     $VM->Status($NewVMStatus);
+    if ($NewVMStatus eq 'offline')
+    {
+      my $Errors = ($VM->Errors || 0) + 1;
+      $VM->Errors($Errors);
+    }
+    else
+    {
+      $VM->Errors(undef);
+    }
     $VM->ChildDeadline(undef);
     $VM->ChildPid(undef);
     $VM->Save();
@@ -261,6 +270,8 @@ sub WrapUpAndExit($;$$)
   exit($Status eq 'completed' ? 0 : 1);
 }
 
+# Only to be used if the error cannot be fixed by re-running the task.
+# The TestBot will be indicated as having caused the failure.
 sub FatalError($;$)
 {
   my ($ErrMessage, $Retry) = @_;
@@ -319,11 +330,26 @@ if ($VM->Type ne "build")
 }
 if (!$Debug and $VM->Status ne "running")
 {
-  FatalError("The VM is not ready for use (" . $VM->Status . ")\n");
+  # Maybe the administrator tinkered with the VM state? In any case the VM
+  # is not ours to use so requeue the task and abort.
+  Error("The VM is not ready for use (" . $VM->Status . ")\n");
+  NotifyAdministrator("Putting the ". $VM->Name ." VM offline",
+    "The VM status should be 'running' but is '". $VM->Status ."' instead.\n".
+    "The VM has been put offline and the TestBot will try to regain\n".
+    "access to it.");
+  WrapUpAndExit('queued');
 }
 if (!$VM->GetDomain()->IsPoweredOn())
 {
-  FatalError("The VM is not powered on\n");
+  # Maybe the VM was prepared in advance and got taken down by a power outage?
+  # Requeue the task and treat this event as a failed revert to avoid infinite
+  # loops.
+  Error("The VM is not powered on\n");
+  NotifyAdministrator("Putting the ". $VM->Name ." VM offline",
+    "The VM is not powered on despite its status being 'running'.\n".
+    "The VM has been put offline and the TestBot will try to regain\n".
+    "access to it.");
+  WrapUpAndExit('queued');
 }
 
 if ($Step->Type ne "build")
