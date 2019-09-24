@@ -240,28 +240,48 @@ int platform_settime(uint64_t epoch, uint32_t leeway)
 }
 
 
-int platform_upgrade(const char* tmpserver, char** argv)
+int platform_upgrade(char* current_argv0, int argc, char** argv)
 {
-    static const char* oldserver = "testagentd.old";
+    static const char* OLDSERVER = "testagentd.old";
+    const char* oldserver = NULL;
+    struct stat stat_current, stat_argv0;
     int pipefds[2];
     pid_t pid;
 
-    if (rename(argv[0], oldserver))
+    if (stat(current_argv0, &stat_current))
     {
-        set_status(ST_ERROR, "unable to move the current server file out of the way: %s", strerror(errno));
+        set_status(ST_ERROR, "could not stat '%s': %s", current_argv0, strerror(errno));
         return 0;
     }
 
-    if (rename(tmpserver, argv[0]))
+    if (stat(argv[0], &stat_argv0))
     {
-        set_status(ST_ERROR, "unable to move the currentnew server file into place: %s", strerror(errno));
-        rename(oldserver, argv[0]);
+        set_status(ST_ERROR, "could not stat '%s': %s", argv[0], strerror(errno));
         return 0;
+    }
+
+    if (stat_current.st_dev != stat_argv0.st_dev ||
+        stat_current.st_ino != stat_argv0.st_ino)
+    {
+        oldserver = OLDSERVER;
+        if (rename(current_argv0, oldserver))
+        {
+            set_status(ST_ERROR, "unable to move the current server file out of the way: %s", strerror(errno));
+            return 0;
+        }
+
+        if (rename(argv[0], current_argv0))
+        {
+            set_status(ST_ERROR, "unable to move the currentnew server file into place: %s", strerror(errno));
+            rename(oldserver, argv[0]);
+            return 0;
+        }
     }
     if (pipe(pipefds))
     {
         set_status(ST_ERROR, "could not synchronize with the new process: %s", strerror(errno));
-        rename(oldserver, argv[0]);
+        if (oldserver)
+            rename(oldserver, current_argv0);
         return 0;
     }
 
@@ -271,11 +291,13 @@ int platform_upgrade(const char* tmpserver, char** argv)
         set_status(ST_ERROR, "unable to start the new server: %s", strerror(errno));
         close(pipefds[0]);
         close(pipefds[1]);
-        rename(oldserver, argv[0]);
+        if (oldserver)
+            rename(oldserver, current_argv0);
         return 0;
     }
 
-    unlink(oldserver);
+    if (oldserver)
+        unlink(oldserver);
     if (!pid)
     {
         /* The child process is responsible for cleanly closing the connection
@@ -292,7 +314,8 @@ int platform_upgrade(const char* tmpserver, char** argv)
     read(pipefds[0], &pid, 1);
     close(pipefds[0]);
 
-    execvp(argv[0], argv);
+    argv[0] = current_argv0;
+    execvp(current_argv0, argv);
     return 1;
 }
 

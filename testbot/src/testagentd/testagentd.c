@@ -39,8 +39,10 @@
  * 1.5:  Add support for upgrading the server.
  * 1.6:  Add the rmchildproc and getcwd RPCs.
  * 1.7:  Add --show-restarts and the setproperty RPC.
+ * 1.8:  Add the restart RPC, server.arg* properties, fix upgrades if >1
+ *       server.
  */
-#define PROTOCOL_VERSION "testagentd 1.7"
+#define PROTOCOL_VERSION "testagentd 1.8"
 
 #define BLOCK_SIZE       65536
 
@@ -94,6 +96,7 @@ enum rpc_ids_t
     RPCID_RMCHILDPROC,
     RPCID_GETCWD,
     RPCID_SETPROPERTY,
+    RPCID_RESTART,
 };
 
 /* This is the RPC currently being processed */
@@ -117,6 +120,7 @@ static const char* rpc_name(uint32_t id)
         "rmchildproc",
         "getcwd",
         "setproperty",
+        "restart",
     };
 
     if (id < sizeof(names) / sizeof(*names))
@@ -1084,6 +1088,63 @@ static void do_setproperty(SOCKET client)
     }
 }
 
+static void do_restart(SOCKET client)
+{
+    uint32_t argc, i;
+    char** argv;
+    int success = 1;
+
+    if (!recv_list_size(client, &argc))
+    {
+        send_error(client);
+        return;
+    }
+    if (argc < 1)
+    {
+        set_status(ST_ERROR, "expected 1 argument or more (got %u)", argc);
+        send_error(client);
+        return;
+    }
+    /* Allocate an extra entry for the trailing NULL pointer */
+    argv = malloc((argc + 1) * sizeof(*argv));
+    if (argv)
+    {
+        memset(argv, 0, (argc + 1) * sizeof(*argv));
+        for (i = 0; i < argc; i++)
+        {
+            if (!recv_string(client, &argv[i]))
+            {
+                success = 0;
+                break;
+            }
+        }
+    }
+    else
+    {
+        set_status(ST_ERROR, "malloc() failed: %s", strerror(errno));
+        skip_entries(client, argc);
+        success = 0;
+    }
+
+    if (success)
+        success = platform_upgrade(server_argv[0], argc, argv);
+
+    /* Free all the memory */
+    for (i = 0; i < argc; i++)
+        free(argv[i]);
+    free(argv);
+
+    if (success)
+    {
+        send_list_size(client, 0);
+        /* Tell the main loop to quit */
+        broken = 1;
+        quit = 1;
+    }
+    else
+        send_error(client);
+}
+
 static void do_upgrade(SOCKET client)
 {
     static const char *filename = "testagentd.tmp";
@@ -1112,7 +1173,12 @@ static void do_upgrade(SOCKET client)
     }
 
     if (success)
-        success = platform_upgrade(filename, server_argv);
+    {
+        char* current_argv0 = server_argv[0];
+        server_argv[0] = (char*)filename;
+        success = platform_upgrade(current_argv0, server_argc, server_argv);
+        server_argv[0] = current_argv0;
+    }
 
     if (success)
     {
@@ -1231,6 +1297,8 @@ static void process_rpc(SOCKET client)
     case RPCID_SETPROPERTY:
         do_setproperty(client);
         break;
+    case RPCID_RESTART:
+        do_restart(client);
     default:
         do_unknown(client, rpcid);
     }

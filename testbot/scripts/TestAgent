@@ -53,7 +53,7 @@ sub error(@)
 }
 
 my ($Cmd, $Hostname, $LocalFilename, $ServerFilename, $PropName, $PropValue, @Rm);
-my (@Run, $RunIn, $RunOut, $RunErr, $WaitPid);
+my (@Run, $RunIn, $RunOut, $RunErr, $WaitPid, @Restart);
 my $SendFlags = 0;
 my $RunFlags = 0;
 my ($Port, $ConnectOneTimeout, $ConnectMinAttempts, $ConnectMinTimeout, $Timeout);
@@ -240,6 +240,12 @@ while (@ARGV)
         set_cmd($arg);
         $LocalFilename = check_opt_val($arg, $LocalFilename);
     }
+    elsif ($arg eq "restart")
+    {
+        set_cmd($arg);
+        @Restart = @ARGV;
+        last;
+    }
     else
     {
         error("unknown command '$arg'\n");
@@ -359,6 +365,8 @@ if (defined $Usage)
     print "  ping          Makes sure the server is still alive.\n";
     print "  upgrade       Replaces the server executable with the specified file and\n";
     print "                restarts it.\n";
+    print "  restart       Replaces and restarts the server from the specified server file\n";
+    print "                and arguments or from the last command line if omitted.\n";
     print "  <hostname>    Is the hostname of the server.\n";
     print "  --port <port> Use the specified port number instead of the default one.\n";
     print "  --connect-one-timeout <time> Specifies the timeout for one connection\n";
@@ -476,6 +484,10 @@ elsif ($Cmd eq "getproperty")
 elsif ($Cmd eq "upgrade")
 {
     $Result = $TA->Upgrade($LocalFilename);
+}
+elsif ($Cmd eq "restart")
+{
+    $Result = $TA->Restart(@Restart);
 }
 elsif ($Cmd eq "getcwd")
 {

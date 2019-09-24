@@ -100,7 +100,7 @@ int platform_settime(uint64_t epoch, uint32_t leeway);
  * Returns non-zero if successful, which will let the caller know to complete
  * the current RPC and cleanly exit. Returns 0 otherwise.
  */
-int platform_upgrade(const char* tmpserver, char** argv);
+int platform_upgrade(char* current_argv0, int argc, char** argv);
 
 /* Called when the message has been dismissed by the user.
  */

@@ -40,6 +40,7 @@ my $RPC_UPGRADE = 9;
 my $RPC_RMCHILDPROC = 10;
 my $RPC_GETCWD = 11;
 my $RPC_SETPROPERTY = 12;
+my $RPC_RESTART = 13;
 
 my %RpcNames=(
     $RPC_PING => 'ping',
@@ -55,6 +56,7 @@ my %RpcNames=(
     $RPC_RMCHILDPROC => 'rmchildproc',
     $RPC_GETCWD => 'getcwd',
     $RPC_SETPROPERTY => 'setproperty',
+    $RPC_RESTART => 'restart',
 );
 
 my $Debug = 0;
@@ -1470,6 +1472,56 @@ sub Upgrade($$)
       return undef;
   }
   close($fh);
+
+  # Get the reply
+  my $rc = $self->_RecvList('');
+
+  # The server has quit and thus the connection is no longer usable.
+  # So disconnect now to force the next RPC to reconnect, instead or letting it
+  # try to reuse the broken connection and fail.
+  $self->Disconnect();
+
+  return $rc;
+}
+
+sub Restart($$)
+{
+  my ($self, $Argv) = @_;
+
+  if (!$Argv || !@$Argv)
+  {
+    # Restart the server with the same parameters
+    my $Properties = $self->GetProperties();
+    my $Argc = $Properties->{"server.argc"};
+    if (!$Argc)
+    {
+      $self->_SetError($ERROR, "Could not get the server command line argument count");
+      return undef;
+    }
+    for (my $i = 0; $i < $Argc; $i++)
+    {
+      my $Arg = $Properties->{sprintf("server.argv[%d]", $i)};
+      if (!defined $Arg)
+      {
+        $self->_SetError($ERROR, "Server argument $i is undefined!");
+        return undef;
+      }
+      push @$Argv, $Arg;
+    }
+  }
+  debug("Restart TestAgentd: '", join("' '", @$Argv), "'\n");
+
+  if (!$self->_StartRPC($RPC_RESTART) or
+      !$self->_SendListSize('ArgC', scalar(@$Argv)))
+  {
+    return undef;
+  }
+  my $i = 0;
+  foreach my $Arg (@$Argv)
+  {
+    return undef if (!$self->_SendString("Cmd$i", $Arg));
+    $i++;
+  }
 
   # Get the reply
   my $rc = $self->_RecvList('');

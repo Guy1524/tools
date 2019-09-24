@@ -298,40 +298,212 @@ char* get_server_filename(int old)
     return strdup(filename);
 }
 
-int platform_upgrade(const char* tmpserver, char** argv)
+/***********************************************************************
+ *           build_command_line
+ *
+ * Adapted from the Wine source.
+ *
+ * Build the command line of a process from the argv array.
+ *
+ * Note that it does NOT necessarily include the file name.
+ * Sometimes we don't even have any command line options at all.
+ *
+ * We must quote and escape characters so that the argv array can be rebuilt
+ * from the command line:
+ * - spaces and tabs must be quoted
+ *   'a b'   -> '"a b"'
+ * - quotes must be escaped
+ *   '"'     -> '\"'
+ * - if '\'s are followed by a '"', they must be doubled and followed by '\"',
+ *   resulting in an odd number of '\' followed by a '"'
+ *   '\"'    -> '\\\"'
+ *   '\\"'   -> '\\\\\"'
+ * - '\'s are followed by the closing '"' must be doubled,
+ *   resulting in an even number of '\' followed by a '"'
+ *   ' \'    -> '" \\"'
+ *   ' \\'    -> '" \\\\"'
+ * - '\'s that are not followed by a '"' can be left as is
+ *   'a\b'   == 'a\b'
+ *   'a\\b'  == 'a\\b'
+ */
+static char *build_command_line(char **argv)
 {
-    char *testagentd = NULL, *oldtestagentd = NULL;
+    int len;
+    char **arg;
+    char *p;
+    char* cmdline;
+
+    len = 0;
+    for (arg = argv; *arg; arg++)
+    {
+        BOOL has_space;
+        int bcount;
+        char* a;
+
+        has_space=FALSE;
+        bcount=0;
+        a=*arg;
+        if( !*a ) has_space=TRUE;
+        while (*a!='\0') {
+            if (*a=='\\') {
+                bcount++;
+            } else {
+                if (*a==' ' || *a=='\t') {
+                    has_space=TRUE;
+                } else if (*a=='"') {
+                    /* doubling of '\' preceding a '"',
+                     * plus escaping of said '"'
+                     */
+                    len+=2*bcount+1;
+                }
+                bcount=0;
+            }
+            a++;
+        }
+        len+=(a-*arg)+1 /* for the separating space */;
+        if (has_space)
+            len+=2+bcount; /* for the quotes and doubling of '\' preceding the closing quote */
+    }
+
+    cmdline = malloc(len);
+    if (!cmdline)
+        return NULL;
+
+    p = cmdline;
+    for (arg = argv; *arg; arg++)
+    {
+        BOOL has_space,has_quote;
+        char* a;
+        int bcount;
+
+        /* Check for quotes and spaces in this argument */
+        has_space=has_quote=FALSE;
+        a=*arg;
+        if( !*a ) has_space=TRUE;
+        while (*a!='\0') {
+            if (*a==' ' || *a=='\t') {
+                has_space=TRUE;
+                if (has_quote)
+                    break;
+            } else if (*a=='"') {
+                has_quote=TRUE;
+                if (has_space)
+                    break;
+            }
+            a++;
+        }
+
+        /* Now transfer it to the command line */
+        if (has_space)
+            *p++='"';
+        if (has_quote || has_space) {
+            bcount=0;
+            a=*arg;
+            while (*a!='\0') {
+                if (*a=='\\') {
+                    *p++=*a;
+                    bcount++;
+                } else {
+                    if (*a=='"') {
+                        int i;
+
+                        /* Double all the '\\' preceding this '"', plus one */
+                        for (i=0;i<=bcount;i++)
+                            *p++='\\';
+                        *p++='"';
+                    } else {
+                        *p++=*a;
+                    }
+                    bcount=0;
+                }
+                a++;
+            }
+        } else {
+            char* x = *arg;
+            while ((*p=*x++)) p++;
+        }
+        if (has_space) {
+            int i;
+
+            /* Double all the '\' preceding the closing quote */
+            for (i=0;i<bcount;i++)
+                *p++='\\';
+            *p++='"';
+        }
+        *p++=' ';
+    }
+    if (p > cmdline)
+        p--;  /* remove last space */
+    *p = '\0';
+
+    return cmdline;
+}
+
+int platform_upgrade(char* current_argv0, int argc, char** argv)
+{
+    char *testagentd = NULL, *oldtestagentd = NULL, *cmdline = NULL;
+    char full_argv0[MAX_PATH];
+    char *tmp_argv0;
+    DWORD rc;
     STARTUPINFO si;
     PROCESS_INFORMATION pi;
     int success = 0;
 
     testagentd = get_server_filename(0);
-    oldtestagentd = get_server_filename(1);
-    if (!testagentd || !oldtestagentd)
+    if (!testagentd)
     {
-        set_status(ST_ERROR, "unable to get the process filenames (le=%lu)", GetLastError());
+        set_status(ST_ERROR, "unable to get the process filename (le=%lu)", GetLastError());
         goto done;
     }
 
-    if (!MoveFile(testagentd, oldtestagentd))
+    rc = GetFullPathNameA(argv[0], sizeof(full_argv0), full_argv0, NULL);
+    if (rc == 0 || rc > sizeof(full_argv0))
     {
-        set_status(ST_ERROR, "unable to move the current server file out of the way (le=%lu)", GetLastError());
+        set_status(ST_ERROR, "could not get the full path for '%s' (le=%lu)", argv[0], GetLastError());
         goto done;
     }
-    if (!MoveFile(tmpserver, testagentd))
+
+    if (strcmp(testagentd, full_argv0))
     {
-        set_status(ST_ERROR, "unable to move the new server file in place (le=%lu)", GetLastError());
-        MoveFile(oldtestagentd, testagentd);
+        oldtestagentd = get_server_filename(1);
+        if (!oldtestagentd)
+        {
+            set_status(ST_ERROR, "unable to get the backup filename (le=%lu)", GetLastError());
+            goto done;
+        }
+        if (!MoveFile(testagentd, oldtestagentd))
+        {
+            set_status(ST_ERROR, "unable to move the current server file out of the way (le=%lu)", GetLastError());
+            goto done;
+        }
+        if (!MoveFile(argv[0], testagentd))
+        {
+            set_status(ST_ERROR, "unable to move the new server file in place (le=%lu)", GetLastError());
+            MoveFile(oldtestagentd, testagentd);
+            goto done;
+        }
+    }
+
+    tmp_argv0 = argv[0];
+    argv[0] = testagentd;
+    cmdline = build_command_line(argv);
+    argv[0] = tmp_argv0;
+    if (!cmdline)
+    {
+        set_status(ST_ERROR, "unable to build the new command line");
+        if (oldtestagentd)
+            MoveFile(oldtestagentd, testagentd);
         goto done;
     }
 
     memset(&si, 0, sizeof(si));
     si.cb = sizeof(si);
-    if (!CreateProcessA(testagentd, GetCommandLineA(), NULL, NULL, TRUE,
+    if (!CreateProcessA(testagentd, cmdline, NULL, NULL, TRUE,
                         CREATE_NEW_CONSOLE, NULL, NULL, &si, &pi))
     {
-        set_status(ST_ERROR, "could not run '%s': %lu", GetCommandLineA(), GetLastError());
-        MoveFile(oldtestagentd, testagentd);
+        set_status(ST_ERROR, "could not run '%s': %lu", cmdline, GetLastError());
+        if (oldtestagentd)
+            MoveFile(oldtestagentd, testagentd);
         goto done;
     }
 
@@ -341,6 +513,7 @@ int platform_upgrade(const char* tmpserver, char** argv)
  done:
     free(testagentd);
     free(oldtestagentd);
+    free(cmdline);
     return success;
 }
 
