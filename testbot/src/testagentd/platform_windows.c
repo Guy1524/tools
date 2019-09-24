@@ -532,16 +532,19 @@ int platform_init(void)
     {
         /* This also serves to ensure the old server has released the port
          * before we attempt to open our own.
+         * But if a second server is running the deletion will never work so
+         * give up after a while.
          */
+        int attempt = 0;
         do
         {
             if (!DeleteFileA(oldtestagentd))
                 Sleep(500);
+            attempt++;
         }
-        while (GetLastError() ==  ERROR_ACCESS_DENIED);
+        while (GetLastError() ==  ERROR_ACCESS_DENIED && attempt < 20);
         free(oldtestagentd);
     }
-
 
     wVersionRequested = MAKEWORD(2, 2);
     rc = WSAStartup(wVersionRequested, &wsaData);
