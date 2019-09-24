@@ -386,6 +386,29 @@ sub CreateSnapshot($$)
 {
   my ($Domain, $SnapshotName) = @_;
 
+  if ($VM->Type eq "wine")
+  {
+    # Make sure an X session has started before taking the snapshot
+    Debug(Elapsed($Start), " Waiting for the X session\n");
+    LogMsg "Waiting for the $VMKey X session\n";
+    my $TA = $VM->GetAgent();
+    my $Pid = $TA->Run(["sh", "-c", "while ! xset -display :0.0 q >/dev/null; do sleep 1; done"], 0);
+    if (!$Pid)
+    {
+      FatalError("Could not check for the X session on the $VMKey VM\n");
+    }
+    if (!defined $TA->Wait($Pid, $SleepAfterBoot))
+    {
+      my $ErrMessage = $TA->GetLastError();
+      if ($ErrMessage =~ /timed out waiting for the child process/)
+      {
+        FatalError("Timed out waiting for the X session\n");
+      }
+      FatalError("An error occurred while waiting for the X session: $ErrMessage\n");
+    }
+    $TA->Disconnect();
+  }
+
   if ($SleepAfterBoot != 0)
   {
     Debug(Elapsed($Start), " Sleeping for the $SnapshotName snapshot\n");
