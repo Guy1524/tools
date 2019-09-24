@@ -518,6 +518,11 @@ if ($NewStatus eq 'completed')
     # Without the snapshot the VM is not usable anymore but FatalError() will
     # just mark it as 'dirty'. It's only the next time it is used that the
     # problem will be noticed and that it will be taken offline.
+    NotifyAdministrator("The ". $VM->Name ." update failed",
+                        "Could not recreate the $IdleSnapshot snapshot:\n\n".
+                        "$ErrMessage\n\n".
+                        "See the link below for more details:\n".
+                        MakeSecureURL(GetTaskURL($JobId, $StepNo, $TaskNo)) ."\n");
     FatalError("Could not recreate the $IdleSnapshot snapshot: $ErrMessage\n");
   }
 
