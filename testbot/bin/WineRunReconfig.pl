@@ -468,7 +468,7 @@ if ($NewStatus eq "completed")
     if ($FileName !~ m~^latest/~ and !$Summary->{$BaseName} and
         -f "$DataDir/latest/$BaseName")
     {
-      # This file was not updated to there is no point redownloading it.
+      # This file was not updated so there is no point in redownloading it.
       next;
     }
     Debug(Elapsed($Start), " Retrieving '$TaskDir/$BaseName'\n");
