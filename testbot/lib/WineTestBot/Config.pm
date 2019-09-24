@@ -28,7 +28,7 @@ WineTestBot::Config - Site-independent configuration settings
 use vars qw (@ISA @EXPORT @EXPORT_OK $UseSSL $LogDir $DataDir $BinDir
              %RepoURLs $DbDataSource $DbUsername $DbPassword $MaxRevertingVMs
              $MaxRevertsWhileRunningVMs $MaxActiveVMs $MaxRunningVMs
-             $MaxVMsWhenIdle $SleepAfterRevert $WaitForBoot
+             $MaxVMsWhenIdle $WaitForBoot $SleepAfterBoot $SleepAfterRevert
              $VMToolTimeout $MaxVMErrors $MaxTaskTries $AdminEMail $RobotEMail
              $WinePatchToOverride $WinePatchCc
              $ExeBuildNativeTimeout $ExeBuildTestTimeout $ExeModuleTimeout
@@ -44,7 +44,8 @@ require Exporter;
 @ISA = qw(Exporter);
 @EXPORT = qw($UseSSL $LogDir $DataDir $BinDir %RepoURLs
              $MaxRevertingVMs $MaxRevertsWhileRunningVMs $MaxActiveVMs
-             $MaxRunningVMs $MaxVMsWhenIdle $SleepAfterRevert $WaitForBoot
+             $MaxRunningVMs $MaxVMsWhenIdle $WaitForBoot $SleepAfterBoot
+             $SleepAfterRevert
              $VMToolTimeout $MaxVMErrors $MaxTaskTries $AdminEMail
              $RobotEMail $WinePatchToOverride $WinePatchCc $SuiteTimeout
              $ExeBuildNativeTimeout $ExeBuildTestTimeout $ExeModuleTimeout
@@ -92,6 +93,8 @@ $MaxVMsWhenIdle = undef;
 
 # How long to attempt to connect to the TestAgent while the VM is booting.
 $WaitForBoot = 90;
+# How long to let the VM settle down after booting it before taking a snapshot.
+$SleepAfterBoot = 30;
 # How long to let the VM settle down after a revert before starting a task on
 # it (in seconds).
 $SleepAfterRevert = 0;

@@ -307,11 +307,10 @@ sub GetSnapshotName($)
   return (undef, $SnapshotName);
 }
 
-sub RevertToSnapshot($)
+sub RevertToSnapshot($$)
 {
-  my ($self) = @_;
+  my ($self, $SnapshotName) = @_;
 
-  my $SnapshotName = $self->{VM}->IdleSnapshot;
   my ($ErrMessage, $Domain, $Snapshot) = $self->_GetSnapshot($SnapshotName);
   return ($ErrMessage, undef) if (defined $ErrMessage);
 

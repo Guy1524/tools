@@ -6,7 +6,7 @@
 # network trouble, and thus are best performed in a separate process.
 #
 # Copyright 2009 Ge van Geldorp
-# Copyright 2012-2017 Francois Gouget
+# Copyright 2012-2019 Francois Gouget
 #
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
@@ -382,6 +382,25 @@ sub SetupTestAgentd($$)
   $TA->Disconnect();
 }
 
+sub CreateSnapshot($$)
+{
+  my ($Domain, $SnapshotName) = @_;
+
+  if ($SleepAfterBoot != 0)
+  {
+    Debug(Elapsed($Start), " Sleeping for the $SnapshotName snapshot\n");
+    LogMsg "Letting $VMKey settle down for the $SnapshotName snapshot\n";
+    sleep($SleepAfterBoot);
+  }
+
+  Debug(Elapsed($Start), " Creating the $SnapshotName snapshot\n");
+  my $ErrMessage = $Domain->CreateSnapshot($SnapshotName);
+  if (defined $ErrMessage)
+  {
+    FatalError("Could not recreate the $SnapshotName snapshot on $VMKey: $ErrMessage\n");
+  }
+}
+
 sub Revert()
 {
   my $VM = CreateVMs()->GetItem($VMKey);
@@ -391,11 +410,34 @@ sub Revert()
     return 1;
   }
   $CurrentStatus = "reverting";
+  my $DomainSnapshot = $VM->IdleSnapshot;
+  my $ExtraTimeout = 0;
+  my $CreateSnapshot;
+
+  my $Domain = $VM->GetDomain();
+  if (!$Domain->HasSnapshot($DomainSnapshot) and $DomainSnapshot =~ s/-live$//)
+  {
+    # Add some extra time to boot the VM and create the live snapshot
+    $ExtraTimeout += $WaitForBoot + $VMToolTimeout / 2;
+    $CreateSnapshot = 1;
+    Debug(Elapsed($Start), " $VMKey does not yet have a $DomainSnapshot-live snapshot\n");
+  }
+  if (!$Domain->HasSnapshot($DomainSnapshot))
+  {
+    FatalError("Could not find $VMKey\'s $DomainSnapshot snapshot\n");
+  }
+  if ($ExtraTimeout)
+  {
+    Debug(Elapsed($Start), " Extend the $VMKey revert deadline by $ExtraTimeout\n");
+    my $Deadline = $VM->Status eq "maintenance" ? (time() + $VMToolTimeout) :
+                                                  $VM->ChildDeadline;
+    $VM->ChildDeadline($Deadline + $ExtraTimeout);
+    $VM->Save();
+  }
 
   # Revert the VM (and power it on if necessary)
-  my $Domain = $VM->GetDomain();
-  Debug(Elapsed($Start), " Reverting $VMKey to ", $VM->IdleSnapshot, "\n");
-  my ($ErrMessage, $Booting) = $Domain->RevertToSnapshot();
+  Debug(Elapsed($Start), " Reverting $VMKey to $DomainSnapshot\n");
+  my ($ErrMessage, $Booting) = $Domain->RevertToSnapshot($DomainSnapshot);
   if (defined $ErrMessage)
   {
     # Libvirt/QEmu is buggy and cannot revert a running VM from one hardware
@@ -408,28 +450,45 @@ sub Revert()
       FatalError("Could not power off $VMKey: $ErrMessage\n");
     }
 
-    Debug(Elapsed($Start), " Reverting $VMKey to ", $VM->IdleSnapshot, "... again\n");
-    ($ErrMessage, $Booting) = $Domain->RevertToSnapshot();
+    Debug(Elapsed($Start), " Reverting $VMKey to $DomainSnapshot... again\n");
+    ($ErrMessage, $Booting) = $Domain->RevertToSnapshot($DomainSnapshot);
   }
   if (defined $ErrMessage)
   {
-    FatalError("Could not revert $VMKey to ". $VM->IdleSnapshot .": $ErrMessage\n");
+    FatalError("Could not revert $VMKey to $DomainSnapshot: $ErrMessage\n");
   }
 
-  # The VM is now sleeping which may allow some tasks to run
-  return 1 if (ChangeStatus("reverting", "sleeping"));
+  # Mark the VM as sleeping which allows the scheduler to abort the revert in
+  # favor of higher priority tasks. But don't allow interruptions in the
+  # middle of snapshot creation!
+  if (!$CreateSnapshot)
+  {
+    return 1 if (ChangeStatus("reverting", "sleeping"));
+  }
 
   # Set up the TestAgent server
   SetupTestAgentd($VM, $Booting);
 
-  if ($SleepAfterRevert != 0)
+  if ($CreateSnapshot)
   {
+    CreateSnapshot($Domain, $VM->IdleSnapshot);
+  }
+  else
+  {
+    my $Sleep = ($Booting and $SleepAfterBoot > $SleepAfterRevert) ?
+                $SleepAfterBoot : $SleepAfterRevert;
     Debug(Elapsed($Start), " Sleeping\n");
-    LogMsg "Letting ". $VM->Name  ." settle down for ${SleepAfterRevert}s\n";
-    sleep($SleepAfterRevert);
+    LogMsg "Letting $VMKey settle down for ${Sleep}s\n";
+    sleep($Sleep);
   }
 
-  return ChangeStatus("sleeping", "idle", "done");
+  if ($CreateSnapshot)
+  {
+    # The activity monitor does not like it when VMs skip the sleeping step
+    return 1 if (ChangeStatus("reverting", "sleeping"));
+  }
+
+  return ChangeStatus($CurrentStatus, "idle", "done");
 }
 
 
