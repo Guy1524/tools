@@ -438,6 +438,11 @@ if ($TA->GetFile("Reconfig.log", "$TaskDir/log"))
   {
     # We should not have badpatch errors and if the result line is missing we
     # probably already have an error message that explains why.
+    NotifyAdministrator("The ". $VM->Name ." build failed",
+                        "The ". $VM->Name ." build failed:\n\n".
+                        "$Summary->{Task}\n\n".
+                        "See the link below for more details:\n".
+                        MakeSecureURL(GetTaskURL($JobId, $StepNo, $TaskNo)) ."\n");
     $NewStatus = "badbuild";
   }
 }
