@@ -365,6 +365,23 @@ sub CheckOff()
   return ChangeStatus("dirty", "off", "done");
 }
 
+sub SetupTestAgentd($$)
+{
+  my ($VM, $Booting) = @_;
+
+  Debug(Elapsed($Start), " Setting up the $VMKey TestAgent server\n");
+  LogMsg "Setting up the $VMKey TestAgent server\n";
+  my $TA = $VM->GetAgent();
+  $TA->SetConnectTimeout(undef, undef, $WaitForBoot) if ($Booting);
+  my $Version = $TA->GetVersion();
+  if (!$Version)
+  {
+    my $ErrMessage = $TA->GetLastError();
+    FatalError("Could not connect to the $VMKey TestAgent: $ErrMessage\n");
+  }
+  $TA->Disconnect();
+}
+
 sub Revert()
 {
   my $VM = CreateVMs()->GetItem($VMKey);
@@ -402,18 +419,8 @@ sub Revert()
   # The VM is now sleeping which may allow some tasks to run
   return 1 if (ChangeStatus("reverting", "sleeping"));
 
-  # Verify that the TestAgent server accepts connections
-  Debug(Elapsed($Start), " Verifying the TestAgent server\n");
-  LogMsg "Verifying the $VMKey TestAgent server\n";
-  my $TA = $VM->GetAgent();
-  $TA->SetConnectTimeout(undef, undef, $WaitForBoot) if ($Booting);
-  my $Success = $TA->Ping();
-  $TA->Disconnect();
-  if (!$Success)
-  {
-    $ErrMessage = $TA->GetLastError();
-    FatalError("Cannot connect to the $VMKey TestAgent: $ErrMessage\n");
-  }
+  # Set up the TestAgent server
+  SetupTestAgentd($VM, $Booting);
 
   if ($SleepAfterRevert != 0)
   {
