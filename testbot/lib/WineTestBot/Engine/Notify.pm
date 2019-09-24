@@ -82,7 +82,7 @@ sub Shutdown($$)
   my $Reply = SendCmdReceiveReply("shutdown $KillTasks $KillVMs\n");
   if (length($Reply) < 1)
   {
-    return "Unrecognized reply received from engine";
+    return "The Engine did not acknowledge the Shutdown command";
   }
   if (substr($Reply, 0, 1) eq "1")
   {
@@ -105,7 +105,7 @@ sub JobStatusChange($$$)
   my $Reply = SendCmdReceiveReply("jobstatuschange $JobKey $OldStatus $NewStatus\n");
   if (length($Reply) < 1)
   {
-    return "Unrecognized reply received from engine";
+    return "The Engine did not acknowledge the JobStatusChange command";
   }
   if (substr($Reply, 0, 1) eq "1")
   {
@@ -122,7 +122,7 @@ sub JobCancel($)
   my $Reply = SendCmdReceiveReply("jobcancel $JobKey\n");
   if (length($Reply) < 1)
   {
-    return "Unrecognized reply received from engine";
+    return "The Engine did not acknowledge the JobCancel command";
   }
   if (substr($Reply, 0, 1) eq "1")
   {
@@ -139,7 +139,7 @@ sub JobRestart($)
   my $Reply = SendCmdReceiveReply("jobrestart $JobKey\n");
   if (length($Reply) < 1)
   {
-    return "Unrecognized reply received from engine";
+    return "The Engine did not acknowledge the JobRestart command";
   }
   if (substr($Reply, 0, 1) eq "1")
   {
@@ -154,7 +154,7 @@ sub RescheduleJobs()
   my $Reply = SendCmdReceiveReply("reschedulejobs\n");
   if (length($Reply) < 1)
   {
-    return "Unrecognized reply received from engine";
+    return "The Engine did not acknowledge the RescheduleJobs command";
   }
   if (substr($Reply, 0, 1) eq "1")
   {
@@ -171,7 +171,7 @@ sub VMStatusChange($$$)
   my $Reply = SendCmdReceiveReply("vmstatuschange $VMKey $OldStatus $NewStatus\n");
   if (length($Reply) < 1)
   {
-    return "Unrecognized reply received from engine";
+    return "The Engine did not acknowledge the VMStatusChange notification";
   }
   if (substr($Reply, 0, 1) eq "1")
   {
@@ -186,7 +186,7 @@ sub WinePatchMLSubmission()
   my $Reply = SendCmdReceiveReply("winepatchmlsubmission\n");
   if (length($Reply) < 1)
   {
-    return "Unrecognized reply received from engine";
+    return "The Engine did not acknowledge the WinePatchMLSubmission command";
   }
   if (substr($Reply, 0, 1) eq "1")
   {
@@ -201,7 +201,7 @@ sub WinePatchWebSubmission()
   my $Reply = SendCmdReceiveReply("winepatchwebsubmission\n");
   if (length($Reply) < 1)
   {
-    return "Unrecognized reply received from engine";
+    return "The Engine did not acknowledge the WinePatchWebSubmission command";
   }
   if (substr($Reply, 0, 1) eq "1")
   {
@@ -218,7 +218,7 @@ sub GetScreenshot($)
   my $Reply = SendCmdReceiveReply("getscreenshot $VMName\n");
   if (length($Reply) < 1)
   {
-    return "Unrecognized reply received from engine";
+    return "The Engine did not acknowledge the GetScreenshot command";
   }
   if (substr($Reply, 0, 1) eq "1")
   {
