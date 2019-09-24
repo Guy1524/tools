@@ -33,26 +33,28 @@ use WineTestBot::Config;
 
 my $logfile;
 my $logprefix;
+sub SetupLogging()
+{
+  require File::Basename;
+  $logprefix = File::Basename::basename($0);
+  $logprefix =~ s/\.[^.]*$//;
+  my $oldumask = umask(002);
+  if (!open($logfile, ">>", "$LogDir/log"))
+  {
+    print STDERR "$logprefix:warning: could not open '$LogDir/log' for writing: $!\n";
+    open($logfile, ">>&=", 2);
+  }
+  umask($oldumask);
+
+  # Flush after each print
+  my $tmp=select($logfile);
+  $| = 1;
+  select($tmp);
+}
+
 sub LogMsg(@)
 {
-  if (!defined $logfile)
-  {
-    require File::Basename;
-    $logprefix = File::Basename::basename($0);
-    $logprefix =~ s/\.[^.]*$//;
-    my $oldumask = umask(002);
-    if (!open($logfile, ">>", "$LogDir/log"))
-    {
-      print STDERR "$logprefix:warning: could not open '$LogDir/log' for writing: $!\n";
-      open($logfile, ">>&=", 2);
-    }
-    umask($oldumask);
-
-    # Flush after each print
-    my $tmp=select($logfile);
-    $| = 1;
-    select($tmp);
-  }
+  SetupLogging() if (!defined $logfile);
   print $logfile scalar localtime, " ", $logprefix, "[$$]: ", @_ if ($logfile);
 }
 
@@ -75,19 +77,18 @@ exec()-ing external tools so their error messages are not lost.
 
 sub SetupRedirects()
 {
-  if (defined $logfile)
+  SetupLogging() if (!defined $logfile);
+
+  if (open(STDERR, ">>&", $logfile))
   {
-    if (open(STDERR, ">>&", $logfile))
-    {
-      # Make sure stderr still flushes after each print
-      my $tmp=select(STDERR);
-      $| = 1;
-      select($tmp);
-    }
-    else
-    {
-      LogMsg "unable to redirect stderr to '$logfile': $!\n";
-    }
+    # Make sure stderr still flushes after each print
+    my $tmp = select(STDERR);
+    $| = 1;
+    select($tmp);
+  }
+  else
+  {
+    LogMsg "unable to redirect stderr to '$logfile': $!\n";
   }
 }
 
