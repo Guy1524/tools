@@ -299,8 +299,8 @@ sub FatalTAError($$)
     # since neither the VM nor the task are at fault.
     Error("$ErrMessage\n");
     NotifyAdministrator("Putting the ". $VM->Name ." VM offline",
-                        "A TestAgent operation to the ". $VM->Name ." VM failed:\n".
-                        "\n$ErrMessage\n".
+                        "A TestAgent operation to the ". $VM->Name ." VM failed:\n\n".
+                        "$ErrMessage\n\n".
                         "So the VM has been put offline and the TestBot will try to regain access to it.");
     WrapUpAndExit('queued');
   }
