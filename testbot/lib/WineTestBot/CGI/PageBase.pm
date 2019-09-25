@@ -73,12 +73,10 @@ sub CheckSecurePage($$)
 {
   my ($self, $Page) = @_;
 
-  if (! $UseSSL || SecureConnection())
+  if ($UseSSL && ! SecureConnection())
   {
-    return;
+    $self->Redirect($Page, MakeSecureURL($ENV{"REQUEST_URI"}));
   }
-
-  $self->Redirect($Page, MakeSecureURL($ENV{"REQUEST_URI"}));
 }
 
 sub GenerateHttpHeaders($)
