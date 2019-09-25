@@ -742,6 +742,7 @@ sub main()
   }
 
   $SIG{CHLD} = \&REAPER;
+  WineTestBot::Log::SetupRedirects();
 
   $WineTestBot::Engine::Notify::RunningInEngine = 1;
   LogMsg "Starting the WineTestBot Engine\n";
