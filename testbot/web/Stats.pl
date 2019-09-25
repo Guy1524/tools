@@ -131,8 +131,7 @@ sub _GetStatHtml($$;$$)
     my ($JobId, $StepNo, $TaskNo) = ObjectModel::Collection::SplitKey(undef, $SrcObj->GetFullKey());
     if (defined $TaskNo)
     {
-      my $Key = "$JobId#k". ($StepNo * 100 + $TaskNo);
-      return "<a href='/JobDetails.pl?Key=$Key'>$Value</a>";
+      return "<a href='". GetTaskURL($JobId, $StepNo, $TaskNo) ."'>$Value</a>";
     }
     return "<a href='/index.pl#job$JobId'>$Value</a>";
   }
