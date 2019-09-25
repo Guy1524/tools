@@ -328,14 +328,13 @@ sub RevertToSnapshot($$)
   return (undef, $Reason != Sys::Virt::Domain::STATE_RUNNING_FROM_SNAPSHOT);
 }
 
-sub CreateSnapshot($)
+sub CreateSnapshot($$)
 {
-  my ($self) = @_;
+  my ($self, $SnapshotName) = @_;
 
   my ($ErrMessage, $Domain) = $self->_GetDomain();
   return $ErrMessage if (defined $ErrMessage);
 
-  my $SnapshotName = $self->{VM}->IdleSnapshot;
   # FIXME: XML escaping
   my $Xml = "<domainsnapshot><name>$SnapshotName</name></domainsnapshot>";
   eval { $Domain->create_snapshot($Xml, 0) };

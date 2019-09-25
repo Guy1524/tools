@@ -365,9 +365,9 @@ sub CheckOff()
   return ChangeStatus("dirty", "off", "done");
 }
 
-sub SetupTestAgentd($$)
+sub SetupTestAgentd($$$)
 {
-  my ($VM, $Booting) = @_;
+  my ($VM, $Booting, $ResetStartCount) = @_;
 
   Debug(Elapsed($Start), " Setting up the $VMKey TestAgent server\n");
   LogMsg "Setting up the $VMKey TestAgent server\n";
@@ -378,6 +378,23 @@ sub SetupTestAgentd($$)
   {
     my $ErrMessage = $TA->GetLastError();
     FatalError("Could not connect to the $VMKey TestAgent: $ErrMessage\n");
+  }
+
+  if ($ResetStartCount)
+  {
+    # If SetProperty() is not supported neither is --show-restarts.
+    # So it all works out.
+    $TA->SetProperty("start.count", 0);
+  }
+  else
+  {
+    # Check that TestAgentd is not displaying the "Has Windows rebooted?"
+    # warning.
+    my $Count = $TA->GetProperties("start.count");
+    if (defined $Count and $Count > 1)
+    {
+      FatalError("Cannot take a live snapshot because start.count=$Count > 1");
+    }
   }
   $TA->Disconnect();
 }
@@ -435,9 +452,17 @@ sub Revert()
   $CurrentStatus = "reverting";
   my $DomainSnapshot = $VM->IdleSnapshot;
   my $ExtraTimeout = 0;
-  my $CreateSnapshot;
+  my ($SetLocale, $CreateSnapshot);
 
   my $Domain = $VM->GetDomain();
+  if (!$Domain->HasSnapshot($DomainSnapshot) and
+      $DomainSnapshot =~ s/-([a-z]{2})[_-]([A-Z]{2})$//)
+  {
+    # Add some extra time to set up the VM locale and reboot it
+    $ExtraTimeout += $VMToolTimeout;
+    $SetLocale = "$1-$2";
+    Debug(Elapsed($Start), " $VMKey does not yet have a $DomainSnapshot-$SetLocale snapshot\n");
+  }
   if (!$Domain->HasSnapshot($DomainSnapshot) and $DomainSnapshot =~ s/-live$//)
   {
     # Add some extra time to boot the VM and create the live snapshot
@@ -484,19 +509,49 @@ sub Revert()
   # Mark the VM as sleeping which allows the scheduler to abort the revert in
   # favor of higher priority tasks. But don't allow interruptions in the
   # middle of snapshot creation!
-  if (!$CreateSnapshot)
+  if (!$CreateSnapshot and !$SetLocale)
   {
     return 1 if (ChangeStatus("reverting", "sleeping"));
   }
 
-  # Set up the TestAgent server
-  SetupTestAgentd($VM, $Booting);
+  # Set up the TestAgent server. Note that setting the locale will require a
+  # reboot so reset start.count in that case.
+  SetupTestAgentd($VM, $Booting, $SetLocale);
 
   if ($CreateSnapshot)
   {
-    CreateSnapshot($Domain, $VM->IdleSnapshot);
+    $DomainSnapshot .= "-live";
+    CreateSnapshot($Domain, $DomainSnapshot);
   }
-  else
+
+  # Set up the VM locale
+  if ($SetLocale)
+  {
+    Debug(Elapsed($Start), " Setting up the $SetLocale locale on $VMKey\n");
+    if (system("$BinDir/SetWinLocale", "--vm", $VMKey, "--default", $SetLocale))
+    {
+      FatalError("Could not set the $VMKey locale to $SetLocale\n");
+    }
+
+    Debug(Elapsed($Start), " Wait for the $VMKey locale-setting reboot to complete\n");
+    LogMsg "Wait for the $VMKey locale-setting reboot to complete\n";
+    while (1)
+    {
+      my $TA = $VM->GetAgent();
+      my $Count = $TA->GetProperties("start.count");
+      $TA->Disconnect();
+
+      # SetupTestAgentd() has reset start.count to zero.
+      # It will only change after the reboot.
+      last if (defined $Count and $Count != 0);
+
+      sleep(1);
+    }
+
+    $DomainSnapshot .= "-$SetLocale";
+    CreateSnapshot($Domain, $DomainSnapshot);
+  }
+  elsif (!$CreateSnapshot)
   {
     my $Sleep = ($Booting and $SleepAfterBoot > $SleepAfterRevert) ?
                 $SleepAfterBoot : $SleepAfterRevert;
@@ -505,7 +560,7 @@ sub Revert()
     sleep($Sleep);
   }
 
-  if ($CreateSnapshot)
+  if ($CreateSnapshot or $SetLocale)
   {
     # The activity monitor does not like it when VMs skip the sleeping step
     return 1 if (ChangeStatus("reverting", "sleeping"));

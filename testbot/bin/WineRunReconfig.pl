@@ -512,7 +512,7 @@ if ($NewStatus eq 'completed')
   }
 
   Debug(Elapsed($Start), " Recreating the $IdleSnapshot snapshot\n");
-  $ErrMessage = $Domain->CreateSnapshot();
+  $ErrMessage = $Domain->CreateSnapshot($IdleSnapshot);
   if (defined $ErrMessage)
   {
     # Without the snapshot the VM is not usable anymore but FatalError() will
