@@ -53,6 +53,7 @@ use WineTestBot::Config;
 use WineTestBot::Engine::Notify;
 use WineTestBot::Log;
 use WineTestBot::SpecialJobs;
+use WineTestBot::Utils;
 use WineTestBot::VMs;
 
 
