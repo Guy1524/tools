@@ -113,21 +113,21 @@ sub GetWindowsTestVMs($$$)
   my ($VMKey, $Build, $BaseJob) = @_;
 
   my $VMs = CreateVMs();
-  $VMs->AddFilter("Name", [$VMKey]) if (defined $VMKey);
-  if ($Build eq "exe64")
+  $VMs->AddFilter("Type", $Build eq "exe32" ? ["win32", "win64"] : ["win64"]);
+  if (defined $VMKey)
   {
-    $VMs->AddFilter("Type", ["win64"]);
-    $VMs->AddFilter("Role", ["base", "winetest"]) if (!defined $VMKey);
+    $VMs->AddFilter("Name", [$VMKey]);
+    $VMs->FilterEnabledRole();
   }
-  elsif ($BaseJob eq "base")
+  elsif ($BaseJob)
   {
-    $VMs->AddFilter("Type", ["win32", "win64"]);
-    $VMs->AddFilter("Role", ["base"]) if (!defined $VMKey);
+    $VMs->AddFilter("Role", $BaseJob eq "base" ? ["base"] :
+                            $BaseJob eq "other" ? ["winetest"] :
+                            ["base", "winetest"]);
   }
   else
   {
-    $VMs->AddFilter("Type", ["win32", "win64"]);
-    $VMs->AddFilter("Role", ["winetest"]) if (!defined $VMKey);
+    $VMs->FilterEnabledRole();
   }
 
   my $SortedKeys = $VMs->SortKeysBySortOrder($VMs->GetKeys());
