@@ -258,7 +258,7 @@ EOF
   if ($self->SessionActive())
   {
     print "        <li class='divider'>&nbsp;</li>\n";
-    print "        <li><p><a href='", MakeSecureURL("/Submit.pl"),
+    print "        <li><p><a href='", MakeSecureURL("/OldSubmit.pl"),
           "'>Submit job</a></p></li>\n";
     print "        <li><p><a href='/Activity.pl'>Activity</a></p></li>\n";
     print "        <li><p><a href='/Stats.pl'>Statistics</a></p></li>\n";
