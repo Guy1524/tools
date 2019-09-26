@@ -43,36 +43,419 @@ use WineTestBot::Utils;
 use WineTestBot::VMs;
 
 
+#
+# File upload
+#
+
+sub _GetStagingFilePath($)
+{
+  my ($self) = @_;
+
+  return "$DataDir/staging/" . $self->GetCurrentSession()->Id . "-websubmit_$self->{FileName}";
+}
+
+sub _Upload($)
+{
+  my ($self) = @_;
+
+  my $Src = $self->CGI->upload("FileName");
+  if (defined $Src)
+  {
+    my $OldUMask = umask(002);
+    if (open(my $Dst, ">", $self->_GetStagingFilePath()))
+    {
+      umask($OldUMask);
+      my $Buffer;
+      while (sysread($Src, $Buffer, 4096))
+      {
+        print $Dst $Buffer;
+      }
+      close($Dst);
+    }
+    else
+    {
+      umask($OldUMask);
+      delete $self->{FileName};
+      $self->{ErrField} = "FileName";
+      $self->{ErrMessage} = "Unable to save the uploaded file";
+      return undef;
+    }
+  }
+  else
+  {
+    delete $self->{FileName};
+    $self->{ErrField} = "FileName";
+    $self->{ErrMessage} = "Unable to upload the file";
+    return undef;
+  }
+  return 1;
+}
+
+sub _GetFileType($)
+{
+  my ($self) = @_;
+
+  return 1 if (defined $self->{FileType});
+  $self->{FileType} = "patch";
+
+  my $Fh;
+  if (!sysopen($Fh, $self->_GetStagingFilePath(), O_RDONLY))
+  {
+    $self->{ErrField} = "FileName";
+    $self->{ErrMessage} = "Unable to open '$self->{FileName}'";
+    return undef;
+  }
+
+  my $Buffer;
+  if (sysread($Fh, $Buffer, 0x40))
+  {
+    # Unpack IMAGE_DOS_HEADER
+    my @Fields = unpack "S30I", $Buffer;
+    if ($Fields[0] == 0x5a4d)
+    {
+      seek $Fh, $Fields[30], SEEK_SET;
+      if (sysread($Fh, $Buffer, 0x18))
+      {
+        @Fields = unpack "IS2I3S2", $Buffer;
+        if ($Fields[0] == 0x00004550)
+        {
+          if (($Fields[7] & 0x2000) == 0)
+          {
+            $self->{FileType} = "exe";
+          }
+          else
+          {
+            $self->{FileType} = "dll";
+          }
+          if ($Fields[1] == 0x014c)
+          {
+            $self->{FileType} .= "32";
+          }
+          elsif ($Fields[1] == 0x8664)
+          {
+            $self->{FileType} .= "64";
+          }
+          else
+          {
+            $self->{FileType} = "patch";
+          }
+        }
+      }
+    }
+    # zip files start with PK, 0x03, 0x04
+    elsif ($Fields[0] == 0x4b50 && $Fields[1] == 0x0403)
+    {
+      $self->{FileType} = "zip";
+    }
+  }
+  close($Fh);
+
+  if ($self->{FileType} !~ /^(?:exe32|exe64|patch)$/)
+  {
+    $self->{ErrField} = "FileName";
+    $self->{ErrMessage} = "Unsupported file type";
+    return undef;
+  }
+
+  return 1;
+}
+
+sub _AnalyzePatch($)
+{
+  my ($self) = @_;
+
+  $self->{Impacts} ||= GetPatchImpacts($self->_GetStagingFilePath());
+
+  if (!$self->{Impacts}->{PatchedRoot} and
+      !$self->{Impacts}->{PatchedModules} and
+      !$self->{Impacts}->{PatchedTests})
+  {
+    $self->{ErrField} = "FileName";
+    $self->{ErrMessage} = "'$self->{FileName}' is not a valid patch";
+    return undef;
+  }
+  if ($self->{Impacts}->{TestUnitCount} == 0)
+  {
+    $self->{ErrField} = "FileName";
+    $self->{ErrMessage} = "The patch does not impact the tests";
+    return undef;
+  }
+  if ($self->{Impacts}->{TestUnitCount} > 1)
+  {
+    $self->{ErrField} = "FileName";
+    $self->{ErrMessage} = "The patch contains changes to multiple tests";
+    return undef;
+  }
+  return 1;
+}
+
+
+#
+# State validation
+#
+
+sub _ValidateFileName($)
+{
+  my ($self) = @_;
+
+  if (!defined $self->{FileName})
+  {
+    delete $self->{FileName};
+    $self->{ErrField} = "FileName";
+    $self->{ErrMessage} = "You must provide a file to test";
+    return undef;
+  }
+  if (!IsValidFileName($self->{FileName}))
+  {
+    delete $self->{FileName};
+    $self->{ErrField} = "FileName";
+    $self->{ErrMessage} = "The filename contains invalid characters";
+    return undef;
+  }
+  my $PropertyDescriptor = CreateSteps()->GetPropertyDescriptorByName("FileName");
+  if ($PropertyDescriptor->GetMaxLength() - 32 - 1 < length($self->{FileName}))
+  {
+    delete $self->{FileName};
+    $self->{ErrField} = "FileName";
+    $self->{ErrMessage} = "The filename is too long";
+    return undef;
+  }
+
+  return 1;
+}
+
+sub _ValidateVMSelection($;$)
+{
+  my ($self, $DeselectIncompatible) = @_;
+
+  return undef if (!$self->_GetFileType());
+
+  my @Deselected;
+  foreach my $VMRow (@{$self->{VMRows}})
+  {
+    if ($self->{FileType} eq "exe64" and $VMRow->{VM}->Type eq "win32")
+    {
+      # This VM cannot run 64 bit executables
+      $VMRow->{Incompatible} = 1;
+      if ($VMRow->{Checked})
+      {
+        if ($DeselectIncompatible)
+        {
+          $VMRow->{Checked} = undef;
+        }
+        else
+        {
+          push @Deselected, $VMRow->{VM}->Name;
+        }
+      }
+    }
+    else
+    {
+      delete $VMRow->{Incompatible};
+    }
+
+    if ($VMRow->{Checked})
+    {
+      # Count VMs so we can provide defaults or issue an error when needed
+      $self->{CheckedVMCount}++;
+      # Set ShowRun64 if page 3 should offer to run both the 32 and 64 bit
+      # version of a patch.
+      $self->{ShowRun64} = 1 if ($VMRow->{VM}->Type eq "win64");
+    }
+  }
+  if (@Deselected)
+  {
+    $self->{ErrMessage} = "The following VMs are incompatible and have been deselected: @Deselected";
+    return undef;
+  }
+  return 1;
+}
+
+sub Validate($)
+{
+  my ($self) = @_;
+
+  # There is nothing to validate for error page 0
+  return $self->SUPER::Validate() if ($self->{Page} == 0);
+
+  # Validate the state from all past pages
+  if ($self->{Page} >= 1)
+  {
+    # Note that _GetFileType() assumes the file is a patch when it does not
+    # recognize it. So call _AnalyzePatch() to make sure it is legit.
+    if (!$self->_ValidateFileName() or !$self->_GetFileType() or
+        ($self->{FileType} eq "patch" and !$self->_AnalyzePatch()))
+    {
+      # The helper functions all set the error message already
+      return undef;
+    }
+
+    if (!defined $self->{Branch})
+    {
+      # Note that Page 1 should have provided a default
+      # so there is no reason for it to still be undefined.
+      $self->{ErrField} = "Branch";
+      $self->{ErrMessage} = "You must specify the branch to test";
+      return undef;
+    }
+    if (!CreateBranches()->GetItem($self->{Branch}))
+    {
+      $self->{ErrField} = "Branch";
+      $self->{ErrMessage} = "The '$self->{Branch}' branch does not exist";
+      return undef;
+    }
+  }
+
+  if ($self->{Page} >= 2)
+  {
+    return undef if (!$self->_ValidateVMSelection());
+    if (!$self->{CheckedVMCount})
+    {
+      $self->{ErrMessage} = "Select at least one VM";
+      return undef;
+    }
+  }
+
+  if ($self->{Page} >= 3)
+  {
+    if (($self->{FileType} eq "patch" and
+         $self->{TestExecutable} !~ m/^[\w_.]+_test\.exe$/) or
+        !IsValidFileName($self->{TestExecutable}))
+    {
+      $self->{ErrField} = "TestExecutable";
+      $self->{ErrMessage} = "Invalid test executable filename";
+      return undef;
+    }
+
+    if ($self->{CmdLineArg} eq "" and !$self->{NoCmdLineArgWarn})
+    {
+      $self->{ErrMessage} = "You did not specify a command line argument. ".
+                            "This is most likely not correct, so please ".
+                            "fix this. If you are sure that you really don't ".
+                            'want a command line argument, press "Submit" '.
+                            "again.";
+      $self->{ErrField} = "CmdLineArg";
+      $self->{NoCmdLineArgWarn} = 1;
+      return undef;
+    }
+  }
+
+  return $self->SUPER::Validate();
+}
+
+
+#
+# Page state management
+#
+
+sub _GetParams($@)
+{
+  my $self = shift @_;
+  map { $self->{$_} = $self->GetParam($_) } @_;
+}
+
 sub _initialize($$$)
 {
   my ($self, $Request, $RequiredRole) = @_;
 
-  $self->{Page} = $self->GetParam("Page") || 1;
+  # Reload the parameters from all pages so settings don't get lost
+  # when going back to change something.
+
+  $self->{Page} = $self->GetParam("Page");
   # Page is a hidden parameter so fix it instead of issuing an error
-  $self->{Page} = 1 if ($self->{Page} !~ /^[1-4]$/);
+  $self->{Page} = 1 if (!defined $self->{Page} or $self->{Page} !~ /^[0-3]$/);
   $self->{LastPage} = $self->{Page};
 
-  my @PropertyDescriptors1 = (
-    CreateBasicPropertyDescriptor("Remarks", "Remarks", !1, !1, "A", 128),
-  );
-  $self->{PropertyDescriptors1} = \@PropertyDescriptors1;
+  # Load the Page 1 parameters
+  $self->_GetParams("FileName", "Branch", "Remarks");
 
-  my @PropertyDescriptors3 = (
-    CreateBasicPropertyDescriptor("TestExecutable", "Test executable", !1, 1, "A", 50),
-    CreateBasicPropertyDescriptor("CmdLineArg", "Command line arguments", !1, !1, "A", 50),
-    CreateBasicPropertyDescriptor("Run64", "Run 64-bit tests in addition to 32-bit tests", !1, 1, "B", 1),
-    CreateBasicPropertyDescriptor("DebugLevel", "Debug level (WINETEST_DEBUG)", !1, 1, "N", 2),
-    CreateBasicPropertyDescriptor("ReportSuccessfulTests", "Report successful tests (WINETEST_REPORT_SUCCESS)", !1, 1, "B", 1),
-  );
-  $self->{PropertyDescriptors3} = \@PropertyDescriptors3;
+  # Load the Page 2 parameters
+  $self->_GetParams("ShowAll", "UserVMSelection");
+  my $VMs = CreateVMs();
+  $VMs->AddFilter("Type", ["win32", "win64", "wine"]);
+  $VMs->FilterEnabledRole();
 
-  if ($self->{Page} == 2)
+  my $SortedKeys = $VMs->SortKeysBySortOrder($VMs->GetKeys());
+  foreach my $VMKey (@$SortedKeys)
   {
-    $self->{ShowAll} = defined($self->GetParam("ShowAll"));
+    my $VM = $VMs->GetItem($VMKey);
+    my $VMRow = {
+      VM => $VM,
+      Field  => "vm_". $self->CGI->escapeHTML($VMKey),
+      Extra => $VM->Role ne "base",
+    };
+    $VMRow->{Checked} = $self->GetParam($VMRow->{Field});
+    push @{$self->{VMRows}}, $VMRow;
+  }
+
+  # Load the Page 3 parameters
+  $self->_GetParams("TestExecutable", "CmdLineArg", "NoCmdLineArgWarn",
+                    "Run64", "DebugLevel", "ReportSuccessfulTests");
+  $self->{DebugLevel} = 1 if (!defined $self->{DebugLevel});
+
+  # Load the Page 4 parameters
+  $self->{JobKey} = $self->GetParam("JobKey");
+  if (defined $self->{JobKey} and $self->{JobKey} !~ /^[0-9]+$/)
+  {
+    # JobKey is a hidden parameter so drop it instead of issuing an error
+    delete $self->{JobKey};
   }
 
   $self->SUPER::_initialize($Request, $RequiredRole, undef);
 }
+
+sub _GenerateStateField($$)
+{
+  my ($self, $Name) = @_;
+
+  if (defined $self->{$Name})
+  {
+    print "<input type='hidden' name='$Name' value='",
+          $self->CGI->escapeHTML($self->{$Name}), "'>\n";
+  }
+}
+
+sub _GenerateStateFields($)
+{
+  my ($self) = @_;
+
+  $self->_GenerateStateField("Page");
+
+  if ($self->{Page} != 1)
+  {
+    $self->_GenerateStateField("Branch");
+    $self->_GenerateStateField("FileName");
+    $self->_GenerateStateField("Remarks");
+  }
+  if ($self->{Page} != 2)
+  {
+    $self->_GenerateStateField("ShowAll");
+    $self->_GenerateStateField("UserVMSelection");
+    foreach my $VMRow (@{$self->{VMRows}})
+    {
+      next if ($VMRow->{Incompatible});
+      if ($VMRow->{Checked})
+      {
+        print "<input type='hidden' name='$VMRow->{Field}' value='on'>\n";
+      }
+    }
+  }
+  if ($self->{Page} != 3)
+  {
+    # Don't save NoCmdLineArgWarn: let it be reset if the user goes back
+    # so he gets warned again.
+    $self->_GenerateStateField("TestExecutable");
+    $self->_GenerateStateField("CmdLineArg");
+    $self->_GenerateStateField("Run64");
+    $self->_GenerateStateField("DebugLevel");
+    $self->_GenerateStateField("ReportSuccessfulTests");
+  }
+}
+
+
+#
+# Page generation
+#
 
 sub GetTitle($)
 {
@@ -84,7 +467,14 @@ sub GetHeaderText($)
 {
   my ($self) = @_;
 
-  if ($self->{Page} == 1)
+  if ($self->{Page} == 0)
+  {
+    return "Your job was successfully queued, but the job engine that takes " .
+           "care of actually running it seems to be unavailable (perhaps it " .
+           "crashed). Your job will remain queued until the engine is " .
+           "restarted.";
+  }
+  elsif ($self->{Page} == 1)
   {
     return "Specify the patch file that you want to upload and submit " .
            "for testing.<br>\n" .
@@ -102,13 +492,6 @@ sub GetHeaderText($)
     }
     return $HeaderText;
   }
-  elsif ($self->{Page} == 4)
-  {
-    return "Your job was successfully queued, but the job engine that takes " .
-           "care of actually running it seems to be unavailable (perhaps it " .
-           "crashed). Your job will remain queued until the engine is " .
-           "restarted.";
-  }
 
   return "";
 }
@@ -117,17 +500,27 @@ sub GetPropertyDescriptors($)
 {
   my ($self) = @_;
 
+  # Note that this may be called for different pages. For instance first to
+  # validate the properties of the page 1, then again to generate the form
+  # fields of page 2. See _SetPage().
   if ($self->{Page} == 1)
   {
-    return $self->{PropertyDescriptors1};
+    $self->{PropertyDescriptors} ||= [
+      CreateBasicPropertyDescriptor("Remarks", "Remarks", !1, !1, "A", 128),
+    ];
   }
   elsif ($self->{Page} == 3)
   {
-    my $IsPatch = ($self->GetParam("FileType") eq "patch");
-    $self->{PropertyDescriptors3}[0]->{IsRequired} = $IsPatch;
-    return $self->{PropertyDescriptors3};
+    $self->_GetFileType();
+    my $IsPatch = ($self->{FileType} eq "patch");
+    $self->{PropertyDescriptors} ||= [
+      CreateBasicPropertyDescriptor("TestExecutable", "Test executable", !1, $IsPatch, "A", 50),
+      CreateBasicPropertyDescriptor("CmdLineArg", "Command line arguments", !1, !1, "A", 50),
+      CreateBasicPropertyDescriptor("Run64", "Run 64-bit tests in addition to 32-bit tests", !1, 1, "B", 1),
+      CreateBasicPropertyDescriptor("DebugLevel", "Debug level (WINETEST_DEBUG)", !1, 1, "N", 2),
+      CreateBasicPropertyDescriptor("ReportSuccessfulTests", "Report successful tests (WINETEST_REPORT_SUCCESS)", !1, 1, "B", 1),
+    ];
   }
-
   return $self->SUPER::GetPropertyDescriptors();
 }
 
@@ -135,24 +528,30 @@ sub GenerateFields($)
 {
   my ($self) = @_;
 
-  print "<div><input type='hidden' name='Page' value='$self->{Page}'></div>\n";
-  if ($self->{Page} == 1)
+  # Save the settings that will not be edited by this page
+  $self->_GenerateStateFields();
+
+  if ($self->{Page} == 0)
+  {
+    $self->_GenerateStateField("JobKey");
+  }
+
+  elsif ($self->{Page} == 1)
   {
     print "<div class='ItemProperty'><label>File</label>",
           "<div class='ItemValue'>",
-          "<input type='file' name='File' size='64' maxlength='64' />",
+          "<input type='file' name='FileName' size='64' maxlength='64' />",
           "&nbsp;<span class='Required'>*</span></div></div>\n";
+
     my $Branches = CreateBranches();
-    my $SelectedBranchKey = $self->GetParam("Branch");
-    if (! defined($SelectedBranchKey))
+    if (!defined $self->{Branch})
     {
-      $SelectedBranchKey = $Branches->GetDefaultBranch()->GetKey();
+      my $DefaultBranch = $Branches->GetDefaultBranch();
+      $self->{Branch} = $DefaultBranch->GetKey() if ($DefaultBranch);
     }
-    if (! $Branches->MultipleBranchesPresent())
+    if (!$Branches->MultipleBranchesPresent())
     {
-      print "<div><input type='hidden' name='Branch' value='",
-            $self->CGI->escapeHTML($SelectedBranchKey),
-            "'></div>\n";
+      $self->_GenerateStateField("Branch");
     }
     else
     {
@@ -164,173 +563,65 @@ sub GenerateFields($)
       {
         my $Branch = $Branches->GetItem($Key);
         print "<option value='", $self->CGI->escapeHTML($Key), "'";
-        if ($Key eq $SelectedBranchKey)
+        if (defined $self->{Branch} and $Key eq $self->{Branch})
         {
           print " selected";
         }
         print ">", $self->CGI->escapeHTML($Branch->Name), "</option>";
       }
-      print "</select>",
-            "&nbsp;<span class='Required'>*</span></div></div>\n";
+      print "</select>&nbsp;<span class='Required'>*</span></div></div>\n";
     }
-
+    # The other fields are taken care of by FreeFormPage.
     $self->{HasRequired} = 1;
   }
-  else
+
+  elsif ($self->{Page} == 2)
   {
-    if (! defined($self->{FileName}))
-    {
-      $self->{FileName} = $self->GetParam("FileName");
-    }
-    if (! defined($self->{FileType}))
-    {
-      $self->{FileType} = $self->GetParam("FileType");
-    }
-    if (! defined($self->{TestExecutable}))
-    {
-      $self->{TestExecutable} = $self->GetParam("TestExecutable");
-    }
-    if (! defined($self->{CmdLineArg}))
-    {
-      $self->{CmdLineArg} = $self->GetParam("CmdLineArg");
-    }
-    print "<div><input type='hidden' name='Remarks' value='",
-          $self->CGI->escapeHTML($self->GetParam("Remarks")), "'></div>\n";
-    print "<div><input type='hidden' name='FileName' value='",
-          $self->CGI->escapeHTML($self->{FileName}), "'></div>\n";
-    print "<div><input type='hidden' name='FileType' value='",
-          $self->CGI->escapeHTML($self->{FileType}), "'></div>\n";
-    print "<div><input type='hidden' name='Branch' value='",
-          $self->CGI->escapeHTML($self->GetParam("Branch")), "'></div>\n";
-    if ($self->{Page} != 3)
-    {
-      if (defined($self->{TestExecutable}))
-      {
-        print "<div><input type='hidden' name='TestExecutable' value='",
-              $self->CGI->escapeHTML($self->{TestExecutable}), "'></div>\n";
-      }
-      if (defined($self->{CmdLineArg}))
-      {
-        print "<div><input type='hidden' name='CmdLineArg' value='",
-              $self->CGI->escapeHTML($self->{CmdLineArg}), "'></div>\n";
-      }
-    }
-    if ($self->{Page} == 2)
-    {
-      if ($self->{LastPage} == 3)
-      {
-        my $VMs = CreateVMs();
-        # VMs that are only visible with ShowAll
-        $VMs->AddFilter("Role", ["winetest", "extra"]);
-        foreach my $VMKey (@{$VMs->GetKeys()})
-        {
-          my $FieldName = "vm_" . $self->CGI->escapeHTML($VMKey);
-          if (defined $self->GetParam($FieldName))
-          {
-            $self->{ShowAll} = 1;
-            last;
-          }
-        }
-      }
-      if ($self->{ShowAll})
-      {
-        print "<div><input type='hidden' name='ShowAll' value='1'></div>\n";
-      }
-      print "<div class='CollectionBlock'><table>\n";
-      print "<thead><tr><th class='Record'></th>\n";
-      print "<th class='Record'>VM Name</th>\n";
-      print "<th class='Record'>Description</th>\n";
-      print "</thead><tbody>\n";
+    $self->_GenerateStateField("ShowAll");
+    print "<div class='CollectionBlock'><table>\n";
+    print "<thead><tr><th class='Record'></th>\n";
+    print "<th class='Record'>VM Name</th>\n";
+    print "<th class='Record'>Description</th>\n";
+    print "</thead><tbody>\n";
 
-      my $VMs = CreateVMs();
-      if ($self->{FileType} eq "exe64")
-      {
-          $VMs->AddFilter("Type", ["win64", "wine"]);
-      }
-      else
-      {
-          $VMs->AddFilter("Type", ["win32", "win64", "wine"]);
-      }
-      if ($self->{ShowAll})
-      {
-        # All but the retired and deleted ones
-        $VMs->AddFilter("Role", ["base", "winetest", "extra"]);
-      }
-      else
-      {
-        $VMs->AddFilter("Role", ["base"]);
-      }
-      my $Even = 1;
-      my $SortedKeys = $VMs->SortKeysBySortOrder($VMs->GetKeys());
-      foreach my $VMKey (@$SortedKeys)
-      {
-        my $VM = $VMs->GetItem($VMKey);
-        my $FieldName = "vm_" . $self->CGI->escapeHTML($VMKey);
-        print "<tr class='", ($Even ? "even" : "odd"),
-            "'><td><input name='$FieldName' type='checkbox'";
-        $Even = !$Even;
-        my ($Checked, $Status) = (1, "");
-        if ($VM->Status =~ /^(offline|maintenance)$/)
-        {
-          $Status = " [". $VM->Status ."]";
-          $Checked = undef;
-        }
-        if ($Checked and
-            ($self->{LastPage} == 1 || $self->GetParam($FieldName)))
-        {
-          print " checked='checked'";
-        }
-        print "/></td>\n";
-
-        print "<td>", $self->CGI->escapeHTML($VM->Name), "</td>\n";
-        print "<td><details><summary>",
-              $self->CGI->escapeHTML($VM->Description || $VM->Name),
-              "$Status</summary>",
-              $self->CGI->escapeHTML($VM->Details || "No details!"),
-              "</details></td>";
-        print "</tr>\n";
-      }
-      print "</tbody></table>\n";
-      print "</div><!--CollectionBlock-->\n";
-    }
-    else
+    my $Even = 1;
+    foreach my $VMRow (@{$self->{VMRows}})
     {
-      if (defined($self->{NoCmdLineArgWarn}))
+      next if ($VMRow->{Incompatible});
+      # Extra VMs may be hidden
+      next if ($VMRow->{Extra} and !$VMRow->{Checked} and !$self->{ShowAll});
+
+      # By default select the base VMs that are ready to run tasks
+      my $VM = $VMRow->{VM};
+      if (!$self->{UserVMSelection} and !$VMRow->{Extra} and
+          $VM->Status !~ /^(?:offline|maintenance)$/)
       {
-        print "<div><input type='hidden' name='NoCmdLineArgWarn' value='on'>",
-              "</div>\n";
+        $VMRow->{Checked} = 1;
       }
-      my $VMs = CreateVMs();
-      foreach my $VMKey (@{$VMs->GetKeys()})
-      {
-        my $FieldName = "vm_" . $self->CGI->escapeHTML($VMKey);
-        if ($self->GetParam($FieldName))
-        {
-          print "<div><input type='hidden' name='$FieldName' value='on'>",
-                "</div>\n";
-        }
-      }
+
+      print "<tr class='", ($Even ? "even" : "odd"),
+            "'><td><input name='$VMRow->{Field}' type='checkbox'";
+      $Even = !$Even;
+      print " checked='checked'" if ($VMRow->{Checked});
+      print "/></td>\n";
+
+      print "<td>", $self->CGI->escapeHTML($VM->Name), "</td>\n";
+      print "<td><details><summary>",
+            $self->CGI->escapeHTML($VM->Description || $VM->Name);
+      print " [", $VM->Status ,"]" if ($VM->Status =~ /^(?:offline|maintenance)$/);
+      print "</summary>",
+            $self->CGI->escapeHTML($VM->Details || "No details!"),
+            "</details></td>";
+      print "</tr>\n";
     }
-  }
-  if ($self->{Page} == 4)
-  {
-    if ($self->GetParam("JobKey"))
-    {
-      $self->{JobKey} = $self->GetParam("JobKey");
-    }
-    print "<div><input type='hidden' name='JobKey' value='", $self->{JobKey},
-          "'></div>\n";
-  }
+    print "</tbody></table>\n";
 
-  $self->SUPER::GenerateFields();
-}
+    # From now on it's the user's VM selection, i.e. don't pick defaults
+    $self->{UserVMSelection} = 1;
+    $self->_GenerateStateField("UserVMSelection");
+    print "</div><!--CollectionBlock-->\n";
 
-sub GenerateActions($)
-{
-  my ($self) = @_;
-
-  if ($self->{Page} == 2)
-  {
+    # Add a "Toggle All" pseudo action
     print <<EOF;
 <script type='text/javascript'>
 <!--
@@ -338,7 +629,7 @@ function ToggleAll()
 {
   for (var i = 0; i < document.forms[0].elements.length; i++)
   {
-    if(document.forms[0].elements[i].type == 'checkbox')
+    if (document.forms[0].elements[i].type == 'checkbox')
       document.forms[0].elements[i].checked = !(document.forms[0].elements[i].checked);
   }
 }
@@ -349,13 +640,25 @@ document.write("<div class='ItemActions'><a href='javascript:void(0)' onClick='T
 </script>
 EOF
 
+    # Add a Show base/all VMs button separate from the other actions
     print "<div class='ItemActions'>\n";
     print "<input type='submit' name='Action' value='",
           $self->{ShowAll} ? "Show base VMs" : "Show all VMs", "'/>\n";
     print "</div>\n";
   }
 
-  $self->SUPER::GenerateActions();
+  elsif ($self->{Page} == 3)
+  {
+    $self->_GenerateStateField("NoCmdLineArgWarn");
+
+    # Preserve these fields if they are not shown
+    $self->_GenerateStateField("Run64") if (!$self->{ShowRun64} or $self->{FileType} ne "patch");
+    $self->_GenerateStateField("TestExecutable") if ($self->{FileType} ne "patch");
+
+    # The other fields are taken care of by FreeFormPage.
+  }
+
+  $self->SUPER::GenerateFields();
 }
 
 sub GetActions($)
@@ -363,7 +666,11 @@ sub GetActions($)
   my ($self) = @_;
 
   my $Actions = $self->SUPER::GetActions();
-  if ($self->{Page} == 1)
+  if ($self->{Page} == 0)
+  {
+    push @$Actions, "OK";
+  }
+  elsif ($self->{Page} == 1)
   {
     push @$Actions, "Next >";
   }
@@ -374,10 +681,6 @@ sub GetActions($)
   elsif ($self->{Page} == 3)
   {
     push @$Actions, "< Prev", "Submit";
-  }
-  elsif ($self->{Page} == 4)
-  {
-    push @$Actions, "OK";
   }
 
   return $Actions;
@@ -390,306 +693,75 @@ sub DisplayProperty($$)
   if ($self->{Page} == 3)
   {
     my $PropertyName = $PropertyDescriptor->GetName();
-    if ($self->GetParam("FileType") eq "patch")
+    if ($PropertyName eq "Run64")
     {
-      if ($PropertyName eq "Run64")
-      {
-        my $Show64 = !1;
-        my $VMs = CreateVMs();
-        $VMs->AddFilter("Type", ["win64"]);
-        foreach my $VMKey (@{$VMs->GetKeys()})
-        {
-          my $FieldName = "vm_" . $self->CGI->escapeHTML($VMKey);
-          if ($self->GetParam($FieldName))
-          {
-            $Show64 = 1;
-            last;
-          }
-        }
-        if (! $Show64)
-        {
-          return "";
-        }
-      }
+      return "" if (!$self->{ShowRun64} or $self->{FileType} ne "patch");
     }
-    else
+    elsif ($PropertyName eq "TestExecutable")
     {
-      if ($PropertyName eq "TestExecutable" || $PropertyName eq "Run64")
-      {
-        return "";
-      }
+      return "" if ($self->{FileType} ne "patch");
     }
   }
 
   return $self->SUPER::DisplayProperty($PropertyDescriptor);
 }
 
-sub GetPropertyValue($$)
+sub GetDisplayValue($$)
 {
   my ($self, $PropertyDescriptor) = @_;
 
-  if ($self->{Page} == 3)
-  {
-    my $PropertyName = $PropertyDescriptor->GetName();
-    if ($PropertyName eq "DebugLevel")
-    {
-      return 1;
-    }
-    if ($PropertyName eq "Run64")
-    {
-      return 1;
-    }
-  }
-
-  return $self->SUPER::GetPropertyValue($PropertyDescriptor);
+  return $self->{$PropertyDescriptor->GetName()};
 }
 
-sub GetTmpStagingFullPath($$)
+
+#
+# Page actions
+#
+
+sub _SetPage($$)
 {
-  my ($self, $FileName) = @_;
+  my ($self, $Page) = @_;
 
-  return undef if (!$FileName);
-  return "$DataDir/staging/" . $self->GetCurrentSession()->Id . "-websubmit_$FileName";
-}
-
-sub Validate($)
-{
-  my ($self) = @_;
-
-  if ($self->{Page} == 2)
-  {
-    my $VMSelected = !1;
-    my $VMs = CreateVMs();
-    foreach my $VMKey (@{$VMs->GetKeys()})
-    {
-      my $FieldName = "vm_" . $self->CGI->escapeHTML($VMKey);
-      if ($self->GetParam($FieldName))
-      {
-        $VMSelected = 1;
-        last;
-      }
-    }
-
-    if (! $VMSelected)
-    {
-      $self->{ErrMessage} = "Select at least one VM";
-      return !1;
-    }
-  }
-  elsif ($self->{Page} == 3)
-  {
-    if (($self->GetParam("FileType") eq "patch" &&
-         $self->GetParam("TestExecutable") !~ m/^[\w_.]+_test\.exe$/) ||
-        !IsValidFileName($self->GetParam("TestExecutable")))
-    {
-      $self->{ErrField} = "TestExecutable";
-      $self->{ErrMessage} = "Invalid test executable filename";
-      return !1;
-    }
-
-    if ($self->GetParam("NoCmdLineArgWarn"))
-    {
-      $self->{NoCmdLineArgWarn} = 1;
-    }
-    elsif (! $self->GetParam("CmdLineArg"))
-    {
-      $self->{ErrMessage} = "You didn't specify a command line argument. " .
-                            "This is most likely not correct, so please " .
-                            "fix this. If you're sure that you really don't " .
-                            'want a command line argument, press "Submit" ' .
-                            "again.";
-      $self->{ErrField} = "CmdLineArg";
-      $self->{NoCmdLineArgWarn} = 1;
-      return !1;
-    }
-  }
-
-  return $self->SUPER::Validate();
-}
-
-sub ValidateAndGetFileName($$)
-{
-  my ($self, $FieldName) = @_;
-
-  my $FileName = $self->GetParam($FieldName);
-  if (!$FileName)
-  {
-    $self->{ErrField} = $FieldName;
-    $self->{ErrMessage} = "You must provide a file to test";
-    return undef;
-  }
-  if (!IsValidFileName($FileName))
-  {
-    $self->{ErrField} = $FieldName;
-    $self->{ErrMessage} = "The filename contains invalid characters";
-    return undef;
-  }
-  my $PropertyDescriptor = CreateSteps()->GetPropertyDescriptorByName("FileName");
-  if ($PropertyDescriptor->GetMaxLength() - 32 - 1 < length($FileName))
-  {
-    $self->{ErrField} = $FieldName;
-    $self->{ErrMessage} = "The filename is too long";
-    return undef;
-  }
-  return $FileName;
-}
-
-sub DetermineFileType($$)
-{
-  my ($self, $FileName) = @_;
-
-  if (! sysopen(FH, $FileName, O_RDONLY))
-  {
-    return ("Unable to open $FileName", "unknown", undef, undef);
-  }
-
-  my $FileType = "unknown";
-  my $Buffer;
-  if (sysread(FH, $Buffer, 0x40))
-  {
-    # Unpack IMAGE_DOS_HEADER
-    my @Fields = unpack "S30I", $Buffer;
-    if ($Fields[0] == 0x5a4d)
-    {
-      seek FH, $Fields[30], SEEK_SET;
-      if (sysread(FH, $Buffer, 0x18))
-      {
-        @Fields = unpack "IS2I3S2", $Buffer;
-        if ($Fields[0] == 0x00004550)
-        {
-          if (($Fields[7] & 0x2000) == 0)
-          {
-            $FileType = "exe";
-          }
-          else
-          {
-            $FileType = "dll";
-          }
-          if ($Fields[1] == 0x014c)
-          {
-            $FileType .= "32";
-          }
-          elsif ($Fields[1] == 0x8664)
-          {
-            $FileType .= "64";
-          }
-          else
-          {
-            $FileType = "unknown";
-          }
-        }
-      }
-    }
-    # zip files start with PK, 0x03, 0x04
-    elsif ($Fields[0] == 0x4b50 && $Fields[1] == 0x0403)
-    {
-      $FileType = "zip";
-    }
-  }
-
-  close FH;
-
-  my ($ErrMessage, $ExeBase, $TestUnit);
-  if ($FileType eq "unknown")
-  {
-    my $Impacts = GetPatchImpacts($FileName);
-    if ($Impacts->{TestUnitCount} == 0)
-    {
-      $ErrMessage = "Patch doesn't affect tests";
-    }
-    elsif ($Impacts->{TestUnitCount} > 1)
-    {
-      $ErrMessage = "Patch contains changes to multiple tests";
-    }
-    else
-    {
-      foreach my $TestInfo (values %{$Impacts->{Tests}})
-      {
-        if ($TestInfo->{UnitCount})
-        {
-          $FileType = "patch";
-          $ExeBase = $TestInfo->{ExeBase};
-          $TestUnit = (keys %{$TestInfo->{PatchedUnits}})[0];
-          last;
-        }
-      }
-    }
-  }
-  elsif ($FileType eq "dll32" || $FileType eq "dll64" || $FileType eq "zip")
-  {
-    # We know what these are but not what to do with them. So reject them early.
-    $FileType = "unknown";
-  }
-
-  return ($ErrMessage, $FileType, $ExeBase, $TestUnit);
+  $self->{Page} = $Page;
+  # Changing the page also changes the fields of the HTML form
+  delete $self->{PropertyDescriptors};
 }
 
 sub OnPage1Next($)
 {
   my ($self) = @_;
 
-  my $BaseName = $self->ValidateAndGetFileName("File");
-  return !1 if (!$BaseName);
-
-  my $Fh = $self->CGI->upload("File");
-  if (defined($Fh))
+  if (!$self->_ValidateFileName() or !$self->_Upload() or !$self->Validate() or
+      !$self->_ValidateVMSelection("deselect"))
   {
-    my $StagingFile = $self->GetTmpStagingFullPath($BaseName);
-    my $OldUMask = umask(002);
-    if (! open (OUTFILE,">$StagingFile"))
-    {
-      umask($OldUMask);
-      $self->{ErrField} = "File";
-      $self->{ErrMessage} = "Unable to process uploaded file";
-      return !1;
-    }
-    umask($OldUMask);
-    my $Buffer;
-    while (sysread($Fh, $Buffer, 4096))
-    {
-      print OUTFILE $Buffer;
-    }
-    close OUTFILE;
-
-    my ($ErrMessage, $FileType, $ExeBase, $TestUnit) = $self->DetermineFileType($StagingFile);
-    if (defined($ErrMessage))
-    {
-      $self->{ErrField} = "File";
-      $self->{ErrMessage} = $ErrMessage;
-      return !1;
-    }
-    if ($FileType !~ /^(?:exe32|exe64|patch)$/)
-    {
-      $self->{ErrField} = "File";
-      $self->{ErrMessage} = "Unrecognized file type";
-      return !1;
-    }
-
-    $self->{FileName} = $BaseName;
-    $self->{FileType} = $FileType;
-    if (defined $ExeBase)
-    {
-      $self->{TestExecutable} = "$ExeBase.exe";
-    }
-    if (defined($TestUnit))
-    {
-      $self->{CmdLineArg} = $TestUnit;
-    }
-  }
-  else
-  {
-    $self->{ErrField} = "File";
-    $self->{ErrMessage} = "File upload failed";
-    return !1;
+    return undef;
   }
 
-  if (! $self->Validate)
+  # Set defaults
+  if ((!defined $self->{TestExecutable} or !defined $self->{CmdLineArg}) and
+      $self->{Impacts})
   {
-    return !1;
+    foreach my $TestInfo (values %{$self->{Impacts}->{Tests}})
+    {
+      next if (!$TestInfo->{UnitCount});
+      if (!defined $self->{TestExecutable})
+      {
+        $self->{TestExecutable} = "$TestInfo->{ExeBase}.exe";
+      }
+      if (!defined $self->{CmdLineArg})
+      {
+        $self->{CmdLineArg} = (keys %{$TestInfo->{PatchedUnits}})[0];
+      }
+      last;
+    }
+  }
+  if (!defined $self->{Run64})
+  {
+    # Whether we show it or not the default is true
+    $self->{Run64} = 1;
   }
 
-  $self->{Page} = 2;
-
+  $self->_SetPage(2);
   return 1;
 }
 
@@ -697,13 +769,9 @@ sub OnPage2Next($)
 {
   my ($self) = @_;
 
-  if (! $self->Validate)
-  {
-    return !1;
-  }
+  return undef if (!$self->Validate);
 
-  $self->{Page} = 3;
-
+  $self->_SetPage(3);
   return 1;
 }
 
@@ -711,15 +779,20 @@ sub OnPage2Prev($)
 {
   my ($self) = @_;
 
-  my $FileName = $self->GetParam("FileName");
-  if ($FileName)
+  if (!$self->_ValidateFileName())
   {
-    my $StagingFileName = $self->GetTmpStagingFullPath(basename($FileName));
-    unlink($StagingFileName) if ($StagingFileName);
+    # Ignore the error. What counts is not using a suspicious FileName.
+    delete $self->{ErrField};
+    delete $self->{ErrMessage};
+  }
+  elsif (defined $self->{FileName})
+  {
+    my $StagingFilePath = $self->_GetStagingFilePath();
+    unlink($StagingFilePath) if ($StagingFilePath);
+    delete $self->{FileName};
   }
 
-  $self->{Page} = 1;
-
+  $self->_SetPage(1);
   return 1;
 }
 
@@ -727,15 +800,21 @@ sub OnPage3Prev($)
 {
   my ($self) = @_;
 
-  $self->{Page} = 2;
+  # Set to 0 instead of undef to record the user preference
+  $self->{Run64} ||= 0;
+  $self->{ReportSuccessfulTests} ||= 0;
 
-  return 1;
+  $self->_SetPage(2);
+
+  # Don't try to generate page 2 from bad data (typically because of an invalid
+  # FileName). Instead go back to page 1.
+  return $self->Validate() ? 1 : $self->OnPage2Prev();
 }
 
 
-sub SubmitJob($$$)
+sub _SubmitJob($$)
 {
-  my ($self, $BaseName, $Staging) = @_;
+  my ($self, $Staging) = @_;
 
   # See also Patches::Submit() in lib/WineTestBot/Patches.pm
 
@@ -744,32 +823,18 @@ sub SubmitJob($$$)
   my $NewJob = $Jobs->Add();
   $NewJob->User($self->GetCurrentSession()->User);
   $NewJob->Priority(5);
-  if ($self->GetParam("Remarks"))
-  {
-    $NewJob->Remarks($self->GetParam("Remarks"));
-  }
-  else
-  {
-    $NewJob->Remarks($self->GetParam("CmdLineArg"));
-  }
-  my $Branch = CreateBranches()->GetItem($self->GetParam("Branch"));
-  if (defined($Branch))
-  {
-    $NewJob->Branch($Branch);
-  }
+  $NewJob->Remarks($self->{Remarks} || $self->{CmdLineArg} || "");
+  my $Branch = CreateBranches()->GetItem($self->{Branch});
+  $NewJob->Branch($Branch) if (defined $Branch);
   my $Steps = $NewJob->Steps;
 
-  # Add steps and tasks for the 32 and 64-bit tests
-  my $FileType = $self->GetParam("FileType");
-  my $Impacts;
-  $Impacts = GetPatchImpacts($Staging) if ($FileType eq "patch");
-
+  # Add steps and tasks for the 32 and 64 bit tests
   my $BuildStep;
   foreach my $Bits ("32", "64")
   {
-    next if ($Bits eq "32" && $FileType eq "exe64");
-    next if ($Bits eq "64" && $FileType eq "exe32");
-    next if ($Bits eq "64" && $FileType eq "patch" && !defined($self->GetParam("Run64")));
+    next if ($Bits eq "32" && $self->{FileType} eq "exe64");
+    next if ($Bits eq "64" && $self->{FileType} eq "exe32");
+    next if ($Bits eq "64" && $self->{FileType} eq "patch" && !defined $self->{Run64});
 
     my $Tasks;
     my $VMs = CreateVMs();
@@ -783,12 +848,12 @@ sub SubmitJob($$$)
 
       if (!$Tasks)
       {
-        if (!$BuildStep and $FileType eq "patch")
+        if (!$BuildStep and $self->{FileType} eq "patch")
         {
           # This is a patch so add a build step...
           $BuildStep = $Steps->Add();
-          $BuildStep->FileName($BaseName);
-          $BuildStep->FileType($FileType);
+          $BuildStep->FileName($self->{FileName});
+          $BuildStep->FileType($self->{FileType});
           $BuildStep->Type("build");
           $BuildStep->DebugLevel(0);
 
@@ -801,11 +866,11 @@ sub SubmitJob($$$)
           $Task->VM($BuildVM);
 
           my $MissionStatement = "exe32";
-          $MissionStatement .= ":exe64" if (defined $self->GetParam("Run64"));
+          $MissionStatement .= ":exe64" if (defined $self->{Run64});
           my ($ErrMessage, $Missions) = ParseMissionStatement($MissionStatement);
           if (!defined $ErrMessage)
           {
-            $Task->Timeout(GetBuildTimeout($Impacts, $Missions->[0]));
+            $Task->Timeout(GetBuildTimeout($self->{Impacts}, $Missions->[0]));
             $Task->Missions($MissionStatement);
 
             # Save the build step so the others can reference it
@@ -814,27 +879,27 @@ sub SubmitJob($$$)
           if (defined $ErrMessage)
           {
             $self->{ErrMessage} = $ErrMessage;
-            return !1;
+            return undef;
           }
         }
 
         # Then create the test step
         my $TestStep = $Steps->Add();
-        if ($FileType eq "patch")
+        if ($self->{FileType} eq "patch")
         {
           $TestStep->PreviousNo($BuildStep->No);
-          my $TestExe = basename($self->GetParam("TestExecutable"));
+          my $TestExe = basename($self->{TestExecutable});
           $TestExe =~ s/_test\.exe$/_test64.exe/ if ($Bits eq "64");
           $TestStep->FileName($TestExe);
         }
         else
         {
-          $TestStep->FileName($BaseName);
+          $TestStep->FileName($self->{FileName});
         }
         $TestStep->FileType("exe$Bits");
         $TestStep->Type("single");
-        $TestStep->DebugLevel($self->GetParam("DebugLevel"));
-        $TestStep->ReportSuccessfulTests(defined($self->GetParam("ReportSuccessfulTests")));
+        $TestStep->DebugLevel($self->{DebugLevel});
+        $TestStep->ReportSuccessfulTests(defined $self->{ReportSuccessfulTests});
         $Tasks = $TestStep->Tasks;
       }
 
@@ -843,7 +908,7 @@ sub SubmitJob($$$)
       $Task->VM($VM);
       $Task->Timeout($SingleTimeout);
       $Task->Missions("exe$Bits");
-      $Task->CmdLineArg($self->GetParam("CmdLineArg"));
+      $Task->CmdLineArg($self->{CmdLineArg});
     }
   }
 
@@ -861,16 +926,16 @@ sub SubmitJob($$$)
     {
       # First create the Wine test step
       my $WineStep = $Steps->Add();
-      $WineStep->FileName($BaseName);
-      $WineStep->FileType($FileType);
+      $WineStep->FileName($self->{FileName});
+      $WineStep->FileType($self->{FileType});
       $WineStep->Type("single");
-      $WineStep->DebugLevel($self->GetParam("DebugLevel"));
-      $WineStep->ReportSuccessfulTests(defined($self->GetParam("ReportSuccessfulTests")));
+      $WineStep->DebugLevel($self->{DebugLevel});
+      $WineStep->ReportSuccessfulTests(defined $self->GetParam("ReportSuccessfulTests"));
       $Tasks = $WineStep->Tasks;
 
-      $MissionStatement = ($FileType =~ /^(?:exe32|patch)$/) ? "win32" : "";
-      if ($FileType eq "exe64" or
-          ($FileType eq "patch" and defined $self->GetParam("Run64")))
+      $MissionStatement = ($self->{FileType} =~ /^(?:exe32|patch)$/) ? "win32" : "";
+      if ($self->{FileType} eq "exe64" or
+          ($self->{FileType} eq "patch" and defined $self->{Run64}))
       {
         $MissionStatement .= ":wow64";
       }
@@ -880,13 +945,13 @@ sub SubmitJob($$$)
       if (defined $ErrMessage)
       {
         $self->{ErrMessage} = $ErrMessage;
-        return !1;
+        return undef;
       }
       $Missions = $Missions->[0];
-      $Timeout = $FileType ne "patch" ?
+      $Timeout = $self->{FileType} ne "patch" ?
                  $SingleTimeout :
-                 GetBuildTimeout($Impacts, $Missions) +
-                 GetTestTimeout($Impacts, $Missions);
+                 GetBuildTimeout($self->{Impacts}, $Missions) +
+                 GetTestTimeout($self->{Impacts}, $Missions);
     }
 
     # Then add a task for this VM
@@ -894,31 +959,31 @@ sub SubmitJob($$$)
     $Task->VM($VM);
     $Task->Timeout($Timeout);
     $Task->Missions($MissionStatement);
-    $Task->CmdLineArg($self->GetParam("CmdLineArg")) if ($FileType ne "patch");
+    $Task->CmdLineArg($self->{CmdLineArg}) if ($self->{FileType} ne "patch");
   }
 
   # Now save it all (or whatever's left to save)
   my ($ErrKey, $ErrProperty, $ErrMessage) = $Jobs->Save();
-  if (defined($ErrMessage))
+  if (defined $ErrMessage)
   {
     $self->{ErrMessage} = $ErrMessage;
-    return !1;
+    return undef;
   }
 
   # Stage the test patch/executable so the job can pick it up
-  if (!rename($Staging, "$DataDir/staging/job". $NewJob->Id ."_$BaseName"))
+  if (!rename($Staging, "$DataDir/staging/job". $NewJob->Id ."_$self->{FileName}"))
   {
-    $self->{ErrMessage} = "Could not stage '$BaseName': $!\n";
-    return !1;
+    $self->{ErrMessage} = "Could not stage '$self->{FileName}': $!\n";
+    return undef;
   }
 
   # Switch Status to staging to indicate we are done setting up the job
   $NewJob->Status("staging");
   ($ErrKey, $ErrProperty, $ErrMessage) = $Jobs->Save();
-  if (defined($ErrMessage))
+  if (defined $ErrMessage)
   {
     $self->{ErrMessage} = $ErrMessage;
-    return !1;
+    return undef;
   }
 
   # Notify engine
@@ -926,9 +991,9 @@ sub SubmitJob($$$)
   if (defined $ErrMessage)
   {
     $self->{ErrMessage} = $ErrMessage;
-    $self->{Page} = 4;
+    $self->_SetPage(0);
     $self->{JobKey} = $NewJob->GetKey();
-    return !1;
+    return undef;
   }
 
   $self->Redirect("/JobDetails.pl?Key=". $NewJob->GetKey()); # does not return
@@ -939,62 +1004,59 @@ sub OnSubmit($)
 {
   my ($self) = @_;
 
-  return !1 if (!$self->Validate());
-  my $BaseName = $self->ValidateAndGetFileName("FileName");
-  return !1 if (!$BaseName);
+  return undef if (!$self->Validate());
 
   # Rename the staging file to avoid race conditions if the user clicks on
   # Submit multiple times
-  my $OldStaging = $self->GetTmpStagingFullPath($BaseName);
-  my $Staging = CreateNewLink($OldStaging, "$DataDir/staging", $BaseName);
+  my $OldStaging = $self->_GetStagingFilePath();
+  my $Staging = CreateNewLink($OldStaging, "$DataDir/staging", $self->{FileName});
   if (!defined $Staging)
   {
-    $self->{ErrMessage} = "Could not rename '$BaseName': $!";
-    return !1;
+    $self->{ErrMessage} = "Could not rename '$self->{FileName}': $!";
+    return undef;
   }
   if (!unlink $OldStaging)
   {
     unlink $Staging;
     $self->{ErrMessage} = $!{ENOENT} ?
-        "$BaseName has already been submitted or has expired" :
-        "Could not remove the staging '$BaseName' file: $!";
-    return !1;
+        "$self->{FileName} has already been submitted or has expired" :
+        "Could not remove the staging '$self->{FileName}' file: $!";
+    return undef;
   }
 
-  if (!$self->SubmitJob($BaseName, $Staging))
+  if (!$self->_SubmitJob($Staging))
   {
     # Restore the file for the next attempt
     rename($Staging, $OldStaging);
-    return !1;
+    return undef;
   }
   return 1;
 }
 
-sub OnShowAllVMs($)
+sub OnSetShowAllVMs($$)
 {
-  my ($self) = @_;
+  my ($self, $Value) = @_;
 
-  $self->{ShowAll} = 1;
+  # Call _ValidateVMSelection() to identify incompatible VMs so they are not
+  # marked as Checked
+  if (!$self->_ValidateVMSelection("deselect"))
+  {
+    # Ignore errors
+    delete $self->{ErrField};
+    delete $self->{ErrMessage};
+  }
+  $self->{ShowAll} = $Value;
 
-  return !1;
-}
-
-sub OnShowBaseVMs($)
-{
-  my ($self) = @_;
-
-  $self->{ShowAll} = !1;
-
-  return !1;
+  return undef;
 }
 
 sub OnOK($)
 {
   my ($self) = @_;
 
-  if (defined($self->GetParam("JobKey")))
+  if (defined $self->{JobKey})
   {
-    $self->Redirect("/JobDetails.pl?Key=" . $self->GetParam("JobKey")); # does not return
+    $self->Redirect("/JobDetails.pl?Key=$self->{JobKey}"); # does not return
   }
   else
   {
@@ -1020,11 +1082,11 @@ sub OnAction($$)
   }
   elsif ($Action eq "Show base VMs")
   {
-    return $self->OnShowBaseVMs();
+    return $self->OnSetShowAllVMs(undef);
   }
   elsif ($Action eq "Show all VMs")
   {
-    return $self->OnShowAllVMs();
+    return $self->OnSetShowAllVMs(1);
   }
   elsif ($Action eq "OK")
   {
