@@ -464,7 +464,8 @@ FatalTAError(undef, $TAError) if (defined $TAError);
 if ($NewStatus eq "completed")
 {
   use File::Copy;
-  foreach my $FileName ("../src/TestLauncher/TestLauncher32.exe",
+  foreach my $FileName ("../src/testagentd/TestAgentd.exe",
+                        "../src/TestLauncher/TestLauncher32.exe",
                         "../src/TestLauncher/TestLauncher64.exe",
                         "latest/winefiles.txt",
                         "latest/wine-parentsrc.txt")

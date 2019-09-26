@@ -365,9 +365,9 @@ sub CheckOff()
   return ChangeStatus("dirty", "off", "done");
 }
 
-sub SetupTestAgentd($$$)
+sub SetupTestAgentd($$$$)
 {
-  my ($VM, $Booting, $ResetStartCount) = @_;
+  my ($VM, $Booting, $UpgradeTestAgentd, $ResetStartCount) = @_;
 
   Debug(Elapsed($Start), " Setting up the $VMKey TestAgent server\n");
   LogMsg "Setting up the $VMKey TestAgent server\n";
@@ -378,6 +378,46 @@ sub SetupTestAgentd($$$)
   {
     my $ErrMessage = $TA->GetLastError();
     FatalError("Could not connect to the $VMKey TestAgent: $ErrMessage\n");
+  }
+
+  # Upgrade TestAgentd
+  if ($UpgradeTestAgentd and ($VM->Type eq "win32" or $VM->Type eq "win64"))
+  {
+    Debug(Elapsed($Start), " Upgrading the $VMKey TestAgent server from $Version\n");
+    LogMsg "Upgrading the $VMKey TestAgent server from $Version\n";
+    if ($Version !~ / ([0-9]+)\.([0-9]+)$/)
+    {
+      FatalError("Unsupported TestAgent server version: $Version\n");
+    }
+    # We want 'TestAgentd --detach --show-restarts' on Windows but this was
+    # not supported before this version and changing how the server is started
+    # is too complex.
+    $Version = sprintf("%02d.%02d", $1, $2);
+    if ($Version lt "01.07")
+    {
+      FatalError("The TestAgent server is too old to be upgraded: $Version\n");
+    }
+
+    if (!$TA->Upgrade("$DataDir/latest/TestAgentd.exe"))
+    {
+      my $ErrMessage = $TA->GetLastError();
+      FatalError("Could not upgrade the $VMKey TestAgent: $ErrMessage\n");
+    }
+    # Give the server enough time to restart, thus (maybe) avoiding a timeout
+    # on the first (re)connection attempt.
+    sleep(1);
+    $Version = $TA->GetVersion();
+    if (!$Version)
+    {
+      my $ErrMessage = $TA->GetLastError();
+      FatalError("Could not connect to the new $VMKey TestAgent: $ErrMessage\n");
+    }
+    LogMsg "Upgraded the $VMKey TestAgent server to $Version\n";
+
+    # Note that the privileged TestAgent server (if any) is usually run with
+    # --set-time-only which means it cannot be upgraded since the restart RPC
+    # is blacklisted. But that also means it's unlikely to need upgrading.
+    # A side effect is that it will force TestAgentd.exe.old to stay around.
   }
 
   if ($ResetStartCount)
@@ -516,7 +556,7 @@ sub Revert()
 
   # Set up the TestAgent server. Note that setting the locale will require a
   # reboot so reset start.count in that case.
-  SetupTestAgentd($VM, $Booting, $SetLocale);
+  SetupTestAgentd($VM, $Booting, ($CreateSnapshot or $SetLocale), $SetLocale);
 
   if ($CreateSnapshot)
   {

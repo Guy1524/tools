@@ -215,6 +215,9 @@ sub BuildNativeTestAgentd()
 
 sub BuildWindowsTestAgentd()
 {
+  my $WindowsTestAgentd = "$::RootDir/src/testagentd/TestAgentd.exe";
+  my $Before = GetMTime($WindowsTestAgentd);
+
   InfoMsg "\nRebuilding the Windows TestAgentd\n";
   my $CPUCount = GetCPUCount();
   system("cd '$::RootDir/src/testagentd' && set -x && ".
@@ -225,6 +228,10 @@ sub BuildWindowsTestAgentd()
     return !1;
   }
 
+  if ($Before != GetMTime($WindowsTestAgentd))
+  {
+    LogMsg "Updated TestAgentd.exe\n";
+  }
   return 1;
 }
 
