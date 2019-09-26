@@ -360,7 +360,18 @@ sub _CheckAndClassifyVMs()
         $FoundVMErrors = 1;
         $VM->ChildDeadline(undef);
         $VM->ChildPid(undef);
-        $VM->Status("dirty");
+        my $Errors = ($VM->Errors || 0) + 1;
+        $VM->Errors($Errors);
+        if ($Errors >= $MaxVMErrors)
+        {
+          $VM->Status("offline");
+          NotifyAdministrator("The TestBot and/or the ". $VM->Name ." VM needs fixing",
+                              "The ". $VM->Name ." VM got $Errors consecutive errors, the last of which is a child process crash which indicates a TestBot bug. But something may also be wrong with the VM for it to have triggered the crash so it has been put offline.\n");
+        }
+        else
+        {
+          $VM->Status("dirty");
+        }
         $VM->Save();
         $VM->RecordResult($Sched->{records}, "boterror process died");
         $Sched->{lambvms}->{$VMKey} = 1;
