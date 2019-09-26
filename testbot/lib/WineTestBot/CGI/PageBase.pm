@@ -395,18 +395,18 @@ sub Redirect($$$)
   $self->SetCookies();
   if (substr($Location, 0, 4) ne "http")
   {
-    my $Protocol = "http";
-    if (SecureConnection())
-    {
-      $Protocol .= "s";
-    }
+    # Use the same protocol as for the current page. To force switching to
+    # https the caller should use MakeSecureURL().
+    my $Protocol = SecureConnection() ? "https://" : "http://";
     if (substr($Location, 0, 1) ne "/")
     {
+      # Despite its name, Request->uri only contains the path portion of the
+      # URI, excluding the protocol, hostname and parameters!
       my $URI = $self->{Request}->uri;
-      $URI =~ s=^(.*)/[^/]*$=$1/=;
-      $Location = $URI . $Location;
+      $URI =~ s=^(.*)/[^/]*$=$1/$Location=;
+      $Location = $URI;
     }
-    $Location = $Protocol . "://" . $ENV{"HTTP_HOST"} . $Location;
+    $Location = $Protocol . $ENV{"HTTP_HOST"} . $Location;
   }
   $self->{Request}->headers_out->set("Location", $Location);
   $self->{Request}->status(Apache2::Const::REDIRECT);
