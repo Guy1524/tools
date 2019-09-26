@@ -562,6 +562,24 @@ sub Revert()
   {
     $DomainSnapshot .= "-live";
     CreateSnapshot($Domain, $DomainSnapshot);
+
+    if ($VM->Type eq "build" or $VM->Type eq "wine")
+    {
+      require WineTestBot::SpecialJobs;
+      $ErrMessage = WineTestBot::SpecialJobs::AddReconfigJob([$VM], $VM->Name, $VM->Type);
+      if (defined $ErrMessage)
+      {
+        Error("Could not create a job to update and rebuild Wine on the $VMKey VM: $ErrMessage\n");
+        NotifyAdministrator("Could not create a job to update $VMKey",
+          "A live snapshot was created for $VMKey but no job could be\n".
+          "created to update and rebuild Wine on it:\n\n".
+          "$ErrMessage\n");
+      }
+      else
+      {
+        Debug(Elapsed($Start), " Added a job to update and rebuild Wine on $VMKey\n");
+      }
+    }
   }
 
   # Set up the VM locale
