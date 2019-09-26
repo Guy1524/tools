@@ -526,10 +526,24 @@ if ($NewStatus eq 'completed')
     FatalError("Could not recreate the $IdleSnapshot snapshot: $ErrMessage\n");
   }
 
-  if ($VM->Type eq "wine" and
-      system("$BinDir/CheckForWinetestUpdate.pl", "--vm", $VM->Name, "--create", "winetest"))
+  if ($VM->Type eq "wine")
   {
-    Error("Could not create a job to run WineTest on the ". $VM->Name ." VM\n");
+    require WineTestBot::SpecialJobs;
+    $ErrMessage = WineTestBot::SpecialJobs::AddWineTestJob([$VM], $VM->Name);
+    if (defined $ErrMessage)
+    {
+      Error("Could not create a WineTest job for ". $VM->Name .": $ErrMessage\n");
+      NotifyAdministrator("Could not create a WineTest job for ". $VM->Name,
+        "Could not create a job to run WineTest on ". $VM->Name
+        ." after its update:\n\n".
+        "$ErrMessage\n\n".
+        "See the link below for more details:\n".
+        MakeSecureURL(GetTaskURL($JobId, $StepNo, $TaskNo)) ."\n");
+    }
+    else
+    {
+      Debug(Elapsed($Start), " Added a WineTest job for ". $VM->Name ."\n");
+    }
   }
 }
 
