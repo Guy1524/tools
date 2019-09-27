@@ -61,6 +61,7 @@ sub GetReconfigVMs($$)
 sub AddReconfigJob($$$)
 {
   my ($VMs, $VMKey, $VMType) = @_;
+  return undef if (!@$VMs);
 
   # First create a new job
   my $Jobs = CreateJobs();
@@ -138,6 +139,7 @@ sub GetWindowsTestVMs($$$)
 sub AddWindowsTestJob($$$$$)
 {
   my ($VMs, $VMKey, $Build, $BaseJob, $LatestBaseName) = @_;
+  return undef if (!@$VMs);
 
   # First create a new job
   my $Jobs = CreateJobs();
@@ -221,6 +223,7 @@ sub GetWineTestVMs($)
 sub AddWineTestJob($$)
 {
   my ($VMs, $VMKey) = @_;
+  return undef if (!@$VMs);
 
   # First create a new job
   my $Jobs = CreateJobs();
