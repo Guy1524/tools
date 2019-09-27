@@ -196,9 +196,8 @@ sub GetCPUCount()
 
 sub BuildNativeTestAgentd()
 {
-  # If testagentd already exists it's likely already running
-  # so don't rebuild it.
-  return 1 if (-x "$BinDir/build/testagentd");
+  my $NativeTestAgentd = "$::RootDir/bin/build/testagentd";
+  my $Before = GetMTime($NativeTestAgentd);
 
   InfoMsg "\nBuilding the native testagentd\n";
   my $CPUCount = GetCPUCount();
@@ -210,6 +209,10 @@ sub BuildNativeTestAgentd()
     return !1;
   }
 
+  if ($Before != GetMTime($NativeTestAgentd))
+  {
+    LogMsg "Updated testagentd\n";
+  }
   return 1;
 }
 

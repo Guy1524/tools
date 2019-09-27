@@ -487,6 +487,26 @@ if ($NewStatus eq "completed")
       FatalTAError($TA, "An error occurred while retrieving '$TaskDir/$BaseName'");
     }
   }
+
+  if ($Summary->{"testagentd"})
+  {
+    # Restart the TestAgent server from the new binary
+    # Note that the privileged TestAgent server is usually run with
+    # --set-time-only which means it cannot be upgraded since the restart RPC
+    # is blacklisted. But that also means it's unlikely to need upgrading.
+    Debug(Elapsed($Start), " Upgrading testagentd from ". $TA->GetVersion() ."\n");
+    $TA->Restart(undef);
+    # Give the server enough time to restart, thus (maybe) avoiding a timeout
+    # on the first (re)connection attempt.
+    sleep(1);
+    my $Version = $TA->GetVersion();
+    if (!$Version)
+    {
+      my $ErrMessage = $TA->GetLastError();
+      FatalError("Could not connect to the new ". $VM->Name ." TestAgent: $ErrMessage\n");
+    }
+    Debug(Elapsed($Start), "Upgraded testagentd to $Version\n");
+  }
 }
 
 $TA->Disconnect();
