@@ -36,6 +36,8 @@ our @EXPORT = qw(GetReconfigVMs AddReconfigJob
                  GetWindowsTestVMs AddWindowsTestJob
                  GetWineTestVMs AddWineTestJob);
 
+use File::Copy;
+
 use WineTestBot::Config;
 use WineTestBot::Jobs;
 use WineTestBot::Missions;
@@ -189,9 +191,13 @@ sub AddWindowsTestJob($$$$$)
     return "Failed to save the '$Remarks' job: $ErrMessage";
   }
 
-  # Stage the test file so it can be picked up by the job
-  if (!link("$DataDir/latest/$LatestBaseName",
-            "$DataDir/staging/job". $NewJob->Id ."_$LatestBaseName"))
+  # Stage the test file so it can be picked up by the job. Note that the
+  # caller may not own the latest files and thus may be unable to hard-link
+  # them (e.g. web server).
+  my $LatestFileName = "$DataDir/latest/$LatestBaseName";
+  my $StagingFileName = "$DataDir/staging/job". $NewJob->Id ."_$LatestBaseName";
+  if (!link($LatestFileName, $StagingFileName) &&
+      !copy($LatestFileName, $StagingFileName))
   {
     return "Failed to stage $LatestBaseName: $!";
   }

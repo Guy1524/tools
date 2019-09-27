@@ -287,6 +287,8 @@ EOF
   if (defined($Session) && $Session->User->HasRole("admin"))
   {
     print "        <li class='top'><p>Admin</p></li>\n";
+    print "        <li><p><a href='", MakeSecureURL("/admin/SpecialJobs.pl"),
+          "'>Special Jobs</a></p></li>\n";
     print "        <li><p><a href='", MakeSecureURL("/admin/UsersList.pl"),
           "'>Users</a></p></li>\n";
     print "        <li class='divider'>&nbsp;</li>\n";
