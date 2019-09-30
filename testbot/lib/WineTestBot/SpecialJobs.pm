@@ -148,10 +148,9 @@ sub AddWindowsTestJob($$$$$)
   my $NewJob = $Jobs->Add();
   $NewJob->User(GetBatchUser());
   $NewJob->Priority(($BaseJob eq "base" and $Build eq "exe32") ? 8 : 9);
-  my $Remarks = defined $VMKey ? "$VMKey VM" :
-                $Build eq "exe64" ? "64 bit VMs" :
-                "$BaseJob VMs";
-  $NewJob->Remarks("WineTest: $Remarks");
+  my $Remarks = ($Build eq "exe32" ? "32" : "64") ." bit WineTest: ".
+                (defined $VMKey ? "$VMKey VM" : "$BaseJob VMs");
+  $NewJob->Remarks($Remarks);
 
   # Add a task for each VM
   my $Tasks;

@@ -400,7 +400,7 @@ if ($OptTypes{all64})
   }
   elsif ($Create == 1)
   {
-    $Rc = 1 if ($OptTypes{all64} and !DoWindowsTest($OptVMKey, "exe64", "", $LatestBaseName));
+    $Rc = 1 if ($OptTypes{all64} and !DoWindowsTest($OptVMKey, "exe64", "all", $LatestBaseName));
   }
 }
 
