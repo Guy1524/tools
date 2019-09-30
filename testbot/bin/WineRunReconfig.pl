@@ -334,12 +334,9 @@ if ($VM->Type ne "build" and $VM->Type ne "wine")
 if (!$Debug and $VM->Status ne "running")
 {
   # Maybe the administrator tinkered with the VM state? In any case the VM
-  # is not ours to use so requeue the task and abort.
+  # is not ours to use so requeue the task and abort. Note that the VM will
+  # not be put offline (again, not ours).
   Error("The VM is not ready for use (" . $VM->Status . ")\n");
-  NotifyAdministrator("Putting the ". $VM->Name ." VM offline",
-    "The VM status should be 'running' but is '". $VM->Status ."' instead.\n".
-    "The VM has been put offline and the TestBot will try to regain\n".
-    "access to it.");
   WrapUpAndExit('queued');
 }
 my $Domain = $VM->GetDomain();
