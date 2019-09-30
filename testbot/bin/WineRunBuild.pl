@@ -192,11 +192,12 @@ sub LogTaskError($)
   umask($OldUMask);
 }
 
-sub WrapUpAndExit($;$$)
+sub WrapUpAndExit($;$$$)
 {
-  my ($Status, $Retry, $TimedOut) = @_;
+  my ($Status, $Retry, $TimedOut, $Reason) = @_;
   my $NewVMStatus = $Status eq 'queued' ? 'offline' : 'dirty';
-  my $VMResult = $Status eq "boterror" ? "boterror" :
+  my $VMResult = defined $Reason ? $Reason :
+                 $Status eq "boterror" ? "boterror" :
                  $Status eq "queued" ? "error" :
                  $TimedOut ? "timeout" : "";
 
@@ -346,7 +347,7 @@ if (!$VM->GetDomain()->IsPoweredOn())
     "The VM is not powered on despite its status being 'running'.\n".
     "The VM has been put offline and the TestBot will try to regain\n".
     "access to it.");
-  WrapUpAndExit('queued');
+  WrapUpAndExit('queued', undef, undef, 'boterror vm off');
 }
 
 if ($Step->Type ne "build")
