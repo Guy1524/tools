@@ -337,15 +337,18 @@ if (!$Debug and $VM->Status ne "running")
   Error("The VM is not ready for use (" . $VM->Status . ")\n");
   WrapUpAndExit('queued');
 }
-if (!$VM->GetDomain()->IsPoweredOn())
+my $Domain = $VM->GetDomain();
+if (!$Domain->IsPoweredOn())
 {
   # Maybe the VM was prepared in advance and got taken down by a power outage?
   # Requeue the task and treat this event as a failed revert to avoid infinite
   # loops.
   Error("The VM is not powered on\n");
   NotifyAdministrator("Putting the ". $VM->Name ." VM offline",
-    "The VM is not powered on despite its status being 'running'.\n".
-    "The VM has been put offline and the TestBot will try to regain\n".
+    "The ". $VM->Name ." VM should have been powered on to run the task\n".
+    "below but its state was ". $Domain->GetStateDescription() ." instead.\n".
+    MakeSecureURL(GetTaskURL($JobId, $StepNo, $TaskNo)) ."\n\n".
+    "So the VM has been put offline and the TestBot will try to regain\n".
     "access to it.");
   WrapUpAndExit('queued', undef, undef, 'boterror vm off');
 }
