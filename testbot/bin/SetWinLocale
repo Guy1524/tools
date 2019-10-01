@@ -385,6 +385,7 @@ while (@ARGV)
   }
 }
 
+# Check and untaint parameters
 my ($BaseVMName, $VMLocale, %AddLocales, $KeyboardIds, $CountryId);
 if (!defined $Usage)
 {
@@ -449,7 +450,7 @@ if (!defined $Usage)
         Error("'$OptVM' should not be a locale VM\n");
         $Usage = 2;
       }
-      $VMLocale = "$1_$2";
+      $VMLocale = "$1_$2"; # untaint
       $OptDefault = $VMLocale eq "sr_RS" ? "sr-Latn-CS" : "$1-$2";
     }
     elsif ($OptRefresh)
@@ -469,6 +470,15 @@ if (!defined $Usage)
     if (!defined $OptHostName)
     {
       Error("you must specify the Windows machine to work on\n");
+      $Usage = 2;
+    }
+    elsif ($OptHostName =~ /^([a-zA-Z0-9.-]+)$/)
+    {
+      $OptHostName = $1; # untaint
+    }
+    else
+    {
+      Error("'$OptHostName' is not a valid hostname\n");
       $Usage = 2;
     }
   }
