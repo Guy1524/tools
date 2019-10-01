@@ -589,7 +589,44 @@ sub GenerateFields($)
   {
     $self->_GenerateStateField("ShowAll");
     print "<div class='CollectionBlock'><table>\n";
-    print "<thead><tr><th class='Record'></th>\n";
+    print "<thead><tr><th class='Record'>";
+
+    # Check which VMs are selected and set the master default
+    my $MasterChecked = " checked";
+    foreach my $VMRow (@{$self->{VMRows}})
+    {
+      next if ($VMRow->{Incompatible});
+      # Extra VMs may be hidden
+      next if ($VMRow->{Extra} and !$VMRow->{Checked} and !$self->{ShowAll});
+
+      # By default select the base VMs that are ready to run tasks
+      if (!$self->{UserVMSelection} and !$VMRow->{Extra} and
+          $VMRow->{VM}->Status !~ /^(?:offline|maintenance)$/)
+      {
+        $VMRow->{Checked} = 1;
+      }
+      $MasterChecked = "" if (!$VMRow->{Checked});
+    }
+
+    # Add a "Toggle All" pseudo action
+    print <<EOF;
+<script type='text/javascript'>
+<!--
+function SetAllVMCBs(master)
+{
+  var vmcbs = document.getElementsByClassName("vmcb");
+  for (var i = 0; i < vmcbs.length; i++)
+  {
+    vmcbs[i].checked = master.checked;
+  }
+}
+
+// Only put the JavaScript checkbox if JavaScript is enabled
+document.write("<input type='checkbox' onchange='SetAllVMCBs(this);'$MasterChecked/>");
+//-->
+</script>
+EOF
+    print "</th>\n";
     print "<th class='Record'>VM Name</th>\n";
     print "<th class='Record'>Description</th>\n";
     print "</thead><tbody>\n";
@@ -600,17 +637,10 @@ sub GenerateFields($)
       next if ($VMRow->{Incompatible});
       # Extra VMs may be hidden
       next if ($VMRow->{Extra} and !$VMRow->{Checked} and !$self->{ShowAll});
-
-      # By default select the base VMs that are ready to run tasks
       my $VM = $VMRow->{VM};
-      if (!$self->{UserVMSelection} and !$VMRow->{Extra} and
-          $VM->Status !~ /^(?:offline|maintenance)$/)
-      {
-        $VMRow->{Checked} = 1;
-      }
 
       print "<tr class='", ($Even ? "even" : "odd"),
-            "'><td><input name='$VMRow->{Field}' type='checkbox'";
+            "'><td><input class='vmcb' name='$VMRow->{Field}' type='checkbox'";
       $Even = !$Even;
       print " checked='checked'" if ($VMRow->{Checked});
       print "/></td>\n";
@@ -630,25 +660,6 @@ sub GenerateFields($)
     $self->{UserVMSelection} = 1;
     $self->_GenerateStateField("UserVMSelection");
     print "</div><!--CollectionBlock-->\n";
-
-    # Add a "Toggle All" pseudo action
-    print <<EOF;
-<script type='text/javascript'>
-<!--
-function ToggleAll()
-{
-  for (var i = 0; i < document.forms[0].elements.length; i++)
-  {
-    if (document.forms[0].elements[i].type == 'checkbox')
-      document.forms[0].elements[i].checked = !(document.forms[0].elements[i].checked);
-  }
-}
-
-// Only put javascript link in document if javascript is enabled
-document.write("<div class='ItemActions'><a href='javascript:void(0)' onClick='ToggleAll();'>Toggle All<\\\/a><\\\/div>");
-//-->
-</script>
-EOF
 
     # Add a Show base/all VMs button separate from the other actions
     print "<div class='ItemActions'>\n";
