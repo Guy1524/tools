@@ -58,7 +58,7 @@ sub _Upload($)
 {
   my ($self) = @_;
 
-  my $Src = $self->CGI->upload("FileName");
+  my $Src = $self->CGI->upload("Upload");
   if (defined $Src)
   {
     my $OldUMask = umask(002);
@@ -76,7 +76,7 @@ sub _Upload($)
     {
       umask($OldUMask);
       delete $self->{FileName};
-      $self->{ErrField} = "FileName";
+      $self->{ErrField} = "Upload";
       $self->{ErrMessage} = "Unable to save the uploaded file";
       return undef;
     }
@@ -84,7 +84,7 @@ sub _Upload($)
   else
   {
     delete $self->{FileName};
-    $self->{ErrField} = "FileName";
+    $self->{ErrField} = "Upload";
     $self->{ErrMessage} = "Unable to upload the file";
     return undef;
   }
@@ -476,7 +476,8 @@ sub GetHeaderText($)
   }
   elsif ($self->{Page} == 1)
   {
-    return "Specify the patch file that you want to upload and submit " .
+    return defined $self->{FileName} ? "" :
+           "Specify the patch file that you want to upload and submit " .
            "for testing.<br>\n" .
            "You can also specify a Windows .exe file, this would normally be " .
            "a Wine test executable that you cross-compiled."
@@ -539,9 +540,18 @@ sub GenerateFields($)
   elsif ($self->{Page} == 1)
   {
     print "<div class='ItemProperty'><label>File</label>",
-          "<div class='ItemValue'>",
-          "<input type='file' name='FileName' size='64' maxlength='64' />",
-          "&nbsp;<span class='Required'>*</span></div></div>\n";
+          "<div class='ItemValue'>";
+    if (defined $self->{FileName})
+    {
+      $self->_GenerateStateField("FileName");
+      print "<input type='submit' name='Action' value='Unset'/> $self->{FileName}";
+    }
+    else
+    {
+      print "<input type='file' name='Upload' size='64' maxlength='64'/>",
+            "&nbsp;<span class='Required'>*</span>";
+    }
+    print  "</div></div>\n";
 
     my $Branches = CreateBranches();
     if (!defined $self->{Branch})
@@ -727,12 +737,42 @@ sub _SetPage($$)
   delete $self->{PropertyDescriptors};
 }
 
+sub OnUnset($)
+{
+  my ($self) = @_;
+
+  if (!$self->_ValidateFileName())
+  {
+    # Ignore the error. What counts is not using a suspicious FileName.
+    delete $self->{ErrField};
+    delete $self->{ErrMessage};
+  }
+  elsif (defined $self->{FileName})
+  {
+    my $StagingFilePath = $self->_GetStagingFilePath();
+    unlink($StagingFilePath) if ($StagingFilePath);
+    delete $self->{FileName};
+  }
+  delete $self->{TestExecutable};
+  delete $self->{CmdLineArg};
+
+  return 1;
+}
+
 sub OnPage1Next($)
 {
   my ($self) = @_;
 
-  if (!$self->_ValidateFileName() or !$self->_Upload() or !$self->Validate() or
-      !$self->_ValidateVMSelection("deselect"))
+  if (defined $self->{FileName})
+  {
+    return undef if (!$self->_ValidateFileName());
+  }
+  else
+  {
+    $self->{FileName} = $self->GetParam("Upload");
+    return undef if (!$self->_ValidateFileName() or !$self->_Upload());
+  }
+  if (!$self->Validate() or !$self->_ValidateVMSelection("deselect"))
   {
     return undef;
   }
@@ -778,19 +818,6 @@ sub OnPage2Next($)
 sub OnPage2Prev($)
 {
   my ($self) = @_;
-
-  if (!$self->_ValidateFileName())
-  {
-    # Ignore the error. What counts is not using a suspicious FileName.
-    delete $self->{ErrField};
-    delete $self->{ErrMessage};
-  }
-  elsif (defined $self->{FileName})
-  {
-    my $StagingFilePath = $self->_GetStagingFilePath();
-    unlink($StagingFilePath) if ($StagingFilePath);
-    delete $self->{FileName};
-  }
 
   $self->_SetPage(1);
   return 1;
@@ -1075,6 +1102,10 @@ sub OnAction($$)
   elsif ($Action eq "< Prev")
   {
     return $self->{Page} == 3 ? $self->OnPage3Prev() : $self->OnPage2Prev();
+  }
+  elsif ($Action eq "Unset")
+  {
+    return $self->OnUnset();
   }
   elsif ($Action eq "Submit")
   {
