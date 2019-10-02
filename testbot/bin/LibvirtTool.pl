@@ -491,7 +491,8 @@ sub Revert()
   my ($SetLocale, $CreateSnapshot);
 
   my $Domain = $VM->GetDomain();
-  if (!$Domain->HasSnapshot($DomainSnapshot) and
+  if (($VM->Type eq "win32" or $VM->Type eq "win64") and
+      !$Domain->HasSnapshot($DomainSnapshot) and
       $DomainSnapshot =~ s/-([a-z]{2})[_-]([A-Z]{2})$//)
   {
     # Add some extra time to set up the VM locale and reboot it
