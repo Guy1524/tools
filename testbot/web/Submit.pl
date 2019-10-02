@@ -32,6 +32,7 @@ use POSIX qw(:fcntl_h); # For SEEK_XXX
 use File::Basename;
 
 use ObjectModel::BasicPropertyDescriptor;
+use ObjectModel::EnumPropertyDescriptor;
 use WineTestBot::Branches;
 use WineTestBot::Config;
 use WineTestBot::Engine::Notify;
@@ -174,16 +175,10 @@ sub _AnalyzePatch($)
     $self->{ErrMessage} = "'$self->{FileName}' is not a valid patch";
     return undef;
   }
-  if ($self->{Impacts}->{TestUnitCount} == 0)
+  if ($self->{Impacts}->{ModuleUnitCount} == 0)
   {
     $self->{ErrField} = "FileName";
-    $self->{ErrMessage} = "The patch does not impact the tests";
-    return undef;
-  }
-  if ($self->{Impacts}->{TestUnitCount} > 1)
-  {
-    $self->{ErrField} = "FileName";
-    $self->{ErrMessage} = "The patch contains changes to multiple tests";
+    $self->{ErrMessage} = "The patch does not directly impact the Wine dlls and programs";
     return undef;
   }
   return 1;
@@ -271,6 +266,65 @@ sub _ValidateVMSelection($;$)
   return 1;
 }
 
+sub _GetTestExecutables($)
+{
+  my ($self, $ResetInvalid) = @_;
+
+  if (!$self->{TestExecutables})
+  {
+    if ($self->{FileType} eq "patch")
+    {
+      foreach my $Module (sort keys %{$self->{Impacts}->{Tests}})
+      {
+        my $TestInfo = $self->{Impacts}->{Tests}->{$Module};
+        next if (!%{$TestInfo->{Files}});
+        $self->{TestExecutables}->{"$TestInfo->{ExeBase}.exe"} = $Module;
+      }
+    }
+    else
+    {
+      $self->{TestExecutables}->{$self->{FileName}} = 1;
+    }
+  }
+}
+
+sub _ValidateTestExecutable($;$)
+{
+  my ($self, $ResetInvalid) = @_;
+
+  $self->_GetTestExecutables();
+  if ($ResetInvalid and (!defined $self->{TestExecutable} or
+                         !$self->{TestExecutables}->{$self->{TestExecutable}}))
+  {
+    $self->{TestExecutable} = (sort keys %{$self->{TestExecutables}})[0];
+    if (!defined $self->{CmdLineArg} and $self->{Impacts})
+    {
+      my $Module = $self->{TestExecutables}->{$self->{TestExecutable}};
+      my $TestInfo = $self->{Impacts}->{Tests}->{$Module};
+      $self->{CmdLineArg} = (sort keys %{$TestInfo->{PatchedUnits}})[0] ||
+                            (sort keys %{$TestInfo->{AllUnits}})[0];
+    }
+  }
+
+  if (!defined $self->{TestExecutable})
+  {
+    $self->{ErrField} = "TestExecutable";
+    $self->{ErrMessage} = "You must specify the test executable filename";
+    return undef;
+  }
+  elsif (!$self->{TestExecutables}->{$self->{TestExecutable}} or
+         # Make sure the test executable filename is valid
+         # to defend against malicious patches.
+         !IsValidFileName($self->{TestExecutable}))
+  {
+    $self->{ErrField} = "TestExecutable";
+    $self->{ErrMessage} = "Invalid test executable filename";
+    return undef;
+  }
+
+  return 1;
+}
+
 sub Validate($)
 {
   my ($self) = @_;
@@ -318,14 +372,7 @@ sub Validate($)
 
   if ($self->{Page} >= 3)
   {
-    if (($self->{FileType} eq "patch" and
-         $self->{TestExecutable} !~ m/^[\w_.]+_test\.exe$/) or
-        !IsValidFileName($self->{TestExecutable}))
-    {
-      $self->{ErrField} = "TestExecutable";
-      $self->{ErrMessage} = "Invalid test executable filename";
-      return undef;
-    }
+    return undef if (!$self->_ValidateTestExecutable());
 
     if ($self->{CmdLineArg} eq "" and !$self->{NoCmdLineArgWarn})
     {
@@ -493,6 +540,30 @@ sub GetHeaderText($)
     }
     return $HeaderText;
   }
+  elsif ($self->{Page} == 3 and $self->{Impacts})
+  {
+    my @TestExecutables;
+    $self->_GetTestExecutables();
+    foreach my $TestExecutable (sort keys %{$self->{TestExecutables}})
+    {
+      my $Module = $self->{TestExecutables}->{$TestExecutable};
+      my $TestInfo = $self->{Impacts}->{Tests}->{$Module};
+      my @TestUnits;
+      foreach my $TestUnit (sort keys %{$TestInfo->{AllUnits}})
+      {
+        if ($TestInfo->{PatchedUnits}->{$TestUnit})
+        {
+          push @TestUnits, "<i>$TestUnit</i>";
+        }
+        elsif ($TestInfo->{All} or $TestInfo->{PatchedModule})
+        {
+          push @TestUnits, $TestUnit;
+        }
+      }
+      push @TestExecutables, "$Module: ". join(" ", @TestUnits) if (@TestUnits);
+    }
+    return join("<br>\n", "Here is a list of the test executables impacted by the patch (patched test units, if any, are in italics).", @TestExecutables);
+  }
 
   return "";
 }
@@ -512,15 +583,18 @@ sub GetPropertyDescriptors($)
   }
   elsif ($self->{Page} == 3)
   {
-    $self->_GetFileType();
-    my $IsPatch = ($self->{FileType} eq "patch");
-    $self->{PropertyDescriptors} ||= [
-      CreateBasicPropertyDescriptor("TestExecutable", "Test executable", !1, $IsPatch, "A", 50),
-      CreateBasicPropertyDescriptor("CmdLineArg", "Command line arguments", !1, !1, "A", 50),
-      CreateBasicPropertyDescriptor("Run64", "Run 64-bit tests in addition to 32-bit tests", !1, 1, "B", 1),
-      CreateBasicPropertyDescriptor("DebugLevel", "Debug level (WINETEST_DEBUG)", !1, 1, "N", 2),
-      CreateBasicPropertyDescriptor("ReportSuccessfulTests", "Report successful tests (WINETEST_REPORT_SUCCESS)", !1, 1, "B", 1),
-    ];
+    if (!$self->{PropertyDescriptors})
+    {
+      $self->_GetTestExecutables();
+      my @TestExecutables = sort keys %{$self->{TestExecutables}};
+      $self->{PropertyDescriptors} = [
+        CreateEnumPropertyDescriptor("TestExecutable", "Test executable", !1, 1, \@TestExecutables),
+        CreateBasicPropertyDescriptor("CmdLineArg", "Command line arguments", !1, !1, "A", 50),
+        CreateBasicPropertyDescriptor("Run64", "Run 64-bit tests in addition to 32-bit tests", !1, 1, "B", 1),
+        CreateBasicPropertyDescriptor("DebugLevel", "Debug level (WINETEST_DEBUG)", !1, 1, "N", 2),
+        CreateBasicPropertyDescriptor("ReportSuccessfulTests", "Report successful tests (WINETEST_REPORT_SUCCESS)", !1, 1, "B", 1),
+      ];
+    }
   }
   return $self->SUPER::GetPropertyDescriptors();
 }
@@ -601,7 +675,9 @@ sub GenerateFields($)
 
       # By default select the base VMs that are ready to run tasks
       if (!$self->{UserVMSelection} and !$VMRow->{Extra} and
-          $VMRow->{VM}->Status !~ /^(?:offline|maintenance)$/)
+          $VMRow->{VM}->Status !~ /^(?:offline|maintenance)$/ and
+          ($VMRow->{VM}->Type eq "wine" or !$self->{Impacts} or
+           $self->{Impacts}->{TestUnitCount}))
       {
         $VMRow->{Checked} = 1;
       }
@@ -764,8 +840,6 @@ sub OnUnset($)
     unlink($StagingFilePath) if ($StagingFilePath);
     delete $self->{FileName};
   }
-  delete $self->{TestExecutable};
-  delete $self->{CmdLineArg};
 
   return 1;
 }
@@ -783,29 +857,13 @@ sub OnPage1Next($)
     $self->{FileName} = $self->GetParam("Upload");
     return undef if (!$self->_ValidateFileName() or !$self->_Upload());
   }
-  if (!$self->Validate() or !$self->_ValidateVMSelection("deselect"))
+  if (!$self->Validate() or !$self->_ValidateVMSelection("deselect") or
+      !$self->_ValidateTestExecutable("reset"))
   {
     return undef;
   }
 
   # Set defaults
-  if ((!defined $self->{TestExecutable} or !defined $self->{CmdLineArg}) and
-      $self->{Impacts})
-  {
-    foreach my $TestInfo (values %{$self->{Impacts}->{Tests}})
-    {
-      next if (!$TestInfo->{UnitCount});
-      if (!defined $self->{TestExecutable})
-      {
-        $self->{TestExecutable} = "$TestInfo->{ExeBase}.exe";
-      }
-      if (!defined $self->{CmdLineArg})
-      {
-        $self->{CmdLineArg} = (keys %{$TestInfo->{PatchedUnits}})[0];
-      }
-      last;
-    }
-  }
   if (!defined $self->{Run64})
   {
     # Whether we show it or not the default is true
@@ -997,7 +1055,8 @@ sub _SubmitJob($$)
     $Task->VM($VM);
     $Task->Timeout($Timeout);
     $Task->Missions($MissionStatement);
-    $Task->CmdLineArg($self->{CmdLineArg}) if ($self->{FileType} ne "patch");
+    my $Module = $self->{TestExecutables}->{$self->{TestExecutable}};
+    $Task->CmdLineArg(($Module eq 1 ? "" : "$Module ") .$self->{CmdLineArg});
   }
 
   # Now save it all (or whatever's left to save)

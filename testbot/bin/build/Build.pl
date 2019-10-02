@@ -87,6 +87,12 @@ sub BuildTestExecutables($$$)
   }
 
   InfoMsg "\nBuilding the $Build Wine test executable(s)\n";
+  if (!@BuildDirs)
+  {
+    InfoMsg "Nothing to do\n";
+    return 1;
+  }
+
   my $CPUCount = GetCPUCount();
   system("cd '$DataDir/wine-$Build' && set -x && ".
          "time make -j$CPUCount ". join(" ", sort @BuildDirs));

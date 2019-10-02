@@ -121,9 +121,7 @@ sub DailyWineTest($$$$)
 
 sub TestPatch($$)
 {
-  my ($Mission, $Impacts) = @_;
-
-  return 1 if ($Mission->{test} eq "build");
+  my ($Mission, $Impacts, $Args) = @_;
 
   my @TestList;
   if ($Mission->{test} eq "all" and
@@ -180,6 +178,24 @@ sub TestPatch($$)
   return 1;
 }
 
+sub GetExecutable($$$)
+{
+  my ($Mission, $Impacts, $Module) = @_;
+
+  my $TestInfo = $Impacts->{Tests}->{$Module};
+  my $TestExecutable = "$TestInfo->{ExeBase}.exe";
+  my $Dst = "$DataDir/staging/$TestExecutable";
+  unlink $Dst;
+
+  my $WineDir = GetWineDir($Mission);
+  if (!symlink "$WineDir/$TestInfo->{Path}/$TestExecutable", $Dst)
+  {
+    LogMsg "Could not find $TestExecutable: $!\n";
+    return undef;
+  }
+  return $TestExecutable;
+}
+
 sub TestExe($$$)
 {
   my ($Mission, $FileName, $Args) = @_;
@@ -192,6 +208,21 @@ sub TestExe($$$)
     if (defined $ErrMessage)
     {
       LogMsg "Could not create the $BaseName wineprefix: $ErrMessage\n";
+      return 0;
+    }
+  }
+
+  my $TestDir = GetTestDir($Mission);
+  if ($TestDir eq ".")
+  {
+    $FileName = "$DataDir/staging/$FileName";
+  }
+  else
+  {
+    unlink "$TestDir/$FileName";
+    if (!symlink "$DataDir/staging/$FileName", "$TestDir/$FileName")
+    {
+      LogMsg "Could not create '$FileName' in the test directory: $!\n";
       return 0;
     }
   }
@@ -210,7 +241,7 @@ sub TestExe($$$)
 #
 
 my $Action = "";
-my ($Usage, $OptNoSubmit, $MissionStatement, $FileName, $BaseTag);
+my ($Usage, $OptNoSubmit, $MissionStatement, $FileName, $Module, $BaseTag);
 while (@ARGV)
 {
   my $Arg = shift @ARGV;
@@ -248,17 +279,16 @@ while (@ARGV)
   elsif ($Action eq "winetest")
   {
     $BaseTag = $Arg;
-    # The remaining arguments are meant for WineTest
-    last;
+    last; # The remaining arguments are meant for WineTest
   }
   elsif (!defined $FileName)
   {
     if (IsValidFileName($Arg))
     {
-      $FileName = "$DataDir/staging/$Arg";
-      if (!-r $FileName)
+      $FileName = $Arg;
+      if (!-r "$DataDir/staging/$FileName")
       {
-        Error "'$Arg' is not readable\n";
+        Error "'$FileName' is not readable\n";
         $Usage = 2;
       }
     }
@@ -266,13 +296,16 @@ while (@ARGV)
     {
       Error "the '$Arg' filename contains invalid characters\n";
       $Usage = 2;
-      last;
     }
     if ($Action eq "testexe")
     {
-      # The remainder are the executable's arguments
-      last;
+      last; # The remainder are the executable's arguments
     }
+  }
+  elsif ($Action eq "testpatch" and !defined $Module)
+  {
+    $Module = $Arg;
+    last; # The remainder are the executable's arguments
   }
   else
   {
@@ -372,7 +405,7 @@ if (defined $Usage)
     exit $Usage;
   }
   print "Usage: $Name0 [--help] --testexe MISSIONS EXE ARGS...\n";
-  print "or     $Name0 [--help] --testpatch MISSIONS PATCH\n";
+  print "or     $Name0 [--help] --testpatch MISSIONS PATCH [MODULE ARGS...]\n";
   print "or     $Name0 [--help] --winetest [--no-submit] MISSIONS BASETAG ARGS\n";
   print "\n";
   print "Tests the specified patch or runs WineTest in Wine.\n";
@@ -387,11 +420,10 @@ if (defined $Usage)
   print "               - wow32: The 32 bit WoW Wine build.\n";
   print "               - wow64: The 64 bit WoW Wine build.\n";
   print "  EXE          Is the staging file containing the executable to run.\n";
-  print "  ARGS         Are the arguments for the test executable.\n";
   print "  PATCH        Is the staging file containing the patch to test.\n";
   print "  BASETAG      Is the tag for this WineTest run. Note that the build type is\n";
   print "               automatically added to this tag.\n";
-  print "  ARGS         The WineTest arguments.\n";
+  print "  ARGS         Arguments for the test.\n";
   print "  --help       Shows this usage message.\n";
   exit $Usage;
 }
@@ -413,7 +445,7 @@ unlink map { GetMissionBaseName($_) .".report" } @{$TaskMissions->{Missions}};
 my $Impacts;
 if ($Action eq "testpatch")
 {
-  $Impacts = ApplyPatch("wine", $FileName);
+  $Impacts = ApplyPatch("wine", "$DataDir/staging/$FileName");
   exit(1) if (!$Impacts or
               !BuildWine($TaskMissions, "win32") or
               !BuildWine($TaskMissions, "wow64") or
@@ -421,17 +453,24 @@ if ($Action eq "testpatch")
 }
 foreach my $Mission (@{$TaskMissions->{Missions}})
 {
+  return 1 if ($Mission->{test} eq "build");
+
   if ($Action eq "testexe")
   {
     exit(1) if (!TestExe($Mission, $FileName, \@ARGV));
   }
-  elsif ($Action eq "testpatch")
-  {
-    exit(1) if (!TestPatch($Mission, $Impacts));
-  }
   elsif ($Action eq "winetest")
   {
     exit(1) if (!DailyWineTest($Mission,  $OptNoSubmit, $BaseTag, \@ARGV));
+  }
+  elsif (@ARGV)
+  {
+    my $FileName = GetExecutable($Mission, $Impacts, $Module);
+    exit(1) if (!$FileName or !TestExe($Mission, $FileName, \@ARGV));
+  }
+  else
+  {
+    exit(1) if (!TestPatch($Mission, $Impacts));
   }
 }
 

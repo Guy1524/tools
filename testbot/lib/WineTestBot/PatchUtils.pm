@@ -441,6 +441,7 @@ sub GetPatchImpacts($)
       next if (exists $TestInfo->{Files}->{"$Base.spec"});
       # Don't try running a deleted test unit obviously
       next if ($TestInfo->{Files}->{$File} eq "rm");
+      $TestInfo->{AllUnits}->{$Base} = 1;
 
       if ($TestInfo->{All} or $TestInfo->{Files}->{$File})
       {

@@ -30,7 +30,8 @@ our @EXPORT = qw(GetToolName InfoMsg LogMsg Error
                  GitPull ApplyPatch
                  GetCPUCount BuildNativeTestAgentd BuildWindowsTestAgentd
                  GetTestLauncher BuildTestLauncher UpdateAddOns
-                 SetupWineEnvironment RunWine CreateWinePrefix);
+                 SetupWineEnvironment GetWineDir GetTestDir RunWine
+                 CreateWinePrefix);
 
 use Digest::SHA;
 use File::Basename;
@@ -397,29 +398,37 @@ sub SetupWineEnvironment($)
   return $BaseName;
 }
 
+sub GetWineDir($)
+{
+  my ($Mission) = @_;
+  return "$DataDir/wine-$Mission->{Build}";
+}
+
+sub GetTestDir($)
+{
+  my ($Mission) = @_;
+
+  my $DevDir = "$ENV{WINEPREFIX}/dosdevices";
+  return "." if (!-d $DevDir);
+
+  my $Dir = $Mission->{dir} || "";
+  # We cannot put colons in missions so restore the drive letter
+  $Dir = "$DevDir/c:/$Dir" if ($Dir !~ s~^([a-z])/~$DevDir/$1:/~);
+  return -d $Dir ? $Dir : "$DevDir/c:";
+}
+
 sub RunWine($$$)
 {
   my ($Mission, $Cmd, $CmdArgs) = @_;
 
-  my $WineDir = "$DataDir/wine-$Mission->{Build}";
+  my $TestDir = GetTestDir($Mission);
+
+  my $WineDir = GetWineDir($Mission);
   $Cmd = "$WineDir/$Cmd" if ($Cmd =~ /\.exe\.so$/);
-
-  my $CurDir = "$ENV{WINEPREFIX}/dosdevices";
-  if (!-d $CurDir)
-  {
-    $CurDir = ".";
-  }
-  else
-  {
-    my $Dir = $Mission->{dir} || "";
-    # We cannot put colons in missions so restore the drive letter
-    $Dir = "$CurDir/c:/$Dir" if ($Dir !~ s~^([a-z])/~$CurDir/$1:/~);
-    $CurDir = -d $Dir ? $Dir : "$ENV{WINEPREFIX}/dosdevices/c:";
-  }
-
   my $Magic = `file '$Cmd'`;
   my $Wine = ($Magic =~ /ELF 64/ ? "$WineDir/wine64" : "$WineDir/wine");
-  return system("set -x && cd '$CurDir' && ".
+
+  return system("set -x && cd '$TestDir' && ".
                 "time '$Wine' '$Cmd' $CmdArgs");
 }
 

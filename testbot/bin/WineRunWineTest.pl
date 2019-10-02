@@ -484,6 +484,7 @@ if ($Step->Type eq "suite")
 elsif ($Step->FileType eq "patch")
 {
   $Script .= "--testpatch ". ShQuote($Task->Missions) ." patch.diff";
+  $Script .= " ". $Task->CmdLineArg if (defined $Task->CmdLineArg);
 }
 else
 {
