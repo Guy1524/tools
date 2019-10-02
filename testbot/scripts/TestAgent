@@ -345,12 +345,12 @@ if (defined $Usage)
     print "                as <localpath>.\n";
     print "  run           Runs the specified <command> on the server.\n";
     print "    --run-no-wait Don't wait for the command.\n";
-    print "    --run-in <serverpath> Redirect the stdin or the command being run to the\n";
+    print "    --run-in <serverpath> Redirect the stdin of the command being run to the\n";
     print "                  specified server file.\n";
-    print "    --run-out <serverpath> Redirect the stdout or the command being run to the\n";
+    print "    --run-out <serverpath> Redirect the stdout of the command being run to the\n";
     print "                  specified server file.\n";
     print "    --run-dntrunc-out Do not truncate the file stdout is redirected to.\n";
-    print "    --run-err <serverpath> Redirect the stderr or the command being run to the\n";
+    print "    --run-err <serverpath> Redirect the stderr of the command being run to the\n";
     print "                  specified server file.\n";
     print "    --run-dntrunc-err Do not truncate the file stderr is redirected to.\n";
     print "  wait          Waits for the specified child process on the server.\n";
