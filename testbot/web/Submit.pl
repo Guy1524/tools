@@ -325,6 +325,22 @@ sub _ValidateTestExecutable($;$)
   return 1;
 }
 
+sub _ValidateUpload($)
+{
+  my ($self) = @_;
+
+  if (defined $self->{FileName})
+  {
+    return undef if (!$self->_ValidateFileName());
+  }
+  else
+  {
+    $self->{FileName} = $self->GetParam("Upload");
+    return undef if (!$self->_ValidateFileName() or !$self->_Upload());
+  }
+  return 1;
+}
+
 sub Validate($)
 {
   my ($self) = @_;
@@ -410,7 +426,7 @@ sub _initialize($$$)
 
   $self->{Page} = $self->GetParam("Page");
   # Page is a hidden parameter so fix it instead of issuing an error
-  $self->{Page} = 1 if (!defined $self->{Page} or $self->{Page} !~ /^[0-3]$/);
+  $self->{Page} = 1 if (!defined $self->{Page} or $self->{Page} !~ /^[0-4]$/);
   $self->{LastPage} = $self->{Page};
 
   # Load the Page 1 parameters
@@ -468,6 +484,9 @@ sub _GenerateStateFields($)
 
   $self->_GenerateStateField("Page");
 
+  # There are no parameters to preserve when there is a single page
+  return if ($self->{Page} == 4);
+
   if ($self->{Page} != 1)
   {
     $self->_GenerateStateField("Branch");
@@ -514,22 +533,24 @@ sub GetHeaderText($)
 {
   my ($self) = @_;
 
+  my @Headers;
   if ($self->{Page} == 0)
   {
-    return "Your job was successfully queued, but the job engine that takes " .
-           "care of actually running it seems to be unavailable (perhaps it " .
-           "crashed). Your job will remain queued until the engine is " .
-           "restarted.";
+    push @Headers,
+        "Your job was successfully queued, but the job engine that takes " .
+        "care of actually running it seems to be unavailable (perhaps it " .
+        "crashed). Your job will remain queued until the engine is " .
+        "restarted.";
   }
-  elsif ($self->{Page} == 1)
+  if ($self->{Page} == 1 or $self->{Page} == 4)
   {
-    return defined $self->{FileName} ? "" :
+    push @Headers, defined $self->{FileName} ? "" :
            "Specify the patch file that you want to upload and submit " .
            "for testing.<br>\n" .
            "You can also specify a Windows .exe file, this would normally be " .
            "a Wine test executable that you cross-compiled."
   }
-  elsif ($self->{Page} == 2)
+  if ($self->{Page} == 2 or $self->{Page} == 4)
   {
     my $HeaderText = "Select the VMs on which you want to run your test.";
     my $VMs = CreateVMs();
@@ -538,9 +559,9 @@ sub GetHeaderText($)
     {
       $HeaderText .= "<br>NOTE: Offline VMs and those undergoing maintenance will not be able to run your tests right away.";
     }
-    return $HeaderText;
+    push @Headers, $HeaderText;
   }
-  elsif ($self->{Page} == 3 and $self->{Impacts})
+  if (($self->{Page} == 3 or $self->{Page} == 0) and $self->{Impacts})
   {
     my @TestExecutables;
     $self->_GetTestExecutables();
@@ -562,10 +583,10 @@ sub GetHeaderText($)
       }
       push @TestExecutables, "$Module: ". join(" ", @TestUnits) if (@TestUnits);
     }
-    return join("<br>\n", "Here is a list of the test executables impacted by the patch (patched test units, if any, are in italics).", @TestExecutables);
+    push @Headers, join("<br>\n", "Here is a list of the test executables impacted by the patch (patched test units, if any, are in italics).", @TestExecutables);
   }
 
-  return "";
+  return join("<br>\n", @Headers);
 }
 
 sub GetPropertyDescriptors($)
@@ -581,21 +602,33 @@ sub GetPropertyDescriptors($)
       CreateBasicPropertyDescriptor("Remarks", "Remarks", !1, !1, "A", 128),
     ];
   }
-  elsif ($self->{Page} == 3)
+  elsif (($self->{Page} == 3 or $self->{Page} == 4) and
+         !$self->{PropertyDescriptors})
   {
-    if (!$self->{PropertyDescriptors})
+    if ($self->{Page} == 4)
+    {
+      $self->{PropertyDescriptors} = [
+        CreateBasicPropertyDescriptor("Remarks", "Remarks", !1, !1, "A", 128),
+        # Let the user type in the TestExecutable since we won't be able to
+        # figure it out in advance
+        CreateBasicPropertyDescriptor("TestExecutable", "Test executable", !1, 1, "A", 50),
+      ];
+    }
+    else
     {
       $self->_GetTestExecutables();
       my @TestExecutables = sort keys %{$self->{TestExecutables}};
       $self->{PropertyDescriptors} = [
         CreateEnumPropertyDescriptor("TestExecutable", "Test executable", !1, 1, \@TestExecutables),
-        CreateBasicPropertyDescriptor("CmdLineArg", "Command line arguments", !1, !1, "A", 50),
-        CreateBasicPropertyDescriptor("Run64", "Run 64-bit tests in addition to 32-bit tests", !1, 1, "B", 1),
-        CreateBasicPropertyDescriptor("DebugLevel", "Debug level (WINETEST_DEBUG)", !1, 1, "N", 2),
-        CreateBasicPropertyDescriptor("ReportSuccessfulTests", "Report successful tests (WINETEST_REPORT_SUCCESS)", !1, 1, "B", 1),
       ];
     }
+    push @{$self->{PropertyDescriptors}},
+      CreateBasicPropertyDescriptor("CmdLineArg", "Command line arguments", !1, !1, "A", 50),
+      CreateBasicPropertyDescriptor("Run64", "Run 64-bit tests in addition to 32-bit tests", !1, 1, "B", 1),
+      CreateBasicPropertyDescriptor("DebugLevel", "Debug level (WINETEST_DEBUG)", !1, 1, "N", 2),
+      CreateBasicPropertyDescriptor("ReportSuccessfulTests", "Report successful tests (WINETEST_REPORT_SUCCESS)", !1, 1, "B", 1);
   }
+
   return $self->SUPER::GetPropertyDescriptors();
 }
 
@@ -611,7 +644,7 @@ sub GenerateFields($)
     $self->_GenerateStateField("JobKey");
   }
 
-  elsif ($self->{Page} == 1)
+  if ($self->{Page} == 1 or $self->{Page} == 4)
   {
     print "<div class='ItemProperty'><label>File</label>",
           "<div class='ItemValue'>";
@@ -657,9 +690,11 @@ sub GenerateFields($)
     }
     # The other fields are taken care of by FreeFormPage.
     $self->{HasRequired} = 1;
+
+    print "<br>\n" if ($self->{Page} == 4);
   }
 
-  elsif ($self->{Page} == 2)
+  if ($self->{Page} == 2 or $self->{Page} == 4)
   {
     $self->_GenerateStateField("ShowAll");
     print "<div class='CollectionBlock'><table>\n";
@@ -742,15 +777,23 @@ EOF
     print "<input type='submit' name='Action' value='",
           $self->{ShowAll} ? "Show base VMs" : "Show all VMs", "'/>\n";
     print "</div>\n";
+
+    print "<br>\n" if ($self->{Page} == 4);
   }
 
-  elsif ($self->{Page} == 3)
+  if ($self->{Page} == 3 or $self->{Page} == 4)
   {
     $self->_GenerateStateField("NoCmdLineArgWarn");
 
     # Preserve these fields if they are not shown
-    $self->_GenerateStateField("Run64") if (!$self->{ShowRun64} or $self->{FileType} ne "patch");
-    $self->_GenerateStateField("TestExecutable") if ($self->{FileType} ne "patch");
+    if (!$self->{ShowRun64} or $self->{FileType} ne "patch")
+    {
+      $self->_GenerateStateField("Run64");
+    }
+    if ($self->{FileType} ne "patch" and $self->{Page} != 4)
+    {
+      $self->_GenerateStateField("TestExecutable");
+    }
 
     # The other fields are taken care of by FreeFormPage.
   }
@@ -769,7 +812,7 @@ sub GetActions($)
   }
   elsif ($self->{Page} == 1)
   {
-    push @$Actions, "Next >";
+    push @$Actions, "Single Page", "Next >";
   }
   elsif ($self->{Page} == 2)
   {
@@ -778,6 +821,10 @@ sub GetActions($)
   elsif ($self->{Page} == 3)
   {
     push @$Actions, "< Prev", "Submit";
+  }
+  elsif ($self->{Page} == 4)
+  {
+    push @$Actions, "Submit";
   }
 
   return $Actions;
@@ -848,16 +895,8 @@ sub OnPage1Next($)
 {
   my ($self) = @_;
 
-  if (defined $self->{FileName})
-  {
-    return undef if (!$self->_ValidateFileName());
-  }
-  else
-  {
-    $self->{FileName} = $self->GetParam("Upload");
-    return undef if (!$self->_ValidateFileName() or !$self->_Upload());
-  }
-  if (!$self->Validate() or !$self->_ValidateVMSelection("deselect") or
+  if (!$self->_ValidateUpload() or !$self->Validate() or
+      !$self->_ValidateVMSelection("deselect") or
       !$self->_ValidateTestExecutable("reset"))
   {
     return undef;
@@ -871,6 +910,22 @@ sub OnPage1Next($)
   }
 
   $self->_SetPage(2);
+  return 1;
+}
+
+sub OnSinglePage($)
+{
+  my ($self) = @_;
+
+  # The checks and defaults are the same as for Page1Next()
+  if (!$self->OnPage1Next())
+  {
+    # But ignore all errors. The user can change everything anyway.
+    delete $self->{ErrField};
+    delete $self->{ErrMessage};
+  }
+
+  $self->_SetPage(4);
   return 1;
 }
 
@@ -1101,7 +1156,7 @@ sub OnSubmit($)
 {
   my ($self) = @_;
 
-  return undef if (!$self->Validate());
+  return undef if (!$self->_ValidateUpload() or !$self->Validate());
 
   # Rename the staging file to avoid race conditions if the user clicks on
   # Submit multiple times
@@ -1165,7 +1220,11 @@ sub OnAction($$)
 {
   my ($self, $Action) = @_;
 
-  if ($Action eq "Next >")
+  if ($Action eq "Single Page")
+  {
+    return $self->OnSinglePage();
+  }
+  elsif ($Action eq "Next >")
   {
     return $self->{Page} == 2 ? $self->OnPage2Next() : $self->OnPage1Next();
   }
