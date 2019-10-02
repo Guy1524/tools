@@ -321,14 +321,22 @@ sub GetMoreInfoLink($$$$;$)
   return ($Action, $Url);
 }
 
-sub GenerateMoreInfoLink($$$$;$)
+sub GenerateMoreInfoLink($$$$;$$)
 {
-  my ($self, $LinkKey, $Label, $Set, $Value) = @_;
+  my ($self, $LinkKey, $Label, $Set, $Value, $StepTask) = @_;
 
   my ($Action, $Url) = $self->GetMoreInfoLink($LinkKey, $Label, $Set, $Value);
   my $Title = ($Value =~ /^(.*)\.report$/) ? " title='$1'" : "";
 
   my $Html = "<a href='". $self->CGI->escapeHTML($Url) ."'$Title>$Action $Label</a>";
+  if (defined $Value)
+  {
+    $Url = "/GetTaskFile.pl?Job=". uri_escape($self->{JobId})
+           ."&Step=". uri_escape($StepTask->StepNo)
+           ."&Task=". uri_escape($StepTask->TaskNo)
+           ."&File=". uri_escape($Value);
+    $Html = "<a href='$Url'>&darr;</a> $Html";
+  }
   if ($Action eq "Hide")
   {
     $Html = "<span class='TaskMoreInfoSelected'>$Html</span>";
@@ -442,7 +450,7 @@ EOF
     my $ReportCount;
     foreach my $LogName (@{$MoreInfo->{Logs}})
     {
-      $self->GenerateMoreInfoLink($Key, GetLogLabel($LogName), "Full", $LogName);
+      $self->GenerateMoreInfoLink($Key, GetLogLabel($LogName), "Full", $LogName, $StepTask);
       $ReportCount++ if ($LogName !~ /^old_/ and $LogName =~ /\.report$/);
     }
     print "</div>\n";
