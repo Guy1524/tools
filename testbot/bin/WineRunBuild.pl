@@ -47,6 +47,7 @@ use WineTestBot::PatchUtils;
 use WineTestBot::VMs;
 use WineTestBot::Log;
 use WineTestBot::LogUtils;
+use WineTestBot::Utils;
 use WineTestBot::Engine::Notify;
 
 
