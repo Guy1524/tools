@@ -42,6 +42,7 @@ use WineTestBot::PatchUtils;
 use WineTestBot::Steps;
 use WineTestBot::Utils;
 use WineTestBot::VMs;
+use WineTestBot::Log;
 
 
 #
@@ -226,11 +227,28 @@ sub _ValidateVMSelection($;$)
   return undef if (!$self->_GetFileType());
 
   my @Deselected;
+  $self->{HasExe32} = $self->{HasExe64} = 0;
+  $self->{ShowRun32} = $self->{ShowRun64} = 1;
   foreach my $VMRow (@{$self->{VMRows}})
   {
-    if ($self->{FileType} eq "exe64" and $VMRow->{VM}->Type eq "win32")
+    my $Incompatible;
+    my $Caps = $VMRow->{Caps};
+    if ($self->{FileType} eq "exe32" and
+        (($VMRow->{Build} eq "vm" and !$Caps->{build}->{exe32}) # Windows
+         or $VMRow->{Build} eq "wow64")) # Wine
     {
-      # This VM cannot run 64 bit executables
+      # This VM cannot / has no mission to run 32 bit executables
+      $Incompatible = 1;
+    }
+    elsif ($self->{FileType} eq "exe64" and
+           (($VMRow->{Build} eq "vm" and !$Caps->{build}->{exe64}) # Windows
+            or $VMRow->{Build} eq "win32" or $VMRow->{Build} eq "wow32")) # Wine
+    {
+      # This VM cannot / has no mission to run 64 bit executables
+      $Incompatible = 1;
+    }
+    if ($Incompatible)
+    {
       $VMRow->{Incompatible} = 1;
       if ($VMRow->{Checked})
       {
@@ -243,21 +261,36 @@ sub _ValidateVMSelection($;$)
           push @Deselected, $VMRow->{VM}->Name;
         }
       }
+      next;
     }
-    else
-    {
-      delete $VMRow->{Incompatible};
-    }
+    delete $VMRow->{Incompatible};
 
+    # For Windows VMs record whether they will run 32/64 bit tests
+    $VMRow->{Exe32} = ($Caps->{build}->{exe32} and $self->{FileType} =~ /^(?:patch|exe32)$/);
+    $VMRow->{Exe64} = ($Caps->{build}->{exe64} and $self->{FileType} =~ /^(?:patch|exe64)$/);
     if ($VMRow->{Checked})
     {
       # Count VMs so we can provide defaults or issue an error when needed
       $self->{CheckedVMCount}++;
-      # Set ShowRun64 if page 3 should offer to run both the 32 and 64 bit
-      # version of a patch.
-      $self->{ShowRun64} = 1 if ($VMRow->{VM}->Type eq "win64");
+      if ($VMRow->{Exe32})
+      {
+        $self->{HasExe32} = 1;
+        # The user picked a VM that only supports this bitness
+        # so disabling it would make no sense.
+        $self->{ShowRun32} = 0 if (!$VMRow->{Exe64});
+      }
+      if ($VMRow->{Exe64})
+      {
+        $self->{HasExe64} = 1;
+        # The user picked a VM that only supports this bitness
+        # so disabling it would make no sense.
+        $self->{ShowRun64} = 0 if (!$VMRow->{Exe32});
+      }
     }
   }
+  $self->{ShowRun32} = 0 if (!$self->{HasExe32} or $self->{FileType} ne "patch");
+  $self->{ShowRun64} = 0 if (!$self->{HasExe64} or $self->{FileType} ne "patch");
+
   if (@Deselected)
   {
     $self->{ErrMessage} = "The following VMs are incompatible and have been deselected: @Deselected";
@@ -390,6 +423,15 @@ sub Validate($)
   {
     return undef if (!$self->_ValidateTestExecutable());
 
+    if ($self->{FileType} eq "patch" and
+        !$self->{Run32} and $self->{ShowRun32} and
+        !$self->{Run64} and $self->{ShowRun64})
+    {
+      # Don't set ErrField since Run32 and Run64 may be hidden
+      $self->{ErrMessage} = "You must at least pick one of the 32 or 64 bit tests to run on the selected Windows VMs.";
+      return undef;
+    }
+
     if ($self->{CmdLineArg} eq "" and !$self->{NoCmdLineArgWarn})
     {
       $self->{ErrMessage} = "You did not specify a command line argument. ".
@@ -442,18 +484,42 @@ sub _initialize($$$)
   foreach my $VMKey (@$SortedKeys)
   {
     my $VM = $VMs->GetItem($VMKey);
-    my $VMRow = {
-      VM => $VM,
-      Field  => "vm_". $self->CGI->escapeHTML($VMKey),
-      Extra => $VM->Role ne "base",
-    };
-    $VMRow->{Checked} = $self->GetParam($VMRow->{Field});
-    push @{$self->{VMRows}}, $VMRow;
+    my ($ErrMessage, $Caps) = GetMissionCaps($VM->Missions);
+    LogMsg "$ErrMessage\n" if (defined $ErrMessage);
+
+    my @Builds = $VM->Type eq "wine" ? keys %{$Caps->{build}} : ("vm");
+    my $LangNames;
+    if (%{$Caps->{lang}})
+    {
+      # Which languages are available for this row?
+      foreach my $Locale (keys %{$Caps->{lang}})
+      {
+        $LangNames->{LocaleName($Locale)} = $Locale;
+      }
+    }
+
+    my $FieldBase = $self->CGI->escapeHTML($VMKey);
+    foreach my $Build (sort @Builds)
+    {
+      my $VMRow = {
+        VM => $VM,
+        Build => $Build,
+        LangNames => $LangNames,
+        Caps => $Caps,
+        Field  => "${Build}_$FieldBase",
+        Extra => $VM->Role ne "base",
+      };
+      $VMRow->{Checked} = $self->GetParam($VMRow->{Field});
+      $VMRow->{Lang} = $self->GetParam("$VMRow->{Field}_lang");
+      $VMRow->{Lang} ||= "en_US" if ($LangNames);
+
+      push @{$self->{VMRows}}, $VMRow;
+    }
   }
 
   # Load the Page 3 parameters
   $self->_GetParams("TestExecutable", "CmdLineArg", "NoCmdLineArgWarn",
-                    "Run64", "DebugLevel", "ReportSuccessfulTests");
+                    "Run32", "Run64", "DebugLevel", "ReportSuccessfulTests");
   $self->{DebugLevel} = 1 if (!defined $self->{DebugLevel});
 
   # Load the Page 4 parameters
@@ -504,6 +570,10 @@ sub _GenerateStateFields($)
       {
         print "<input type='hidden' name='$VMRow->{Field}' value='on'>\n";
       }
+      if ($VMRow->{Lang})
+      {
+        print "<input type='hidden' name='$VMRow->{Field}_lang' value='$VMRow->{Lang}'>\n";
+      }
     }
   }
   if ($self->{Page} != 3)
@@ -512,6 +582,7 @@ sub _GenerateStateFields($)
     # so he gets warned again.
     $self->_GenerateStateField("TestExecutable");
     $self->_GenerateStateField("CmdLineArg");
+    $self->_GenerateStateField("Run32");
     $self->_GenerateStateField("Run64");
     $self->_GenerateStateField("DebugLevel");
     $self->_GenerateStateField("ReportSuccessfulTests");
@@ -624,7 +695,8 @@ sub GetPropertyDescriptors($)
     }
     push @{$self->{PropertyDescriptors}},
       CreateBasicPropertyDescriptor("CmdLineArg", "Command line arguments", !1, !1, "A", 50),
-      CreateBasicPropertyDescriptor("Run64", "Run 64-bit tests in addition to 32-bit tests", !1, 1, "B", 1),
+      CreateBasicPropertyDescriptor("Run32", "Run the 32 bit tests on Windows", !1, 1, "B", 1),
+      CreateBasicPropertyDescriptor("Run64", "Run the 64 bit tests on Windows", !1, 1, "B", 1),
       CreateBasicPropertyDescriptor("DebugLevel", "Debug level (WINETEST_DEBUG)", !1, 1, "N", 2),
       CreateBasicPropertyDescriptor("ReportSuccessfulTests", "Report successful tests (WINETEST_REPORT_SUCCESS)", !1, 1, "B", 1);
   }
@@ -709,6 +781,7 @@ sub GenerateFields($)
       next if ($VMRow->{Extra} and !$VMRow->{Checked} and !$self->{ShowAll});
 
       # By default select the base VMs that are ready to run tasks
+      # and are impacted by the patch or executable
       if (!$self->{UserVMSelection} and !$VMRow->{Extra} and
           $VMRow->{VM}->Status !~ /^(?:offline|maintenance)$/ and
           ($VMRow->{VM}->Type eq "wine" or !$self->{Impacts} or
@@ -739,6 +812,7 @@ document.write("<input type='checkbox' onchange='SetAllVMCBs(this);'$MasterCheck
 EOF
     print "</th>\n";
     print "<th class='Record'>VM Name</th>\n";
+    print "<th class='Record'>Options</th>\n";
     print "<th class='Record'>Description</th>\n";
     print "</thead><tbody>\n";
 
@@ -756,7 +830,36 @@ EOF
       print " checked='checked'" if ($VMRow->{Checked});
       print "/></td>\n";
 
-      print "<td>", $self->CGI->escapeHTML($VM->Name), "</td>\n";
+      my $Name = $VM->Name;
+      $Name .= " ($VMRow->{Build})" if ($VM->Type eq "wine");
+      print "<td>", $self->CGI->escapeHTML($Name), "</td>\n";
+
+      print "<td>";
+      if ($VMRow->{Exe32} and $VMRow->{Exe64})
+      {
+        print "32 & 64 bits";
+      }
+      elsif ($VMRow->{Exe32})
+      {
+        print "32 bits";
+      }
+      elsif ($VMRow->{Exe64})
+      {
+        print "64 bits";
+      }
+      if ($VMRow->{LangNames})
+      {
+        print "<select name='$VMRow->{Field}_lang'>\n";
+        foreach my $LangName (sort keys %{$VMRow->{LangNames}})
+        {
+          my $Locale = $VMRow->{LangNames}->{$LangName};
+          my $Selected = $Locale eq $VMRow->{Lang} ? " selected" : "";
+          print "<option value='$Locale'$Selected>$LangName</option>\n";
+        }
+        print "</select>";
+      }
+      print "</td>\n";
+
       print "<td><details><summary>",
             $self->CGI->escapeHTML($VM->Description || $VM->Name);
       print " [", $VM->Status ,"]" if ($VM->Status =~ /^(?:offline|maintenance)$/);
@@ -786,6 +889,10 @@ EOF
     $self->_GenerateStateField("NoCmdLineArgWarn");
 
     # Preserve these fields if they are not shown
+    if (!$self->{ShowRun32} or $self->{FileType} ne "patch")
+    {
+      $self->_GenerateStateField("Run32");
+    }
     if (!$self->{ShowRun64} or $self->{FileType} ne "patch")
     {
       $self->_GenerateStateField("Run64");
@@ -837,6 +944,10 @@ sub DisplayProperty($$)
   if ($self->{Page} == 3)
   {
     my $PropertyName = $PropertyDescriptor->GetName();
+    if ($PropertyName eq "Run32")
+    {
+      return "" if (!$self->{ShowRun32} or $self->{FileType} ne "patch");
+    }
     if ($PropertyName eq "Run64")
     {
       return "" if (!$self->{ShowRun64} or $self->{FileType} ne "patch");
@@ -902,11 +1013,14 @@ sub OnPage1Next($)
     return undef;
   }
 
-  # Set defaults
-  if (!defined $self->{Run64})
+  # Set defaults: whether we show them or not the Run* defaults are true
+  foreach my $Bits (32, 64)
   {
-    # Whether we show it or not the default is true
-    $self->{Run64} = 1;
+    if (!defined $self->{"Run$Bits"} and !$self->{"ShowRun$Bits"} and
+        $self->{"HasExe$Bits"})
+    {
+      $self->{"Run$Bits"} = 1;
+    }
   }
 
   $self->_SetPage(2);
@@ -952,6 +1066,7 @@ sub OnPage3Prev($)
   my ($self) = @_;
 
   # Set to 0 instead of undef to record the user preference
+  $self->{Run32} ||= 0;
   $self->{Run64} ||= 0;
   $self->{ReportSuccessfulTests} ||= 0;
 
@@ -980,138 +1095,154 @@ sub _SubmitJob($$)
   my $Steps = $NewJob->Steps;
 
   # Add steps and tasks for the 32 and 64 bit tests
-  my $BuildStep;
-  foreach my $Bits ("32", "64")
+  my $Impacts;
+  $Impacts = GetPatchImpacts($Staging) if ($self->{FileType} eq "patch");
+
+  # Extract the list of VMs and missions from the VM rows
+  my ($ExeVMs, @WineVMs, %WineMissions);
+  foreach my $VMRow (@{$self->{VMRows}})
   {
-    next if ($Bits eq "32" && $self->{FileType} eq "exe64");
-    next if ($Bits eq "64" && $self->{FileType} eq "exe32");
-    next if ($Bits eq "64" && $self->{FileType} eq "patch" && !defined $self->{Run64});
+    next if (!$VMRow->{Checked});
+    # If LoadVMSelection() marked a VM as checked it means we have a task for
+    # it. So there is no need to further check $VM->Type / $self->{FileType}.
 
-    my $Tasks;
-    my $VMs = CreateVMs();
-    $VMs->AddFilter("Type", $Bits eq "32" ? ["win32", "win64"] : ["win64"]);
-    my $SortedKeys = $VMs->SortKeysBySortOrder($VMs->GetKeys());
-    foreach my $VMKey (@$SortedKeys)
+    my $VM = $VMRow->{VM};
+    if ($VM->Type eq "wine")
     {
-      my $VM = $VMs->GetItem($VMKey);
-      my $FieldName = "vm_" . $self->CGI->escapeHTML($VMKey);
-      next if (!$self->GetParam($FieldName)); # skip unselected VMs
-
-      if (!$Tasks)
+      if ($WineMissions{$VM})
       {
-        if (!$BuildStep and $self->{FileType} eq "patch")
-        {
-          # This is a patch so add a build step...
-          $BuildStep = $Steps->Add();
-          $BuildStep->FileName($self->{FileName});
-          $BuildStep->FileType($self->{FileType});
-          $BuildStep->Type("build");
-          $BuildStep->DebugLevel(0);
-
-          # ...with a build task
-          my $VMs = CreateVMs();
-          $VMs->AddFilter("Type", ["build"]);
-          $VMs->AddFilter("Role", ["base"]);
-          my $BuildVM = ${$VMs->GetItems()}[0];
-          my $Task = $BuildStep->Tasks->Add();
-          $Task->VM($BuildVM);
-
-          my $MissionStatement = "exe32";
-          $MissionStatement .= ":exe64" if (defined $self->{Run64});
-          my ($ErrMessage, $Missions) = ParseMissionStatement($MissionStatement);
-          if (!defined $ErrMessage)
-          {
-            $Task->Timeout(GetBuildTimeout($self->{Impacts}, $Missions->[0]));
-            $Task->Missions($MissionStatement);
-
-            # Save the build step so the others can reference it
-            (my $ErrKey, my $ErrProperty, $ErrMessage) = $Jobs->Save();
-          }
-          if (defined $ErrMessage)
-          {
-            $self->{ErrMessage} = $ErrMessage;
-            return undef;
-          }
-        }
-
-        # Then create the test step
-        my $TestStep = $Steps->Add();
-        if ($self->{FileType} eq "patch")
-        {
-          $TestStep->PreviousNo($BuildStep->No);
-          my $TestExe = basename($self->{TestExecutable});
-          $TestExe =~ s/_test\.exe$/_test64.exe/ if ($Bits eq "64");
-          $TestStep->FileName($TestExe);
-        }
-        else
-        {
-          $TestStep->FileName($self->{FileName});
-        }
-        $TestStep->FileType("exe$Bits");
-        $TestStep->Type("single");
-        $TestStep->DebugLevel($self->{DebugLevel});
-        $TestStep->ReportSuccessfulTests(defined $self->{ReportSuccessfulTests});
-        $Tasks = $TestStep->Tasks;
+        $WineMissions{$VM} .= ":$VMRow->{Build}";
       }
-
-      # Then add a task for this VM
-      my $Task = $Tasks->Add();
-      $Task->VM($VM);
-      $Task->Timeout($SingleTimeout);
-      $Task->Missions("exe$Bits");
-      $Task->CmdLineArg($self->{CmdLineArg});
+      else
+      {
+        $WineMissions{$VM} = $VMRow->{Build};
+        push @WineVMs, $VM;
+      }
+      if ($VMRow->{Lang} ne "en_US")
+      {
+        $WineMissions{$VM} .= ",lang=$VMRow->{Lang}";
+      }
+    }
+    else
+    {
+      if ($VMRow->{Exe32} and ($self->{Run32} or !$self->{ShowRun32}))
+      {
+        push @{$ExeVMs->{32}}, $VM;
+      }
+      if ($VMRow->{Exe64} and ($self->{Run64} or !$self->{ShowRun64}))
+      {
+        push @{$ExeVMs->{64}}, $VM;
+      }
     }
   }
 
-  my ($Tasks, $MissionStatement, $Timeout);
-  my $VMs = CreateVMs();
-  $VMs->AddFilter("Type", ["wine"]);
-  my $SortedKeys = $VMs->SortKeysBySortOrder($VMs->GetKeys());
-  foreach my $VMKey (@$SortedKeys)
+  if ($ExeVMs->{32} or $ExeVMs->{64})
   {
-    my $VM = $VMs->GetItem($VMKey);
-    my $FieldName = "vm_" . $self->CGI->escapeHTML($VMKey);
-    next if (!$self->GetParam($FieldName)); # skip unselected VMs
-
-    if (!$Tasks)
+    my $BuildStep;
+    if ($self->{FileType} eq "patch")
     {
-      # First create the Wine test step
-      my $WineStep = $Steps->Add();
-      $WineStep->FileName($self->{FileName});
-      $WineStep->FileType($self->{FileType});
-      $WineStep->Type("single");
-      $WineStep->DebugLevel($self->{DebugLevel});
-      $WineStep->ReportSuccessfulTests(defined $self->GetParam("ReportSuccessfulTests"));
-      $Tasks = $WineStep->Tasks;
+      # This is a patch so add a build step...
+      $BuildStep = $Steps->Add();
+      $BuildStep->FileName($self->{FileName});
+      $BuildStep->FileType($self->{FileType});
+      $BuildStep->Type("build");
+      $BuildStep->DebugLevel(0);
 
-      $MissionStatement = ($self->{FileType} =~ /^(?:exe32|patch)$/) ? "win32" : "";
-      if ($self->{FileType} eq "exe64" or
-          ($self->{FileType} eq "patch" and defined $self->{Run64}))
+      # ...with a build task
+      my $VMs = CreateVMs();
+      $VMs->AddFilter("Type", ["build"]);
+      $VMs->AddFilter("Role", ["base"]);
+      my $BuildVM = ${$VMs->GetItems()}[0];
+      my $Task = $BuildStep->Tasks->Add();
+      $Task->VM($BuildVM);
+
+      my @Builds;
+      push @Builds, "exe32" if ($ExeVMs->{32});
+      push @Builds, "exe64" if ($ExeVMs->{64});
+      my ($ErrMessage, $Missions) = ParseMissionStatement(join(":", @Builds));
+      if (!defined $ErrMessage)
       {
-        $MissionStatement .= ":wow64";
-      }
-      $MissionStatement =~ s/^://;
+        $Task->Timeout(GetBuildTimeout($Impacts, $Missions->[0]));
+        $Task->Missions($Missions->[0]->{Statement});
 
-      my ($ErrMessage, $Missions) = ParseMissionStatement($MissionStatement);
+        # Save the build step so the others can reference it
+        (my $_ErrKey, my $_ErrProperty, $ErrMessage) = $Jobs->Save();
+      }
       if (defined $ErrMessage)
       {
         $self->{ErrMessage} = $ErrMessage;
-        return undef;
+        return !1;
       }
-      $Missions = $Missions->[0];
-      $Timeout = $self->{FileType} ne "patch" ?
-                 $SingleTimeout :
-                 GetBuildTimeout($self->{Impacts}, $Missions) +
-                 GetTestTimeout($self->{Impacts}, $Missions);
     }
 
-    # Then add a task for this VM
-    my $Task = $Tasks->Add();
-    $Task->VM($VM);
-    $Task->Timeout($Timeout);
-    $Task->Missions($MissionStatement);
-    my $Module = $self->{TestExecutables}->{$self->{TestExecutable}};
-    $Task->CmdLineArg(($Module eq 1 ? "" : "$Module ") .$self->{CmdLineArg});
+    foreach my $Bits (32, 64)
+    {
+      next if (!$ExeVMs->{$Bits});
+
+      # Create the test step
+      my $TestStep = $Steps->Add();
+      if ($self->{FileType} eq "patch")
+      {
+        $TestStep->PreviousNo($BuildStep->No);
+        my $TestExe = $self->{TestExecutable};
+        $TestExe =~ s/_test\.exe$/_test64.exe/ if ($Bits eq "64");
+        $TestStep->FileName($TestExe);
+      }
+      else
+      {
+        $TestStep->FileName($self->{FileName});
+      }
+      $TestStep->FileType("exe$Bits");
+      $TestStep->Type("single");
+      $TestStep->DebugLevel($self->{DebugLevel});
+      $TestStep->ReportSuccessfulTests(defined $self->{ReportSuccessfulTests});
+      my $Tasks = $TestStep->Tasks;
+
+      # Add a task for each VM
+      foreach my $VM (@{$ExeVMs->{$Bits}})
+      {
+        my $Task = $Tasks->Add();
+        $Task->VM($VM);
+        $Task->Timeout($SingleTimeout);
+        $Task->Missions("exe$Bits");
+        $Task->CmdLineArg($self->{CmdLineArg});
+      }
+    }
+  }
+
+  if (@WineVMs)
+  {
+    # Create the Wine test step
+    my $WineStep = $Steps->Add();
+    $WineStep->FileName($self->{FileName});
+    $WineStep->FileType($self->{FileType});
+    $WineStep->Type("single");
+    $WineStep->DebugLevel($self->{DebugLevel});
+    $WineStep->ReportSuccessfulTests(defined $self->{ReportSuccessfulTests});
+    my $Tasks = $WineStep->Tasks;
+
+    # Add a task for each VM
+    foreach my $VM (@WineVMs)
+    {
+      my ($ErrMessage, $Missions) = ParseMissionStatement($WineMissions{$VM});
+      if (defined $ErrMessage)
+      {
+        $self->{ErrMessage} = $ErrMessage;
+        return !1;
+      }
+      my $Missions = $Missions->[0];
+      my $Timeout = $self->{FileType} ne "patch" ?
+                    $SingleTimeout :
+                    GetBuildTimeout($Impacts, $Missions) +
+                    GetTestTimeout($Impacts, $Missions);
+
+      my $Task = $Tasks->Add();
+      $Task->VM($VM);
+      $Task->Timeout($Timeout);
+      $Task->Missions($WineMissions{$VM});
+      my $Module = $self->{TestExecutables}->{$self->{TestExecutable}};
+      $Task->CmdLineArg(($Module eq 1 ? "" : "$Module ") .$self->{CmdLineArg});
+    }
   }
 
   # Now save it all (or whatever's left to save)

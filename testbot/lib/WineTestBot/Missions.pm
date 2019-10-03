@@ -27,7 +27,7 @@ WineTestBot::Missions - Missions parser and helper functions
 
 use Exporter 'import';
 our @EXPORT = qw(DumpMissions GetMissionBaseName GetTaskMissionDescription
-                 ParseMissionStatement
+                 GetMissionCaps ParseMissionStatement
                  MergeMissionStatementTasks SplitMissionStatementTasks);
 
 use WineTestBot::Utils;
@@ -140,6 +140,38 @@ sub GetTaskMissionDescription($$)
       " tests";
 
   return $Description;
+}
+
+sub GetMissionCaps($)
+{
+  my ($MissionStatement) = @_;
+  my $Capabilities = { build => {}, lang => {} };
+
+  # Extract capabilities from the mission statement
+  my ($ErrMessage, $Missions) = ParseMissionStatement($MissionStatement);
+  if ($Missions)
+  {
+    foreach my $TaskMissions (@$Missions)
+    {
+      foreach my $Mission (@{$TaskMissions->{Missions}})
+      {
+        my $Build = $Mission->{Build};
+        $Capabilities->{build}->{$Build} = 1;
+        if ($Build =~ /^(?:win32|wow32|wow64)$/)
+        {
+          my $Lang = $Mission->{lang};
+          $Capabilities->{lang}->{$Lang || "en_US"} = 1 if (defined $Lang);
+        }
+      }
+    }
+  }
+  if (%{$Capabilities->{lang}})
+  {
+    # en_US is the default for Wine VMs and must always be supported
+    $Capabilities->{lang}->{"en_US"} = 1;
+  }
+
+  return ($ErrMessage, $Capabilities);
 }
 
 sub MergeMissionStatementTasks($)
