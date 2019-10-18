@@ -1,0 +1,11 @@
+WARNING: very incomplete rn
+
+On your gitlab instance, make a bot user, (ml-bot, for example), and fork the wine repository.
+
+Clone the fork to $HOME/wine, and make sure you have write access to your fork (via ssh keys)
+
+Setup a remote to the main wine repository named 'upstream', so that we can update master before applying wine-devel patches
+
+Set process-gl-events.py and process-ml-events.py to be called at a reasonable interval. You can also call process-ml-events after the filter script
+
+Adjsut values in cfg.py
