@@ -8,16 +8,13 @@ import sqlite3
 import os
 from collections import namedtuple
 
-new_db = not os.path.isfile('./threads.db')
-
 db_connection = sqlite3.connect('./threads.db')
 db_cursor = db_connection.cursor()
 
-if new_db:
-  db_cursor.execute('CREATE TABLE threads (msg_id text, mr_id int, disc_id binary)')
-  db_cursor.execute('CREATE TABLE children (child_id text, parent_id text)')
-  db_cursor.execute('CREATE TABLE versions (mr_id int PRIMARY KEY, version int)')
-  db_connection.commit()
+db_cursor.execute(r'CREATE TABLE IF NOT EXISTS threads (msg_id text, mr_id int, disc_id binary)')
+db_cursor.execute(r'CREATE TABLE IF NOT EXISTS children (child_id text, parent_id text)')
+db_cursor.execute(r'CREATE TABLE IF NOT EXISTS versions (mr_id int PRIMARY KEY, version int)')
+db_connection.commit()
 
 Discussion = namedtuple('Discussion', 'mr_id disc_id')
 

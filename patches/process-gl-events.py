@@ -1,24 +1,20 @@
 #!/usr/bin/env python3
 # Processes recent GitLab events to inform folks on the mailing list
 
-import os
 import re
-import gitlab
 import time
 import datetime
-import dateutil.parser
-from git import Repo
 import urllib.request
-from email.message import EmailMessage
-import email.utils
-from collections import namedtuple
-import cfg
 
+import dateutil.parser
+import git
+import gitlab
+
+import cfg
+import db_helper
 import mail_helper
 
-import db_helper
-
-wine_repo = Repo(cfg.local_wine_git_path)
+wine_repo = git.Repo(cfg.local_wine_git_path)
 assert not wine_repo.bare
 assert not wine_repo.is_dirty()
 assert wine_repo.head.ref == wine_repo.heads.master
@@ -49,22 +45,19 @@ def process_mr_event(event, mr):
       db_helper.set_mr_version(mr.id, version)
     patch_prefix = 'PATCH v' + str(version) if version != 1 else 'PATCH'
     # Download the patch/set
-    tmp_patch = cfg.local_wine_git_path + '/tmp.patch'
-    urllib.request.urlretrieve(mr.web_url + '.patch', tmp_patch)
+    tmp_patch = pathlib.Path(cfg.local_wine_git_path, 'tmp.patch')
+    urllib.request.urlretrieve(mr.web_url + '.patch', str(tmp_patch))
     # Apply it locally
-    wine_git.am(tmp_patch)
-    os.remove(tmp_patch)
+    wine_git.am(str(tmp_patch))
+    tmp_patch.unlink()
     # Format it for submission
     wine_git.format_patch('origin', subject_prefix=patch_prefix)
-    for filename in os.listdir(cfg.local_wine_git_path):
-      if filename.endswith('.patch'):
+    for file_path in cfg.local_wine_git_path.iterdir():
+      if file_path.name.endswith('.patch'):
         # Create the discussion and the thread, then link them
 
-        patch_file = open(cfg.local_wine_git_path + '/' + filename)
-        contents = ''
-        for line in patch_file.readlines():
-          contents += line
-        patch_file.close()
+        with file_path.open() as patch_file:
+          contents = patch_file.read()
 
         search = re.search(r'^From (?P<commithash>\w*)', contents)
         assert search is not None
@@ -76,14 +69,14 @@ def process_mr_event(event, mr):
         assert search is not None
         patch_subject = search.group('subject')
         assert patch_subject is not None
-        patch_msg_id = mail_helper.send_mail(patch_subject, contents.split('\n\n', 1)[1],in_reply_to=msg_id)
+        patch_msg_id = mail_helper.send_mail(patch_subject, contents.split('\n\n', 1)[1], in_reply_to=msg_id)
 
         db_helper.link_discussion_to_mail(db_helper.Discussion(mr.id, patch_discussion.id), patch_msg_id)
     # Clean Up
     wine_git.reset('origin/master', hard=True)
     #wine_git.clean(f=True)
   
-  if event.action_name == 'closed' and mr.author['id'] == ml_bot_uid:
+  if event.action_name == 'closed' and mr.author['id'] == cfg.gl_bot_uid:
     # Send message notifying author the patchset has been closed
     print( 'notifying author' )
 
@@ -91,7 +84,7 @@ def process_comment_event(event):
   if event.noteable_type != 'Merge Request': return
   if event.target_type == 'Note':
     # Not part of a discussion, just find the root email for the MR
-    mail_thread = lookup_mail_thread(Discussion(event.note['noteable_id'], 0))
+    mail_thread = db_helper.lookup_mail_thread(db_helper.Discussion(event.note['noteable_id'], 0))
     # Send mail
   if event.target_type == 'DiscussionNote':
     # Find the discussion

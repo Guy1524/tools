@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-from pathlib import Path
-from datetime import datetime, timedelta
+from pathlib
+from datetime
 
 # paths
-patches_path = str(Path.home()) + '/patches/'
-local_wine_git_path =  str(Path.home()) + '/wine'
+patches_path = pathlib.Path.home() / 'patches/'
+local_wine_git_path =  pathlib.Path.home() / 'wine'
 
 bot_name = 'Gitlab Bot'
 bot_address = 'bot@localhost'
@@ -27,4 +27,4 @@ upstream_repo_id = 3
 fork_repo_id = 4
 
 # Time at which incomplete patchsets are considered stale
-cutoff_time = datetime.now() - timedelta(minutes=15)
+cutoff_time = datetime.datetime.now() - datetime.timedelta(minutes=15)
