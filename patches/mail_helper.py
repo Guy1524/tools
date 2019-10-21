@@ -20,7 +20,8 @@ def send_mail(subject, body, in_reply_to=None):
   msg['Subject'] = subject
   msg['From'] = cfg.bot_name + ' <{0}>'.format(cfg.bot_address)
   msg['To'] = cfg.mailing_list_address
-  msg['In-Reply-To'] = in_reply_to if in_reply_to is not None
+  if in_reply_to is not None:
+    msg['In-Reply-To'] = in_reply_to
   msg['Message-ID'] = msg_id
   
   msg.set_content(body)

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-from pathlib
-from datetime
+import pathlib
+import datetime
 
 # paths
 patches_path = pathlib.Path.home() / 'patches/'
