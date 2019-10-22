@@ -150,16 +150,23 @@ while not out_of_patches:
 
     with file_path.open() as file:
       mail_contents = file.read()
-    print(mail_contents)
+
     author = None
     email = None
     subject = None
     msg_id = None
     reply_to = None
-    author   = re.search(r'(?m)^From: (.*)$', mail_contents).group(1)
-    subject  = re.search(r'(?m)^Subject: (.*)$', mail_contents).group(1)
-    msg_id   = re.search(r'(?m)^Message-Id: (.*)$', mail_contents).group(1)
-    reply_to = re.search(r'(?m)^In-Reply-To: (.*)$', mail_contents).group(1)
+    try:
+      author   = re.search(r'(?m)^From: (.*)$', mail_contents).group(1)
+      subject  = re.search(r'(?m)^Subject: (.*)$', mail_contents).group(1)
+      msg_id   = re.search(r'(?m)^Message-Id: (.*)$', mail_contents).group(1)
+    except:
+      print('Invalid Message')
+      file_path.unlink()
+      continue
+    search = re.search(r'(?m)^In-Reply-To: (.*)$', mail_contents)
+    reply_to = search.group(1) if search is not None else None
+
     patch_prefix = re.search(r'^\[PATCH(?: v(?P<version>\d+))?(?: (?P<patch_idx>\d+)/(?P<patch_total>\d+))?\]', subject)
     # TODO: handle quotation marks in this regex
     author_search = re.search(r'^(?P<name>.*) <(?P<email>[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)>$', author)
