@@ -11,7 +11,7 @@ from collections import namedtuple
 db_connection = sqlite3.connect('./threads.db')
 db_cursor = db_connection.cursor()
 
-db_cursor.execute(r'CREATE TABLE IF NOT EXISTS threads (msg_id text, mr_id int, disc_id binary)')
+db_cursor.execute(r'CREATE TABLE IF NOT EXISTS threads (msg_id text, mr_id int, disc_id binary)') #TODO: store an optional commit hash that the thread is referring to
 db_cursor.execute(r'CREATE TABLE IF NOT EXISTS children (child_id text, parent_id text)')
 db_cursor.execute(r'CREATE TABLE IF NOT EXISTS versions (mr_id int PRIMARY KEY, version int)')
 db_connection.commit()
@@ -35,12 +35,12 @@ def link_discussion_to_mail(discussion, msg_id):
 ###
 
 def get_root_msg_id(msg_id):
-  db_cursor.execute('SELECT * FROM childen WHERE msg_id=?', (msg_id,))
+  db_cursor.execute('SELECT * FROM children WHERE child_id=?', (msg_id,))
   row = db_cursor.fetchone()
-  return row[1] if row is not None else None
+  return row[1] if row is not None else msg_id
 
 def add_child(parent_msg_id, child_msg_id):
-  db_cusor.execute('INSERT INTO children VALUES(?,?)', parent_msg_id, child_msg_id)
+  db_cursor.execute('INSERT INTO children VALUES(?,?)', (child_msg_id, parent_msg_id))
   db_connection.commit()
 
 ###

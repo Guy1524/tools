@@ -31,7 +31,7 @@ def find_mr_initial_hash(mr):
   source_project = gl.projects.get(mr.source_project_id)
   initial_hash = source_project.branches.get(mr.source_branch).commit['id']
   # get the events of the source project again
-  for event in source_project.events.list(sort='asc'):
+  for event in source_project.events.list(sort='asc', all=True):
     if (dateutil.parser.parse(event.created_at) > dateutil.parser.parse(mr.created_at)) and event.action_name == 'pushed to':
       initial_hash = event.push_data['commit_from']
       break
@@ -81,6 +81,7 @@ def process_mr_event(event, mr):
     source_project.branches.delete('temporary_scraper_branch')
 
     #send them
+    #TODO: if a patch was deleted, we won't end up sending anything, maybe send a notification about the change?
     for file_path in sorted(cfg.local_wine_git_path.iterdir()):
       if file_path.name.endswith('.patch'):
         # Create the discussion and the thread, then link them
@@ -92,6 +93,7 @@ def process_mr_event(event, mr):
         assert search is not None
         commit_hash = search.group('commithash')
         assert commit_hash is not None
+
         patch_discussion = mr.discussions.create({'body': 'Discussion on commit ' + commit_hash})
 
         search = re.search(r'(?m)^Subject: (?P<subject>.*)$', contents)
@@ -110,14 +112,38 @@ def process_mr_event(event, mr):
     print( 'notifying author' )
 
 def process_comment_event(event):
-  if event.noteable_type != 'Merge Request': return
+  if event.note['noteable_type'] != 'MergeRequest' or event.author_id == cfg.gl_bot_uid: return
+
+  mr = wine_gl.mergerequests.get(event.note['noteable_id'])
+  note = mr.notes.get(event.target_id)
+  print(note)
+
+  # Find discussion object
+  discussion_id = None
   if event.target_type == 'Note':
     # Not part of a discussion, just find the root email for the MR
-    mail_thread = db_helper.lookup_mail_thread(db_helper.Discussion(event.note['noteable_id'], 0))
-    # Send mail
+    discussion_id = 0
   if event.target_type == 'DiscussionNote':
-    # Find the discussion
-    return
+    # Find the discussion, by finding which discussion contains the note
+    for discussion in mr.discussions.list(all=True):
+      for discussion_note in discussion.attributes['notes']:
+        print(discussion_note)
+        if discussion_note['id'] == note.id:
+          discussion_id = discussion.id
+          break
+      if discussion_id is not None: break
+  assert discussion_id is not None
+
+  discussion_entry = db_helper.Discussion(mr.id, discussion_id)
+  mail_thread = db_helper.lookup_mail_thread(discussion_entry)
+  mr_thread = db_helper.lookup_mail_thread(db_helper.Discussion(mr.id, 0))
+  child = mail_thread is not None
+
+  sent_msg_id = mail_helper.send_mail('Gitlab Merge-Request Comment', note.body, in_reply_to=mail_thread if child else mr_thread)
+  if child:
+    db_helper.add_child(mail_thread, sent_msg_id)
+  else:
+    db_helper.link_discussion_to_mail(discussion_entry, sent_msg_id)
 
 def process_event(event):
   print('Processing Event: ')
@@ -127,7 +153,7 @@ def process_event(event):
     process_mr_event(event, mr)
   if event.action_name == 'commented on':
     print( 'Processing Comment' )
-    print(wine_gl.mergerequests.get(event.note['noteable_id']).notes.get(event.target_id))
+    process_comment_event(event)
   return
 
 # find the time of the most recent event we have processed
@@ -144,14 +170,14 @@ print(last_time)
 
 # get all events from both yesterday and today, so we don't miss any at the end of the day
 two_days_ago = datetime.date.fromtimestamp(time.time()) - datetime.timedelta(days=2)
-all_events = wine_gl.events.list(sort='asc')
+all_events = wine_gl.events.list(sort='asc', all=True) + wine_gl.events.list(sort='desc', all=True) # <- the GitLab API has extremely strange where some events are exclusive to the sorting order
 #after=two_days_ago.isoformat(), 
 
 # also get push events from the repos used in MRs, as the gitlab API docs are wrong and we can't rely on MR update events
-for mr in wine_gl.mergerequests.list():
+for mr in wine_gl.mergerequests.list(all=True):
   source_project = gl.projects.get(mr.source_project_id)
   # get the events
-  for event in source_project.events.list(sort='asc'):
+  for event in source_project.events.list(sort='asc', all=True):
     if (event.action_name == 'pushed to' and event.push_data['ref'] == mr.source_branch and
         dateutil.parser.parse(event.created_at) > dateutil.parser.parse(mr.created_at)):
       # HACK: set target_id to the MR ID, we should probably use commit.merge_requests() instead
@@ -163,6 +189,9 @@ def sort_by_time(event):
   return dateutil.parser.parse(event.created_at)
 
 all_events.sort(key=sort_by_time)
+# Remove duplicates
+event_dictionary = {e.created_at: e for e in all_events}
+all_events = list(event_dictionary.values())
 
 for event in all_events:
   event_time = dateutil.parser.parse(event.created_at)
