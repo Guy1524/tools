@@ -59,7 +59,7 @@ def create_or_update_merge_request(mr, title, author, description, patches, prol
   except:
     print('Failed to apply patches, discarding patchset')
     # TODO: make more robust, and send email back if it didn't apply
-    if mr:
+    if mr is not None:
       wine_git.reset('origin/'+branch_name, hard=True)
     wine_git.checkout('master')
     if mr is None:
