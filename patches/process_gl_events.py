@@ -4,7 +4,6 @@
 import re
 import time
 import datetime
-import pathlib
 
 import dateutil.parser
 import git
@@ -37,8 +36,6 @@ def find_mr_initial_hash(mr):
       break
   return initial_hash
 
-# TODO: this function could use a lot of cleanup
-# TODO: only send the commit that has been updated, not every single one
 # TODO: instead of using native git facilities to get the formatted patches, we should probably use the gitlab API so that we don't have to create a branch in the user's repo
 def process_mr_event(event, mr):
   print(mr.author)
@@ -51,7 +48,7 @@ def process_mr_event(event, mr):
     version = None
     if msg_id is None:
       # This means we haven't already sent a version of this MR to the mailing list, so we send the header and setup the row
-      # TODO: if the MR only has one patch, batch up the MR description w/ the commit description and use that as the header
+      # TODO: if the MR only has one patch, batch up the MR description w/ the commit description and use that as the header/prologue
       msg_id = mail_helper.send_mail(mr.title, mr.description + '\n\nMerge-Request Link: ' + mr.web_url)
       db_helper.link_discussion_to_mail(primary_discussion, msg_id)
       db_helper.make_version_entry(mr.id)
@@ -81,7 +78,7 @@ def process_mr_event(event, mr):
     source_project.branches.delete('temporary_scraper_branch')
 
     #send them
-    #TODO: if a patch was deleted, we won't end up sending anything, maybe send a notification about the change?
+    #TODO: if a patch was deleted, we won't end up sending anything, maybe send a notification about the deletions instead?
     for file_path in sorted(cfg.local_wine_git_path.iterdir()):
       if file_path.name.endswith('.patch'):
         # Create the discussion and the thread, then link them
@@ -93,6 +90,10 @@ def process_mr_event(event, mr):
         assert search is not None
         commit_hash = search.group('commithash')
         assert commit_hash is not None
+
+        if db_helper.remember_commit_hash(mr, commit_hash):
+          # We have already sent this patch, skip it
+          continue
 
         patch_discussion = mr.discussions.create({'body': 'Discussion on commit ' + commit_hash})
 
@@ -106,10 +107,11 @@ def process_mr_event(event, mr):
     # Clean Up
     wine_git.reset('origin/master', hard=True)
     wine_git.clean(force=True)
+    return
 
-  if event.action_name == 'closed' and mr.author['id'] == cfg.gl_bot_uid:
-    # Send message notifying author the patchset has been closed
-    print( 'notifying author' )
+  if mr.author['id'] == cfg.gl_bot_uid:
+    # Turn MR events into emails sent back to the submitter
+    print('TODO')
 
 def process_comment_event(event):
   if event.note['noteable_type'] != 'MergeRequest' or event.author_id == cfg.gl_bot_uid: return
@@ -146,15 +148,13 @@ def process_comment_event(event):
     db_helper.link_discussion_to_mail(discussion_entry, sent_msg_id)
 
 def process_event(event):
-  print('Processing Event: ')
-  print(event)
+  print('Processing Event:\n'+event)
   if event.target_type == 'MergeRequest' or (event.project_id != cfg.upstream_repo_id and event.action_name == 'pushed to'):
     mr = wine_gl.mergerequests.get(event.target_id)
     process_mr_event(event, mr)
   if event.action_name == 'commented on':
     print( 'Processing Comment' )
     process_comment_event(event)
-  return
 
 # find the time of the most recent event we have processed
 last_time_file = open('.last-time', "rt+")

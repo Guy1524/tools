@@ -14,6 +14,7 @@ db_cursor = db_connection.cursor()
 db_cursor.execute(r'CREATE TABLE IF NOT EXISTS threads (msg_id text, mr_id int, disc_id binary)') #TODO: store an optional commit hash that the thread is referring to
 db_cursor.execute(r'CREATE TABLE IF NOT EXISTS children (child_id text, parent_id text)')
 db_cursor.execute(r'CREATE TABLE IF NOT EXISTS versions (mr_id int PRIMARY KEY, version int)')
+db_cursor.execute(r'CREATE TABLE IF NOT EXISTS commits (commit_hash binary PRIMARY KEY, mr_id int)')
 db_connection.commit()
 
 Discussion = namedtuple('Discussion', 'mr_id disc_id')
@@ -57,3 +58,15 @@ def make_version_entry(mr_id):
 def set_mr_version(mr_id, version):
   db_cursor.execute('UPDATE versions SET version=? WHERE mr_id=?', (version, mr_id))
   db_connection.commit()
+
+###
+
+# inserts the commit and mr_id into the table and returns whether it was already present
+def remember_commit_hash(mr_id, commit_hash):
+  db_cursor.execute('SELECT commit_hash FROM commits WHERE commit_hash=? AND mr_id=?', (commit_hash, mr_id))
+  if db_cursor.fetchone():
+    return True
+  db_cursor.execute('INSERT INTO commits VALUES(?,?)', (commit_hash, mr_id))
+  db_connection.commit()
+  return False
+

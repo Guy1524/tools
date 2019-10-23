@@ -4,7 +4,6 @@
 import os
 import re
 import time
-import pathlib
 import datetime
 from collections import namedtuple
 
@@ -31,7 +30,7 @@ wine_gl = gl.projects.get(cfg.upstream_repo_id)
 # Utility functions
 def is_full(array):
   for element in array:
-    if element == None:
+    if element is None:
       return False
   return True
 
@@ -54,7 +53,7 @@ def create_or_update_merge_request(mr, title, author, description, patches, prol
   try:
     for patch in patches:
       wine_git.am(str(patch.path))
-  except Exception:
+  except:
     print('Failed to apply patches, discarding patchset')
     # TODO: make more robust, and send email back if it didn't apply
     if mr:
@@ -77,7 +76,7 @@ def create_or_update_merge_request(mr, title, author, description, patches, prol
     mr = fork_gl.mergerequests.create({'source_branch': branch_name,
                                        'target_project_id': cfg.upstream_repo_id,
                                        'target_branch': 'master',
-                                       'title': patchset_title if patchset_title != None else 'Multi-Patch Patchset from Mailing List',
+                                       'title': patchset_title if patchset_title is not None else 'Multi-Patch Patchset from Mailing List',
                                        'description': description})
     # send email to wine-devel as a place to put MR comments 
     if prologue_msg_id is None:
@@ -86,13 +85,12 @@ def create_or_update_merge_request(mr, title, author, description, patches, prol
         return
       # send meta email if prologue wasn't sent
       mail_helper.send_mail('Gitlab discussion thread for recent patchset by' + author,
-        'Merge-Request Link: ' + mr.web_url,
-      )
+                            'Merge-Request Link: ' + mr.web_url)
     else:
       db_helper.link_discussion_to_mail(db_helper.Discussion(mr.id, 0), prologue_msg_id)
   elif prologue_msg_id and len(patches) != 1:
     extra_discussion = mr.discussions.create({'body': 'Discussion on updated commits'})
-    dh_helper.link_discussions_to_mail(db_helper.Discussion(mr.id, extra_discussion.id), prologue_msg_id)
+    db_helper.link_discussions_to_mail(db_helper.Discussion(mr.id, extra_discussion.id), prologue_msg_id)
 
   # create a discussion for each patch
   for patch in patches:
@@ -101,6 +99,11 @@ def create_or_update_merge_request(mr, title, author, description, patches, prol
     db_helper.link_discussion_to_mail(db_helper.Discussion(mr.id, patch_discussion.id), patch.msgid)
 
 Mail = namedtuple('Mail', 'msg_id reply_to sender body')
+
+def format_email_body(raw_body):
+  # for now, just put the entire email in a code block to prevent markdown formatting on patches
+  # TODO: detect patches and put them in codeblocks, with the right language set
+  return '```\n' + raw_body + '\n```'
 
 # if it's not a patch, see if it's a comment on a MR thread
 def process_standard_mail(mail):
@@ -111,7 +114,7 @@ def process_standard_mail(mail):
     return
   db_helper.add_child(root_msg, mail.msg_id)
   # TODO: Handle fancy emails
-  comment_body = 'Sent by {0} on wine-devel\n\n{1}'.format(mail.sender, mail.body)
+  comment_body = 'Mail from {0} on wine-devel:\n\n{1}'.format(mail.sender, format_email_body(mail.body))
   print(comment_body)
   mr = wine_gl.mergerequests.get(discussion_entry.mr_id)
   # get the discussion id, if present
@@ -168,8 +171,7 @@ while not out_of_patches:
     reply_to = search.group(1) if search is not None else None
 
     patch_prefix = re.search(r'^\[PATCH(?: v(?P<version>\d+))?(?: (?P<patch_idx>\d+)/(?P<patch_total>\d+))?\]', subject)
-    # TODO: handle quotation marks in this regex
-    author_search = re.search(r'^(?P<name>.*) <(?P<email>[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)>$', author)
+    author_search = re.search(r'^\"?(?P<name>[^\"]*)\"? <(?P<email>[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)>$', author)
     email = author_search.group('email') if author_search is not None else None
 
     if email is None:
@@ -204,7 +206,7 @@ while not out_of_patches:
       # Right now we only use patch 1 data to find the MR
       mr = find_root_mr(email, subject[patch_prefix.end() + 1:])
       if mr is None:
-        print( 'unable to find MR for versioned patch' )
+        print('unable to find MR for versioned patch')
         file_path.unlink()
         continue
 
