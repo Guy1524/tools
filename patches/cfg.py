@@ -2,6 +2,11 @@
 import pathlib
 import datetime
 
+# gitlab instance name to be found in the config files
+bot_login_cfg_name = 'bot'
+# TODO: if we can find a better way to access hidden commits, this may not be necessary
+admin_login_cfg_name = 'admin'
+
 # paths
 patches_path = pathlib.Path.home() / 'patches/'
 local_wine_git_path =  pathlib.Path.home() / 'wine'

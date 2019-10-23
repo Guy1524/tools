@@ -23,9 +23,12 @@ wine_git = wine_repo.git
 # Ensure we are up to date
 wine_git.fetch('upstream')
 wine_git.merge('upstream/master')
-gl = gitlab.Gitlab('http://localhost', private_token='DJAm88vRYLC4uTq_WXM4')
+gl = gitlab.Gitlab.from_config(cfg.bot_login_cfg_name, [])
+assert gl is not None
 fork_gl = gl.projects.get(cfg.fork_repo_id)
+assert fork_gl is not None
 wine_gl = gl.projects.get(cfg.upstream_repo_id)
+assert wine_gl is not None
 
 # Utility functions
 def is_full(array):

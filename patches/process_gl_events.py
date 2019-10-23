@@ -22,7 +22,8 @@ wine_git = wine_repo.git
 wine_git.fetch('upstream')
 wine_git.merge('upstream/master')
 # repo owner
-gl = gitlab.Gitlab('http://localhost', private_token='KdpNodSToCXzsE5na-iB')
+gl = gitlab.Gitlab.from_config(cfg.admin_login_cfg_name, [])
+assert gl is not None
 wine_gl = gl.projects.get(3)
 
 #assumes that the remote of the source branch has been added
