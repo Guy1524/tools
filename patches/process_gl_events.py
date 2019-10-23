@@ -134,6 +134,8 @@ def process_comment_event(event):
           discussion_id = discussion.id
           break
       if discussion_id is not None: break
+  if event.target_type == 'DiffNote':
+    discussion_id = note.position['start_sha']
   assert discussion_id is not None
 
   discussion_entry = db_helper.Discussion(mr.id, discussion_id)
@@ -141,14 +143,18 @@ def process_comment_event(event):
   mr_thread = db_helper.lookup_mail_thread(db_helper.Discussion(mr.id, 0))
   child = mail_thread is not None
 
-  sent_msg_id = mail_helper.send_mail('Gitlab Merge-Request Comment', note.body, in_reply_to=mail_thread if child else mr_thread)
+  comment_body = note.body
+  if not child and event.target_type == 'DiffNote':
+    comment_body = '> `TODO: put diff information here`\n\n' + comment_body
+
+  sent_msg_id = mail_helper.send_mail('Gitlab Merge-Request Comment', comment_body, in_reply_to=mail_thread if child else mr_thread)
   if child:
     db_helper.add_child(mail_thread, sent_msg_id)
   else:
     db_helper.link_discussion_to_mail(discussion_entry, sent_msg_id)
 
 def process_event(event):
-  print('Processing Event:\n'+event)
+  print('Processing Event:\n'+str(event))
   if event.target_type == 'MergeRequest' or (event.project_id != cfg.upstream_repo_id and event.action_name == 'pushed to'):
     mr = wine_gl.mergerequests.get(event.target_id)
     process_mr_event(event, mr)
